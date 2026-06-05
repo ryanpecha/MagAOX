@@ -13,6 +13,7 @@
 
 #include <sstream>
 #include <iomanip>
+#include <set>
 
 #include <mx/ioutils/fileUtils.hpp>
 #include <mx/improc/eigenCube.hpp>
@@ -27,7 +28,10 @@ using namespace mx::sys::tsop;
 #include "../../libMagAOX/libMagAOX.hpp"
 
 #ifndef DEBUG_CRUMB
-#define DEBUG_CRUMB(msg) {std::cerr << msg << '(' << __FILE__ << ' ' << __LINE__ << "\n";}
+    #define DEBUG_CRUMB( msg )                                                                                         \
+        {                                                                                                              \
+            std::cerr << msg << '(' << __FILE__ << ' ' << __LINE__ << "\n";                                            \
+        }
 #endif
 
 #define ERR_INVOKED_NAME( msg )                                                                                        \
@@ -93,7 +97,7 @@ class xrif2fits : public mx::app::application
     std::string m_dir; /**< The directory to search for files.  Can be empty if full path given in files.
                             If files is empty, all archives in dir will be used.  Defaults to `./`.*/
 
-    bool m_overWriteDir {false}; ///< Overwrite an existing directory.  Default is to stop if directory exists.
+    bool m_overWriteDir{ false }; ///< Overwrite an existing directory.  Default is to stop if directory exists.
 
     std::vector<std::string> m_files; /**< List of files to use.  If dir is not empty,
                                            it will be pre-pended to each name.*/
@@ -119,6 +123,9 @@ class xrif2fits : public mx::app::application
 
     logMap<verboseT> m_tels;
 
+    /// Warning keys already printed, used to avoid repeating metadata-availability notices per frame.
+    std::set<std::string> m_warnedMetadata;
+
   protected:
     ///@}
 
@@ -131,20 +138,25 @@ class xrif2fits : public mx::app::application
     xrif_t m_xrif_timing{ nullptr };
 
   public:
-    /// c-tor
+    /// Construct an xrif archive to FITS converter.
     /** Sets up the default config paths by reading from the environment
      *
      */
     xrif2fits();
 
+    /// Destroy allocated xrif decoder handles.
     ~xrif2fits();
 
+    /// Configure command-line and file configuration options.
     virtual void setupConfig();
 
+    /// Load command-line and file configuration results.
     virtual void loadConfig();
 
-    virtual mx::error_t readHeaderConfig( const std::string &hcfile );
+    /// Read a camera FITS header metadata configuration file.
+    virtual mx::error_t readHeaderConfig( const std::string &hcfile /**< [in] header configuration file path */ );
 
+    /// Execute the conversion.
     virtual int execute();
 
     /// Prepare the file list and output directory
@@ -156,25 +168,70 @@ class xrif2fits : public mx::app::application
      */
     mx::error_t prepareFiles();
 
-    template <typename dataT>
-    int writeImages( int n, stdFileNameT &lfn );
+    /// Confirm a configured metadata source and app subdirectory exist.
+    mx::error_t validateMetaSourceDir( const std::string &dir,   /**< [in] configured metadata source directory */
+                                       const std::string &app,   /**< [in] app/device subdirectory name */
+                                       const std::string &source /**< [in] user-facing source label */
+    );
 
-    std::string format_nano( uint64_t n );
+    /// Load metadata file maps from configured source directories.
+    mx::error_t loadMetaFileMaps( logMap<verboseT>               &logMap, /**< [in,out] metadata map to populate */
+                                  const std::vector<std::string> &dirs,   /**< [in] metadata source directories */
+                                  const std::string              &app,    /**< [in] app/device name to load */
+                                  const std::string              &ext,    /**< [in] metadata file extension */
+                                  const stdFileNameT &firstFile,          /**< [in] first xrif file needing coverage */
+                                  const stdFileNameT &lastFile,           /**< [in] last xrif file needing coverage */
+                                  const std::string  &source              /**< [in] user-facing source label */
+    );
+
+    /// Check whether telemetry files are available for an app.
+    bool hasTelemetry( const std::string &app /**< [in] app/device name */ ) const;
+
+    /// Compute an exposure interval from camera telemetry.
+    bool exposureTime( timespec          &stime,   /**< [out] exposure start time */
+                       double            &exptime, /**< [out] exposure duration in seconds */
+                       const std::string &app,     /**< [in] camera app/device name */
+                       const timespec    &atime    /**< [in] acquisition/end time */
+    );
+
+    /// Print a warning once for a stable key.
+    void warnMetadataOnce( const std::string &key, /**< [in] stable warning key */
+                           const std::string &msg  /**< [in] warning message */
+    );
+
+    /// Write FITS header and text metadata for one configured metadata item.
+    void appendMetadata( mx::fits::fitsHeader<verboseT> &fh,        /**< [in,out] FITS header being built */
+                         std::ofstream                  &metaOut,   /**< [in,out] metadata text stream */
+                         logMeta                        &meta,      /**< [in,out] metadata item with lookup hints */
+                         bool                            writeMeta, /**< [in] true to write metadata text */
+                         bool                       canLookup, /**< [in] true if interval metadata lookup is valid */
+                         const flatlogs::timespecX &stime,     /**< [in] exposure start time */
+                         const flatlogs::timespecX &atime      /**< [in] acquisition/end time */
+    );
+
+    /// Write decoded images from one archive to FITS files.
+    template <typename dataT>
+    int writeImages( int           n,  /**< [in] index of the xrif file being written */
+                     stdFileNameT &lfn /**< [in] parsed standard file name */
+    );
+
+    /// Format a nanosecond count as a fixed-width 9-digit string.
+    std::string format_nano( uint64_t n /**< [in] nanoseconds */ );
 };
 
 inline xrif2fits::xrif2fits()
 {
     // setup the default config path
-    MagAOXPath    = mx::sys::getEnv( MAGAOX_env_path );
+    MagAOXPath = mx::sys::getEnv( MAGAOX_env_path );
 
-    if(MagAOXPath == "")
+    if( MagAOXPath == "" )
     {
         MagAOXPath = MAGAOX_path;
     }
 
-    if(MagAOXPath.size() > 0)
+    if( MagAOXPath.size() > 0 )
     {
-        if(MagAOXPath.back() !='/')
+        if( MagAOXPath.back() != '/' )
         {
             MagAOXPath += '/';
         }
@@ -182,14 +239,14 @@ inline xrif2fits::xrif2fits()
 
     ConfigRelPath = mx::sys::getEnv( MAGAOX_env_config );
 
-    if(ConfigRelPath == "")
+    if( ConfigRelPath == "" )
     {
         ConfigRelPath = MAGAOX_configRelPath;
     }
 
     if( ConfigRelPath.size() > 0 )
     {
-        if(ConfigRelPath.back() !='/')
+        if( ConfigRelPath.back() != '/' )
         {
             ConfigRelPath += '/';
         }
@@ -363,7 +420,7 @@ inline void xrif2fits::loadConfig()
     config( m_noHeader, "noHeader" );
 
     config( m_dir, "dir" );
-    config(m_overWriteDir, "overwrite");
+    config( m_overWriteDir, "overwrite" );
     config( m_files, "files" );
     config( m_outDir, "outDir" );
     config( m_logDir, "logdir" );
@@ -395,7 +452,7 @@ inline mx::error_t xrif2fits::readHeaderConfig( const std::string &hcfile )
 
     try
     {
-        DEBUG_CRUMB("reading: " + hcfile);
+        DEBUG_CRUMB( "reading: " + hcfile );
 
         if( hconfig.readConfig( hcfile, true ) != 0 )
         {
@@ -421,7 +478,7 @@ inline mx::error_t xrif2fits::readHeaderConfig( const std::string &hcfile )
             }
         }
 
-        DEBUG_CRUMB("reading include: " + mx::app::application::m_configPathCLBase + include);
+        DEBUG_CRUMB( "reading include: " + mx::app::application::m_configPathCLBase + include );
 
         mx_error_check( readHeaderConfig( mx::app::application::m_configPathCLBase + include ) );
     }
@@ -430,7 +487,7 @@ inline mx::error_t xrif2fits::readHeaderConfig( const std::string &hcfile )
 
     hconfig.unusedSections( devices );
 
-    if( devices.size() == 0 && includes.size() == 0) //this allows include-only
+    if( devices.size() == 0 && includes.size() == 0 ) // this allows include-only
     {
         return mx::error_report<verboseT>( mx::error_t::notfound, "No device sections in header config:" + hcfile );
     }
@@ -462,6 +519,159 @@ inline mx::error_t xrif2fits::readHeaderConfig( const std::string &hcfile )
     }
 
     return mx::error_t::noerror;
+}
+
+inline mx::error_t
+xrif2fits::validateMetaSourceDir( const std::string &dir, const std::string &app, const std::string &source )
+{
+    mx::error_t errc;
+    bool        isdir = mx::ioutils::dir_exists_is( dir, errc );
+
+    if( !!errc )
+    {
+        return mx::error_report<verboseT>( errc, "checking " + source + " directory: " + dir );
+    }
+
+    if( !isdir )
+    {
+        return mx::error_report<verboseT>( mx::error_t::dirnotfound, source + " directory does not exist: " + dir );
+    }
+
+    std::string appDir = dir;
+    if( appDir.size() > 0 && appDir.back() != '/' )
+    {
+        appDir += '/';
+    }
+    appDir += app;
+
+    isdir = mx::ioutils::dir_exists_is( appDir, errc );
+
+    if( !!errc )
+    {
+        return mx::error_report<verboseT>( errc, "checking " + source + " app directory: " + appDir );
+    }
+
+    if( !isdir )
+    {
+        return mx::error_report<verboseT>( mx::error_t::dirnotfound,
+                                           source + " app directory does not exist: " + appDir );
+    }
+
+    return mx::error_t::noerror;
+}
+
+inline mx::error_t xrif2fits::loadMetaFileMaps( logMap<verboseT>               &logMap,
+                                                const std::vector<std::string> &dirs,
+                                                const std::string              &app,
+                                                const std::string              &ext,
+                                                const stdFileNameT             &firstFile,
+                                                const stdFileNameT             &lastFile,
+                                                const std::string              &source )
+{
+    if( dirs.size() == 0 )
+    {
+        warnMetadataOnce( source + ":" + app + ":not-configured",
+                          "No " + source + " directories configured for " + app +
+                              "; metadata from this source will be marked " + logMeta::unavailableValue() + "." );
+        return mx::error_t::noerror;
+    }
+
+    for( size_t n = 0; n < dirs.size(); ++n )
+    {
+        mx_error_check( validateMetaSourceDir( dirs[n], app, source ) );
+        mx_error_check( logMap.loadAppToFileMap( dirs[n], app, ext, firstFile, lastFile ) );
+    }
+
+    if( logMap.m_appToFileMap[app].size() == 0 )
+    {
+        warnMetadataOnce( source + ":" + app + ":no-files",
+                          "No " + source + " files found in the requested time range for " + app +
+                              "; metadata from this source will be marked " + logMeta::unavailableValue() + "." );
+    }
+
+    return mx::error_t::noerror;
+}
+
+inline bool xrif2fits::hasTelemetry( const std::string &app ) const
+{
+    logMap<verboseT>::appToFileMapT::const_iterator it = m_tels.m_appToFileMap.find( app );
+
+    return it != m_tels.m_appToFileMap.end() && it->second.size() > 0;
+}
+
+inline bool xrif2fits::exposureTime( timespec &stime, double &exptime, const std::string &app, const timespec &atime )
+{
+    if( !hasTelemetry( app ) )
+    {
+        warnMetadataOnce( "exptime:" + app + ":no-telemetry",
+                          "No telemetry files are available for " + app +
+                              "; exposure-dependent metadata will be marked " + logMeta::unavailableValue() + "." );
+        return false;
+    }
+
+    char *prior = nullptr;
+    if( m_tels.getPriorLog( prior, app, eventCodes::TELEM_STDCAM, atime ) != 0 || prior == nullptr )
+    {
+        warnMetadataOnce( "exptime:" + app + ":no-prior",
+                          "No prior exposure-time telemetry is available for " + app +
+                              "; exposure-dependent metadata will be marked " + logMeta::unavailableValue() + "." );
+        return false;
+    }
+
+    exptime = telem_stdcam::exptime( logHeader::messageBuffer( prior ) );
+    stime   = atime - exptime;
+
+    char *priorprior = nullptr;
+    if( m_tels.getPriorLog( priorprior, app, eventCodes::TELEM_STDCAM, stime ) == 0 && priorprior != nullptr )
+    {
+        /// \todo this needs to check for any log entries between end and start
+        if( telem_stdcam::exptime( logHeader::messageBuffer( priorprior ) ) != exptime )
+        {
+            std::cerr << "Change in exposure time mid-exposure\n";
+        }
+    }
+    else
+    {
+        warnMetadataOnce( "exptime:" + app + ":no-start-prior",
+                          "No exposure-time telemetry was found before the exposure start for " + app + "." );
+    }
+
+    return true;
+}
+
+inline void xrif2fits::warnMetadataOnce( const std::string &key, const std::string &msg )
+{
+    if( m_warnedMetadata.insert( key ).second )
+    {
+        std::cerr << " (" << invokedName << "): " << msg << "\n";
+    }
+}
+
+inline void xrif2fits::appendMetadata( mx::fits::fitsHeader<verboseT> &fh,
+                                       std::ofstream                  &metaOut,
+                                       logMeta                        &meta,
+                                       bool                            writeMeta,
+                                       bool                            canLookup,
+                                       const flatlogs::timespecX      &stime,
+                                       const flatlogs::timespecX      &atime )
+{
+    if( canLookup && hasTelemetry( meta.device() ) )
+    {
+        mx::fits::fitsHeaderCard<verboseT> fc = meta.card( m_tels, stime, atime );
+        fh.append( fc );
+        if( writeMeta )
+        {
+            metaOut << " " << meta.value( m_tels, stime, atime );
+        }
+    }
+    else
+    {
+        fh.append( meta.unavailableCard() );
+        if( writeMeta )
+        {
+            metaOut << " " << logMeta::unavailableValue();
+        }
+    }
 }
 
 inline int xrif2fits::execute()
@@ -547,38 +757,18 @@ inline int xrif2fits::execute()
 
         for( auto &app : logApps )
         {
-            for( size_t n = 0; n < m_logDir.size(); ++n )
+            mx::error_t errc = loadMetaFileMaps( m_logs, m_logDir, app, ".binlog", firstFile, lastFile, "log" );
+            if( !!errc )
             {
-                try
-                {
-                    m_logs.loadAppToFileMap( m_logDir[n], app, ".binlog", firstFile, lastFile );
-                }
-                catch( ... )
-                {
-                    /// for now ignore all exceptions. \todo eventually ignore only "no prior logs" etc
-                }
+                mx::error_report<verboseT>( errc, "error loading log file map for " + app );
+                return -1;
             }
 
-            for( size_t n = 0; n < m_telDir.size(); ++n )
+            errc = loadMetaFileMaps( m_tels, m_telDir, app, ".bintel", firstFile, lastFile, "telemetry" );
+            if( !!errc )
             {
-                try
-                {
-                    m_tels.loadAppToFileMap( m_telDir[n], app, ".bintel", firstFile, lastFile );
-                }
-                catch( ... )
-                {
-                    /// for now ignore all exceptions. \todo eventually ignore only "no prior logs" etc
-                }
-            }
-
-            if( m_logs.m_appToFileMap[app].size() == 0 )
-            {
-                throw MagAOX::xwcException( "no logs found for " + app );
-            }
-
-            if( m_tels.m_appToFileMap[app].size() == 0 )
-            {
-                throw MagAOX::xwcException( "no telems found for " + app );
+                mx::error_report<verboseT>( errc, "error loading telemetry file map for " + app );
+                return -1;
             }
         }
     }
@@ -593,7 +783,10 @@ inline int xrif2fits::execute()
 
         if( !m_noHeader )
         {
-            m_tels.loadFiles( m_fileNames[n].appName(), m_fileNames[n].timestamp() );
+            if( hasTelemetry( m_fileNames[n].appName() ) )
+            {
+                m_tels.loadFiles( m_fileNames[n].appName(), m_fileNames[n].timestamp() );
+            }
         }
         if( !m_timesOnly )
         {
@@ -763,7 +956,8 @@ inline int xrif2fits::execute()
         if( m_timesOnly )
         {
             std::cout << m_files[n] << " ";
-            double totalExposureTime = 0;
+            double totalExposureTime      = 0;
+            bool   totalExposureTimeValid = true;
 
             for( xrif_dimension_t q = 0; q < m_xrif->frames; ++q )
             {
@@ -775,28 +969,18 @@ inline int xrif2fits::execute()
                 atime.tv_sec  = curr_timing[1];
                 atime.tv_nsec = curr_timing[2];
 
-                // We have to bootstrap the exposure time
-                char *prior = nullptr;
-                m_tels.getPriorLog( prior, m_fileNames[n].appName(), eventCodes::TELEM_STDCAM, atime );
                 double exptime = -1;
-                if( prior )
+                if( exposureTime( stime, exptime, m_fileNames[n].appName(), atime ) )
                 {
-                    char *priorprior = nullptr;
-                    exptime          = telem_stdcam::exptime( logHeader::messageBuffer( prior ) );
-                    stime            = atime - exptime;
-                    m_tels.getPriorLog( priorprior, m_fileNames[n].appName(), eventCodes::TELEM_STDCAM, stime );
-
-                    ///\todo this needs to check for any log entries between end and start
-                    if( telem_stdcam::exptime( logHeader::messageBuffer( priorprior ) ) != exptime )
+                    if( totalExposureTimeValid )
                     {
-                        std::cerr << "Change in exposure time mid-exposure\n";
+                        totalExposureTime += exptime;
                     }
                 }
                 else
                 {
-                    std::cerr << "no prior\n";
+                    totalExposureTimeValid = false;
                 }
-                totalExposureTime += exptime;
 
                 std::string timestamp;
                 mx::sys::timeStamp( timestamp, atime );
@@ -808,7 +992,16 @@ inline int xrif2fits::execute()
                 }
                 if( q == ( m_xrif->frames - 1 ) )
                 {
-                    std::cout << dateobs << " " << totalExposureTime << " " << m_xrif->frames << "\n";
+                    std::cout << dateobs << " ";
+                    if( totalExposureTimeValid )
+                    {
+                        std::cout << totalExposureTime;
+                    }
+                    else
+                    {
+                        std::cout << logMeta::unavailableValue();
+                    }
+                    std::cout << " " << m_xrif->frames << "\n";
                 }
             }
         }
@@ -967,7 +1160,7 @@ inline mx::error_t xrif2fits::prepareFiles()
             }
             catch( ... )
             {
-                std::throw_with_nested( mx::exception("adding dir to files") );
+                std::throw_with_nested( mx::exception( "adding dir to files" ) );
             }
         }
 
@@ -1009,21 +1202,22 @@ inline mx::error_t xrif2fits::prepareFiles()
 
         if( !m_timesOnly )
         {
-            if(!m_overWriteDir)
+            if( !m_overWriteDir )
             {
                 mx::error_t errc;
-                if(mx::ioutils::dir_exists_is(m_outDir, errc))
+                if( mx::ioutils::dir_exists_is( m_outDir, errc ) )
                 {
-                    return mx::error_report<verboseT>(mx::error_t::eexist, "Directory " + m_outDir + " already exists.");
+                    return mx::error_report<verboseT>( mx::error_t::eexist,
+                                                       "Directory " + m_outDir + " already exists." );
                 }
 
-                if(!!errc)
+                if( !!errc )
                 {
-                    return mx::error_report<verboseT>(errc, "Checking " + m_outDir);
+                    return mx::error_report<verboseT>( errc, "Checking " + m_outDir );
                 }
             }
 
-            mx_error_check( mx::ioutils::createDirectories(m_outDir) );
+            mx_error_check( mx::ioutils::createDirectories( m_outDir ) );
         }
     }
 
@@ -1031,7 +1225,8 @@ inline mx::error_t xrif2fits::prepareFiles()
     {
         if( m_fileNames.back().appName() != m_fileNames[0].appName() )
         {
-            return mx::error_report<verboseT>(mx::error_t::invalidarg, "can only operate on a single camera at a time" );
+            return mx::error_report<verboseT>( mx::error_t::invalidarg,
+                                               "can only operate on a single camera at a time" );
         }
     }
 
@@ -1055,7 +1250,6 @@ inline mx::error_t xrif2fits::prepareFiles()
         {
             return mx::error_report<verboseT>(
                 errc, "Error reading camera header: " + mx::app::application::m_configPathCLBase + m_cameraHeader );
-
         }
     }
 
@@ -1110,31 +1304,11 @@ int xrif2fits::writeImages( int n, stdFileNameT &lfn )
             wtime.tv_sec  = curr_timing[3];
             wtime.tv_nsec = curr_timing[4];
 
-            double exptime = -1;
+            double exptime          = -1;
+            bool   haveExposureTime = false;
             if( !m_noHeader )
             {
-                // We have to bootstrap the exposure time
-                char *prior = nullptr;
-                m_tels.getPriorLog( prior, lfn.appName(), eventCodes::TELEM_STDCAM, atime );
-
-                if( prior )
-                {
-                    char *priorprior = nullptr;
-                    exptime          = telem_stdcam::exptime( logHeader::messageBuffer( prior ) );
-
-                    stime = atime - exptime;
-                    m_tels.getPriorLog( priorprior, lfn.appName(), eventCodes::TELEM_STDCAM, stime );
-
-                    ///\todo this needs to check for any log entries between end and start
-                    if( telem_stdcam::exptime( logHeader::messageBuffer( priorprior ) ) != exptime )
-                    {
-                        std::cerr << "Change in exposure time mid-exposure\n";
-                    }
-                }
-                else
-                {
-                    std::cerr << "no prior\n";
-                }
+                haveExposureTime = exposureTime( stime, exptime, lfn.appName(), atime );
             }
 
             // timespecX midexp = mx::meanTimespec( atime, stime);
@@ -1158,23 +1332,25 @@ int xrif2fits::writeImages( int n, stdFileNameT &lfn )
                         << wtime.tv_sec << " " << format_nano( wtime.tv_nsec ) << " ";
             }
 
-            if( exptime > -1 )
+            if( !m_noHeader )
             {
                 // First output exposure time
                 if( !m_noMeta )
                 {
-                    metaOut << exptimeMeta.value( m_tels, stime, atime );
+                    if( haveExposureTime )
+                    {
+                        metaOut << exptimeMeta.value( m_tels, stime, atime );
+                    }
+                    else
+                    {
+                        metaOut << logMeta::unavailableValue();
+                    }
                 }
 
                 // Then output each value in turn
                 for( size_t u = 0; u < m_logMetas.size(); ++u )
                 {
-                    mx::fits::fitsHeaderCard<verboseT> fc = m_logMetas[u].card( m_tels, stime, atime );
-                    fh.append( fc );
-                    if( !m_noMeta )
-                    {
-                        metaOut << " " << m_logMetas[u].value( m_tels, stime, atime );
-                    }
+                    appendMetadata( fh, metaOut, m_logMetas[u], !m_noMeta, haveExposureTime, stime, atime );
                 }
             }
 

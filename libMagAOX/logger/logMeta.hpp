@@ -23,28 +23,35 @@ namespace logger
 // This is how the user specifies an item of log meta data (i.e. via a config file)
 struct logMetaSpec
 {
-    std::string          device;
-    flatlogs::eventCodeT eventCode;
-    std::string          member;
-    std::string          keyword; // overrides the default
-    std::string          format;  // overrides the default
-    std::string          comment; // overrides the default
+    std::string          device;    ///< Device name that produced the log entry.
+    flatlogs::eventCodeT eventCode; ///< Flatlogs event code used to select the log type.
+    std::string          member;    ///< Log member name to extract.
+    std::string          keyword;   ///< Optional FITS keyword override.
+    std::string          format;    ///< Optional printf-style value format override.
+    std::string          comment;   ///< Optional FITS comment override.
 
+    /// Construct an empty metadata specification.
     logMetaSpec()
     {
     }
 
-    logMetaSpec( const std::string         &dev,
-                 const flatlogs::eventCodeT ec,
-                 const std::string         &memb,
-                 const std::string         &k,
-                 const std::string         &f,
-                 const std::string         &c )
+    /// Construct a complete metadata specification.
+    logMetaSpec( const std::string         &dev,  /**< [in] device name that produced the log entry */
+                 const flatlogs::eventCodeT ec,   /**< [in] flatlogs event code used to select the log type */
+                 const std::string         &memb, /**< [in] log member name to extract */
+                 const std::string         &k,    /**< [in] FITS keyword override */
+                 const std::string         &f,    /**< [in] printf-style value format override */
+                 const std::string         &c     /**< [in] FITS comment override */
+                 )
         : device( dev ), eventCode( ec ), member( memb ), keyword( k ), format( f ), comment( c )
     {
     }
 
-    logMetaSpec( const std::string &dev, const flatlogs::eventCodeT ec, const std::string &memb )
+    /// Construct a metadata specification using the log type's default FITS keyword, format, and comment.
+    logMetaSpec( const std::string         &dev, /**< [in] device name that produced the log entry */
+                 const flatlogs::eventCodeT ec,  /**< [in] flatlogs event code used to select the log type */
+                 const std::string         &memb /**< [in] log member name to extract */
+                 )
         : device( dev ), eventCode( ec ), member( memb )
     {
     }
@@ -53,44 +60,77 @@ struct logMetaSpec
 // This is the data returned by the member accessor.
 struct logMetaDetail
 {
-    std::string keyword;
-    std::string comment;
-    std::string format;
-    int         valType{ -1 };
-    int         metaType{ -1 };
-    void       *accessor{ nullptr };
-    bool        hierarch{ true }; // if false the device name is not included.
+    std::string keyword;             ///< FITS keyword to write for this metadata value.
+    std::string comment;             ///< FITS comment describing the metadata value.
+    std::string format;              ///< printf-style format used to render numeric values.
+    int         valType{ -1 };       ///< FITS value type used to serialize the metadata value.
+    int         metaType{ -1 };      ///< Metadata time behavior, one of logMeta::metaTypes.
+    void       *accessor{ nullptr }; ///< Type-erased accessor for extracting the member from a log message.
+    bool        hierarch{ true };    ///< If true, include the device name in a HIERARCH-style keyword.
 
+    /// Construct an empty metadata detail.
     logMetaDetail()
     {
     }
 
-    logMetaDetail( const std::string &k, const std::string &c, const std::string &f, int vt, int mt, void *acc )
+    /// Construct a metadata detail with explicit keyword, comment, format, type, and accessor.
+    logMetaDetail( const std::string &k,  /**< [in] FITS keyword */
+                   const std::string &c,  /**< [in] FITS comment */
+                   const std::string &f,  /**< [in] printf-style value format */
+                   int                vt, /**< [in] FITS value type */
+                   int                mt, /**< [in] metadata time behavior */
+                   void              *acc /**< [in] type-erased value accessor */
+                   )
         : keyword( k ), comment( c ), format( f ), valType( vt ), metaType( mt ), accessor( acc )
     {
     }
 
-    logMetaDetail( const std::string &k, const std::string &c, const std::string &f, int vt, int mt, void *acc, bool h )
+    /// Construct a metadata detail with explicit HIERARCH behavior.
+    logMetaDetail( const std::string &k,   /**< [in] FITS keyword */
+                   const std::string &c,   /**< [in] FITS comment */
+                   const std::string &f,   /**< [in] printf-style value format */
+                   int                vt,  /**< [in] FITS value type */
+                   int                mt,  /**< [in] metadata time behavior */
+                   void              *acc, /**< [in] type-erased value accessor */
+                   bool               h    /**< [in] true to include the device name in the FITS keyword */
+                   )
         : keyword( k ), comment( c ), format( f ), valType( vt ), metaType( mt ), accessor( acc ), hierarch( h )
     {
     }
 
-    logMetaDetail( const std::string &k, const std::string &c, int vt, int mt, void *acc, bool h )
+    /// Construct a metadata detail with default value formatting and explicit HIERARCH behavior.
+    logMetaDetail( const std::string &k,   /**< [in] FITS keyword */
+                   const std::string &c,   /**< [in] FITS comment */
+                   int                vt,  /**< [in] FITS value type */
+                   int                mt,  /**< [in] metadata time behavior */
+                   void              *acc, /**< [in] type-erased value accessor */
+                   bool               h    /**< [in] true to include the device name in the FITS keyword */
+                   )
         : keyword( k ), comment( c ), valType( vt ), metaType( mt ), accessor( acc ), hierarch( h )
     {
     }
 
-    logMetaDetail( const std::string &k, int vt, int mt, void *acc )
+    /// Construct a metadata detail with only keyword, type, and accessor.
+    logMetaDetail( const std::string &k,  /**< [in] FITS keyword */
+                   int                vt, /**< [in] FITS value type */
+                   int                mt, /**< [in] metadata time behavior */
+                   void              *acc /**< [in] type-erased value accessor */
+                   )
         : keyword( k ), valType( vt ), metaType( mt ), accessor( acc )
     {
     }
 
-    logMetaDetail( const std::string &k, int vt, int mt, void *acc, bool h )
+    /// Construct a metadata detail with keyword, type, accessor, and explicit HIERARCH behavior.
+    logMetaDetail( const std::string &k,   /**< [in] FITS keyword */
+                   int                vt,  /**< [in] FITS value type */
+                   int                mt,  /**< [in] metadata time behavior */
+                   void              *acc, /**< [in] type-erased value accessor */
+                   bool               h    /**< [in] true to include the device name in the FITS keyword */
+                   )
         : keyword( k ), valType( vt ), metaType( mt ), accessor( acc ), hierarch( h )
     {
     }
 };
-
 
 /*logMetaDetail logMemberAccessor( flatlogs::eventCodeT ec,
                                  const std::string & memberName
@@ -271,33 +311,69 @@ struct logMeta
         Continuous
     };
 
+    /// The string written when metadata is expected but unavailable.
+    /**
+     * \returns the shared unavailable-value sentinel.
+     */
+    static const std::string &unavailableValue();
+
   protected:
-    logMetaSpec   m_spec;
-    logMetaDetail m_detail;
+    logMetaSpec   m_spec;   ///< User/configuration specification for this metadata item.
+    logMetaDetail m_detail; ///< Log-type detail used to extract and serialize this metadata item.
 
-    bool        m_isValid{ false };
-    std::string m_invalidValue{ "invalid" };
+    bool        m_isValid{ false };                   ///< True when the metadata member resolved to an accessor.
+    std::string m_invalidValue{ unavailableValue() }; ///< Sentinel returned when metadata cannot be read.
 
-    char *m_hint{ nullptr };
+    char *m_hint{ nullptr }; ///< Cached log-search hint for repeated lookups of the same metadata item.
+
+    /// Build the FITS keyword for this metadata item.
+    /**
+     * \returns the keyword, including the device prefix when HIERARCH-style output is enabled.
+     */
+    std::string fitsKeyword() const;
 
   public:
+    /// Construct a metadata item from a specification.
     logMeta( const logMetaSpec &lms /**< [in] the specification of this meta data entry */ );
 
+    /// Get the source device name.
     const std::string &device();
+
+    /// Get the FITS keyword for this metadata item.
     const std::string &keyword();
 
+    /// Get the FITS comment for this metadata item.
     const std::string &comment();
 
-    int setLog( const logMetaSpec & );
+    /// Resolve the log accessor and metadata details for a specification.
+    int setLog( const logMetaSpec &lms /**< [in] the specification to resolve */ );
 
-    std::string value( logMap<verboseT> &lm, const flatlogs::timespecX &stime, const flatlogs::timespecX &atime );
+    /// Get the metadata value for an exposure interval.
+    std::string value( logMap<verboseT>          &lm,    /**< [in,out] loaded logs to search */
+                       const flatlogs::timespecX &stime, /**< [in] exposure start time */
+                       const flatlogs::timespecX &atime  /**< [in] exposure acquisition/end time */
+    );
 
-    std::string valueNumber( logMap<verboseT> &lm, const flatlogs::timespecX &stime, const flatlogs::timespecX &atime );
+    /// Get a numeric metadata value for an exposure interval.
+    std::string valueNumber( logMap<verboseT>          &lm,    /**< [in,out] loaded logs to search */
+                             const flatlogs::timespecX &stime, /**< [in] exposure start time */
+                             const flatlogs::timespecX &atime  /**< [in] exposure acquisition/end time */
+    );
 
-    std::string valueString( logMap<verboseT> &lm, const flatlogs::timespecX &stime, const flatlogs::timespecX &atime );
+    /// Get a string metadata value for an exposure interval.
+    std::string valueString( logMap<verboseT>          &lm,    /**< [in,out] loaded logs to search */
+                             const flatlogs::timespecX &stime, /**< [in] exposure start time */
+                             const flatlogs::timespecX &atime  /**< [in] exposure acquisition/end time */
+    );
 
-    mx::fits::fitsHeaderCard<verboseT>
-    card( logMap<verboseT> &lm, const flatlogs::timespecX &stime, const flatlogs::timespecX &atime );
+    /// Build a FITS header card for an unavailable metadata value.
+    mx::fits::fitsHeaderCard<verboseT> unavailableCard() const;
+
+    /// Build a FITS header card for this metadata item over an exposure interval.
+    mx::fits::fitsHeaderCard<verboseT> card( logMap<verboseT>          &lm,    /**< [in,out] loaded logs to search */
+                                             const flatlogs::timespecX &stime, /**< [in] exposure start time */
+                                             const flatlogs::timespecX &atime /**< [in] exposure acquisition/end time */
+    );
 };
 
 } // namespace logger
