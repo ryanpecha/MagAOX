@@ -578,9 +578,23 @@ inline mx::error_t xrif2fits::loadMetaFileMaps( logMap<verboseT>               &
 
     bool        foundAppDir = false;
     mx::error_t errc;
+    bool        hasExplicitDir = false;
 
     for( size_t n = 0; n < dirs.size(); ++n )
     {
+        if( dirs[n] != "" && dirs[n] != "." && dirs[n] != "./" )
+        {
+            hasExplicitDir = true;
+        }
+    }
+
+    for( size_t n = 0; n < dirs.size(); ++n )
+    {
+        if( dirs[n] == "" || ( hasExplicitDir && ( dirs[n] == "." || dirs[n] == "./" ) ) )
+        {
+            continue;
+        }
+
         bool isdir = mx::ioutils::dir_exists_is( dirs[n], errc );
         if( !!errc )
         {

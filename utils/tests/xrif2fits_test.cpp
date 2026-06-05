@@ -130,6 +130,26 @@ TEST_CASE( "xrif2fits metadata source validation handles missing and empty direc
         REQUIRE( app.hasTelemetry( "cam1" ) == false );
     }
 
+    SECTION( "empty source entries are ignored when explicit source directories are present" )
+    {
+        std::filesystem::create_directories( tmp.m_path / "telemetryNfs" / "cam1" );
+
+        mx::error_t errc = app.loadTelemetryMaps( { "", ( tmp.m_path / "telemetryNfs" ).string() } );
+
+        REQUIRE( errc == mx::error_t::noerror );
+        REQUIRE( app.hasTelemetry( "cam1" ) == false );
+    }
+
+    SECTION( "default dot entries are ignored when explicit source directories are present" )
+    {
+        std::filesystem::create_directories( tmp.m_path / "telemetryNfs" / "cam1" );
+
+        mx::error_t errc = app.loadTelemetryMaps( { ".", ( tmp.m_path / "telemetryNfs" ).string() } );
+
+        REQUIRE( errc == mx::error_t::noerror );
+        REQUIRE( app.hasTelemetry( "cam1" ) == false );
+    }
+
     SECTION( "existing app directory with no matching files is non-fatal" )
     {
         std::filesystem::create_directories( tmp.m_path / "telemetry" / "cam1" );

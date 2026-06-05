@@ -99,6 +99,8 @@ exposure is instantaneous.
   subdirectories are fatal when missing, while existing directories with no date-range files warn and continue.
 - For multiple `-l`/`-t` roots, each configured source root must exist, but a given app/device subdirectory only
   has to exist under one of those roots. This supports local-plus-NFS source layouts.
+- Empty source entries are ignored, and parser/default `.` entries are ignored when explicit source roots are
+  present, preventing an implicit local root from making split source layouts fatal.
 - Fixed the lower-level log-map fallback for cases where a previous log exists but no following date directory can
   be found; the previous log directory is now used instead of returning `dirnotfound` from a missing date subdir.
 - Added logger metadata support for the shared unavailable value `NOT AVAILABLE` and a helper to construct
