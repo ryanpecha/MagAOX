@@ -99,6 +99,8 @@ exposure is instantaneous.
   subdirectories are fatal when missing, while existing directories with no date-range files warn and continue.
 - For multiple `-l`/`-t` roots, each configured source root must exist, but a given app/device subdirectory only
   has to exist under one of those roots. This supports local-plus-NFS source layouts.
+- Fixed the lower-level log-map fallback for cases where a previous log exists but no following date directory can
+  be found; the previous log directory is now used instead of returning `dirnotfound` from a missing date subdir.
 - Added logger metadata support for the shared unavailable value `NOT AVAILABLE` and a helper to construct
   unavailable FITS cards using the normal keyword/comment.
 - Preserved exposure-time semantics: if `TELEM_STDCAM` exposure time is unavailable, xrif2fits does not invent

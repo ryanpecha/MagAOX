@@ -23,7 +23,10 @@ using namespace mx::sys::tscomp;
 #include "../file/stdFileName.hpp"
 
 #ifndef DEBUG_CRUMB
-#define DEBUG_CRUMB(msg) {std::cerr << msg << '(' << __FILE__ << ' ' << __LINE__ << "\n";}
+    #define DEBUG_CRUMB( msg )                                                                                         \
+        {                                                                                                              \
+            std::cerr << msg << '(' << __FILE__ << ' ' << __LINE__ << "\n";                                            \
+        }
 #endif
 
 namespace MagAOX
@@ -63,7 +66,7 @@ struct logMap
     /// The app-name to buffer map type, for looking up the currently loaded logs for a given app.
     typedef std::map<std::string, logInMemory> appToBufferMapT;
 
-    int m_searchDaySpan {100}; ///< Maximum number of days to search for files in the past/future.
+    int m_searchDaySpan{ 100 }; ///< Maximum number of days to search for files in the past/future.
 
     appToFileMapT m_appToFileMap;
 
@@ -371,19 +374,24 @@ mx::error_t logMap<verboseT>::loadAppToFileMap( const std::string               
         follLogSubDir = lastFile.subDir( &errc );
         mx_error_check_code( errc );
 
-        DEBUG_CRUMB("checking for: " + basedir + follLogSubDir.path());
+        DEBUG_CRUMB( "checking for: " + basedir + follLogSubDir.path() );
 
-        bool exists = mx::ioutils::dir_exists_is(basedir + follLogSubDir.path(), errc);
+        bool exists = mx::ioutils::dir_exists_is( basedir + follLogSubDir.path(), errc );
 
-        int n =0;
-        while(!exists && n < m_searchDaySpan)
+        int n = 0;
+        while( !exists && n < m_searchDaySpan )
         {
             follLogSubDir.subDay();
 
-            DEBUG_CRUMB("checking for: " + basedir + follLogSubDir.path());
+            DEBUG_CRUMB( "checking for: " + basedir + follLogSubDir.path() );
 
-            exists = mx::ioutils::dir_exists_is(basedir + follLogSubDir.path(), errc);
+            exists = mx::ioutils::dir_exists_is( basedir + follLogSubDir.path(), errc );
             ++n;
+        }
+
+        if( !exists )
+        {
+            follLogSubDir = prevLogSubDir;
         }
 
         follLogFile_n = static_cast<size_t>( -1 );
@@ -391,13 +399,13 @@ mx::error_t logMap<verboseT>::loadAppToFileMap( const std::string               
 
     if( prevLogSubDir == follLogSubDir ) // special case, probably most common
     {
-        DEBUG_CRUMB("prevLogSubDir == follLogSubDir");
+        DEBUG_CRUMB( "prevLogSubDir == follLogSubDir" );
 
         try
         {
-            #ifdef XWCTEST_LOGMAP_LATFM_BADALL3
-                throw xwcException("std::bad_alloc"); // LCOV_EXCL_LINE
-            #endif
+#ifdef XWCTEST_LOGMAP_LATFM_BADALL3
+            throw xwcException( "std::bad_alloc" ); // LCOV_EXCL_LINE
+#endif
             // clang-format on
 
             subdir = prevLogSubDir;
@@ -513,8 +521,7 @@ mx::error_t logMap<verboseT>::loadAppToFileMap( const std::string               
 
             mx_error_check( mx::ioutils::getFileNames( tmp_flist, basedir + subdir.path(), dev, "", ext ) );
 
-
-            if(errc == mx::error_t::noerror)
+            if( errc == mx::error_t::noerror )
             {
 
                 if( follLogFile_n == static_cast<size_t>( -1 ) )
@@ -527,7 +534,7 @@ mx::error_t logMap<verboseT>::loadAppToFileMap( const std::string               
                     if( follLogFile_n > tmp_flist.size() )
                     {
                         return mx::error_report<verboseT>( mx::error_t::sizeerr,
-                                                       "miscounted the number of files somewhere" );
+                                                           "miscounted the number of files somewhere" );
                     }
                 }
 
@@ -552,7 +559,7 @@ int logMap<verboseT>::getPriorLog( char                      *&logBefore,
 {
     flatlogs::eventCodeT evL;
 
-    DEBUG_CRUMB("");
+    DEBUG_CRUMB( "" );
 
     if( m_appToFileMap[appName].size() == 0 )
     {
@@ -560,7 +567,7 @@ int logMap<verboseT>::getPriorLog( char                      *&logBefore,
         return -1;
     }
 
-    DEBUG_CRUMB("");
+    DEBUG_CRUMB( "" );
 
     logInMemory &lim = m_appToBufferMap[appName];
 
@@ -568,7 +575,7 @@ int logMap<verboseT>::getPriorLog( char                      *&logBefore,
     et.time_s += 30;
     if( lim.m_startTime > ts || et < ts )
     {
-        DEBUG_CRUMB("");
+        DEBUG_CRUMB( "" );
 
         if( loadFiles( appName, ts ) < 0 )
         {
