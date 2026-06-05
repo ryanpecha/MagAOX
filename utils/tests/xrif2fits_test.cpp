@@ -107,6 +107,29 @@ TEST_CASE( "xrif2fits metadata source validation handles missing and empty direc
         REQUIRE( errc == mx::error_t::dirnotfound );
     }
 
+    SECTION( "missing app subdirectory across all source directories is fatal" )
+    {
+        std::filesystem::create_directories( tmp.m_path / "telemetryLocal" );
+        std::filesystem::create_directories( tmp.m_path / "telemetryNfs" );
+
+        mx::error_t errc = app.loadTelemetryMaps(
+            { ( tmp.m_path / "telemetryLocal" ).string(), ( tmp.m_path / "telemetryNfs" ).string() } );
+
+        REQUIRE( errc == mx::error_t::dirnotfound );
+    }
+
+    SECTION( "app subdirectory only needs to exist in one source directory" )
+    {
+        std::filesystem::create_directories( tmp.m_path / "telemetryLocal" );
+        std::filesystem::create_directories( tmp.m_path / "telemetryNfs" / "cam1" );
+
+        mx::error_t errc = app.loadTelemetryMaps(
+            { ( tmp.m_path / "telemetryLocal" ).string(), ( tmp.m_path / "telemetryNfs" ).string() } );
+
+        REQUIRE( errc == mx::error_t::noerror );
+        REQUIRE( app.hasTelemetry( "cam1" ) == false );
+    }
+
     SECTION( "existing app directory with no matching files is non-fatal" )
     {
         std::filesystem::create_directories( tmp.m_path / "telemetry" / "cam1" );

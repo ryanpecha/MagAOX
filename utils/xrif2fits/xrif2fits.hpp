@@ -576,10 +576,49 @@ inline mx::error_t xrif2fits::loadMetaFileMaps( logMap<verboseT>               &
         return mx::error_t::noerror;
     }
 
+    bool        foundAppDir = false;
+    mx::error_t errc;
+
     for( size_t n = 0; n < dirs.size(); ++n )
     {
-        mx_error_check( validateMetaSourceDir( dirs[n], app, source ) );
+        bool isdir = mx::ioutils::dir_exists_is( dirs[n], errc );
+        if( !!errc )
+        {
+            return mx::error_report<verboseT>( errc, "checking " + source + " directory: " + dirs[n] );
+        }
+
+        if( !isdir )
+        {
+            return mx::error_report<verboseT>( mx::error_t::dirnotfound,
+                                               source + " directory does not exist: " + dirs[n] );
+        }
+
+        std::string appDir = dirs[n];
+        if( appDir.size() > 0 && appDir.back() != '/' )
+        {
+            appDir += '/';
+        }
+        appDir += app;
+
+        isdir = mx::ioutils::dir_exists_is( appDir, errc );
+        if( !!errc )
+        {
+            return mx::error_report<verboseT>( errc, "checking " + source + " app directory: " + appDir );
+        }
+
+        if( !isdir )
+        {
+            continue;
+        }
+
+        foundAppDir = true;
         mx_error_check( logMap.loadAppToFileMap( dirs[n], app, ext, firstFile, lastFile ) );
+    }
+
+    if( !foundAppDir )
+    {
+        return mx::error_report<verboseT>(
+            mx::error_t::dirnotfound, source + " app directory does not exist in any configured source for " + app );
     }
 
     if( logMap.m_appToFileMap[app].size() == 0 )

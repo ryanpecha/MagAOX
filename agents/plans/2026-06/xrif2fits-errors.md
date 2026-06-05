@@ -97,6 +97,8 @@ exposure is instantaneous.
 
 - Implemented directory validation in `xrif2fits` so configured source directories and expected app
   subdirectories are fatal when missing, while existing directories with no date-range files warn and continue.
+- For multiple `-l`/`-t` roots, each configured source root must exist, but a given app/device subdirectory only
+  has to exist under one of those roots. This supports local-plus-NFS source layouts.
 - Added logger metadata support for the shared unavailable value `NOT AVAILABLE` and a helper to construct
   unavailable FITS cards using the normal keyword/comment.
 - Preserved exposure-time semantics: if `TELEM_STDCAM` exposure time is unavailable, xrif2fits does not invent
