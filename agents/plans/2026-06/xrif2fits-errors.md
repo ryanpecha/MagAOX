@@ -109,3 +109,6 @@ exposure is instantaneous.
   an exposure interval for state/continuous interpolation and instead emits `NOT AVAILABLE` for dependent metadata.
 - Replaced the placeholder xrif2fits test with focused tests for missing directories, empty existing directories,
   and unavailable FITS-card values.
+- Started reducing chatty output by disabling `DEBUG_CRUMB` output unless `DEBUG` is defined, removing normal-run
+  metadata lookup breadcrumbs from `xrif2fits`/logger code, and leaving real corruption/structural error messages in
+  place.

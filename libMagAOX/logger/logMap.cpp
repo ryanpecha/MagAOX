@@ -39,8 +39,7 @@ int logInMemory::loadFile( file::stdFileName<verboseT> const &lfn )
 
     if( nrd != fsz )
     {
-        std::cerr << __FILE__ << " " << __LINE__ << " logInMemory::loadFile(" << lfn.fullName()
-                  << ") did not read all bytes\n";
+        std::cerr << "logInMemory::loadFile(" << lfn.fullName() << ") did not read all bytes\n";
         return -1;
     }
 
@@ -58,7 +57,7 @@ int logInMemory::loadFile( file::stdFileName<verboseT> const &lfn )
 
     if( st != memory.size() )
     {
-        std::cerr << __FILE__ << " " << __LINE__ << " Possibly corrupt logfile.\n";
+        std::cerr << "Possibly corrupt logfile.\n";
         return -1;
     }
 
@@ -88,13 +87,12 @@ int logInMemory::loadFile( file::stdFileName<verboseT> const &lfn )
 
         if( endTime >= m_startTime )
         {
-            std::cerr << __FILE__ << " " << __LINE__ << " overlapping log files!\n";
+            std::cerr << "overlapping log files!\n";
             return -1;
         }
 
         m_memory.insert( m_memory.begin(), memory.begin(), memory.end() );
         m_startTime = startTime;
-        std::cerr << __FILE__ << " " << __LINE__ << " added before!\n";
         return 0;
     }
 
@@ -114,7 +112,7 @@ int logInMemory::loadFile( file::stdFileName<verboseT> const &lfn )
         return 0;
     }
 
-    std::cerr << __FILE__ << " " << __LINE__ << " Need to implement insert in the middle!\n";
+    std::cerr << "Need to implement insert in the middle!\n";
     std::cerr << m_startTime.time_s << " " << m_startTime.time_ns << "\n";
     std::cerr << startTime.time_s << " " << startTime.time_ns << "\n";
 

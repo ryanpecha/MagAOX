@@ -28,10 +28,14 @@ using namespace mx::sys::tsop;
 #include "../../libMagAOX/libMagAOX.hpp"
 
 #ifndef DEBUG_CRUMB
-    #define DEBUG_CRUMB( msg )                                                                                         \
-        {                                                                                                              \
-            std::cerr << msg << '(' << __FILE__ << ' ' << __LINE__ << "\n";                                            \
-        }
+    #ifdef DEBUG
+        #define DEBUG_CRUMB( msg )                                                                                     \
+            {                                                                                                          \
+                std::cerr << msg << '(' << __FILE__ << ' ' << __LINE__ << "\n";                                        \
+            }
+    #else
+        #define DEBUG_CRUMB( msg )
+    #endif
 #endif
 
 #define ERR_INVOKED_NAME( msg )                                                                                        \
@@ -510,7 +514,6 @@ inline mx::error_t xrif2fits::readHeaderConfig( const std::string &hcfile )
 
                     for( auto &field : fields )
                     {
-                        std::cerr << "adding: " << device << ' ' << ec << ' ' << field << '\n';
                         m_logMetas.push_back( logMetaSpec( { device, ec, field } ) );
                     }
                 }

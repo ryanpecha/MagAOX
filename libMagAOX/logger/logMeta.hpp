@@ -163,7 +163,6 @@ int getLogStateVal( valT                      &val,
 
     if( lm.getPriorLog( stprior, appName, ev, stime, _hint ) != 0 )
     {
-        std::cerr << __FILE__ << " " << __LINE__ << " getPriorLog returned error for " << appName << ":" << ev << "\n";
         return -1;
     }
     valT stprV = getter( flatlogs::logHeader::messageBuffer( stprior ) );
@@ -176,7 +175,6 @@ int getLogStateVal( valT                      &val,
 
     if( lm.getNextLog( atprior, stprior, appName ) != 0 )
     {
-        std::cerr << __FILE__ << " " << __LINE__ << " getNextLog returned error for " << appName << ":" << ev << "\n";
         return -1;
     }
 
@@ -197,8 +195,6 @@ int getLogStateVal( valT                      &val,
         stprior = atprior;
         if( lm.getNextLog( atprior, stprior, appName ) != 0 )
         {
-            std::cerr << __FILE__ << " " << __LINE__ << " getNextLog returned error for " << appName << ":" << ev
-                      << "\n";
             return -1;
         }
     }
@@ -234,7 +230,6 @@ int getLogContVal( valT                      &val,
     // Get log entry before midexp
     if( lm.getPriorLog( stprior, appName, ev, midexp, _hint ) != 0 )
     {
-        std::cerr << __FILE__ << " " << __LINE__ << " getPriorLog returned error for " << appName << ":" << ev << "\n";
         return 1;
     }
     valT stprV = getter( flatlogs::logHeader::messageBuffer( stprior ) );
@@ -242,7 +237,6 @@ int getLogContVal( valT                      &val,
     // Get log entry after.
     if( lm.getNextLog( atafter, stprior, appName ) != 0 )
     {
-        std::cerr << __FILE__ << " " << __LINE__ << " getNextLog returned error for " << appName << ":" << ev << "\n";
 #ifdef HARD_EXIT
         exit( -1 );
 #endif

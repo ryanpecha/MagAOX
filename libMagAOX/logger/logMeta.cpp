@@ -172,21 +172,11 @@ std::string logMeta::value( logMap<verboseT> &lm, const flatlogs::timespecX &sti
 
     if( m_detail.valType == valTypes::String )
     {
-        std::string vs = valueString( lm, stime, atime );
-        if( vs == m_invalidValue )
-        {
-            std::cerr << __FILE__ << " " << __LINE__ << " valueString returned unavailable value\n";
-        }
-        return vs;
+        return valueString( lm, stime, atime );
     }
     else
     {
-        std::string vn = valueNumber( lm, stime, atime );
-        if( vn == m_invalidValue )
-        {
-            std::cerr << __FILE__ << " " << __LINE__ << " valueNumber returned unavailable value\n";
-        }
-        return vn;
+        return valueNumber( lm, stime, atime );
     }
 }
 
@@ -226,7 +216,6 @@ logMeta::valueNumber( logMap<verboseT> &lm, const flatlogs::timespecX &stime, co
                                 reinterpret_cast<char ( * )( void * )>( m_detail.accessor ),
                                 &m_hint ) != 0 )
             {
-                std::cerr << "getLogStateVal returned error: " << __FILE__ << " " << __LINE__ << "\n";
                 return m_invalidValue;
             }
             snprintf( str, sizeof( str ), m_spec.format.c_str(), val );
@@ -455,7 +444,6 @@ logMeta::valueNumber( logMap<verboseT> &lm, const flatlogs::timespecX &stime, co
             snprintf( str, sizeof( str ), m_spec.format.c_str(), val.back() );
             res += str;
 
-            std::cerr << "State Vector_Float " << res << '\n';
             return res;
         }
         default:
@@ -684,8 +672,6 @@ logMeta::valueString( logMap<verboseT> &lm, const flatlogs::timespecX &stime, co
                             reinterpret_cast<std::string ( * )( void * )>( m_detail.accessor ),
                             &m_hint ) != 0 )
         {
-            std::cerr << "getLogStateVal returned error " << __FILE__ << " " << __LINE__ << "\n";
-
 #ifdef HARD_EXIT
             std::cerr << __FILE__ << " " << __LINE__ << "\n";
 
@@ -723,7 +709,6 @@ logMeta::card( logMap<verboseT> &lm, const flatlogs::timespecX &stime, const fla
 
     if( vstr == m_invalidValue )
     {
-        std::cerr << "got unavailable value: " << __FILE__ << " " << __LINE__ << "\n";
         // always a string sentinel value, so return here to skip the valType conditional
         return mx::fits::fitsHeaderCard<verboseT>( keyw, vstr, m_spec.comment );
     }
