@@ -13,6 +13,7 @@
 #include <unistd.h>
 
 #include <filesystem>
+#include <limits>
 
 #include <mx/mxException.hpp>
 
@@ -158,6 +159,32 @@ std::string logInMemory::sourceFile( char *log ) const
     }
 
     return "<unknown-loaded-file>";
+}
+
+size_t logInMemory::sourceOffset( char *log ) const
+{
+    if( log == nullptr || m_memory.empty() )
+    {
+        return std::numeric_limits<size_t>::max();
+    }
+
+    const char *bufferStart = m_memory.data();
+    const char *bufferEnd   = m_memory.data() + m_memory.size();
+    if( log < bufferStart || log >= bufferEnd )
+    {
+        return std::numeric_limits<size_t>::max();
+    }
+
+    size_t offset = static_cast<size_t>( log - bufferStart );
+    for( const loadedFile &loaded : m_loadedFiles )
+    {
+        if( offset >= loaded.m_begin && offset < loaded.m_end )
+        {
+            return offset - loaded.m_begin;
+        }
+    }
+
+    return std::numeric_limits<size_t>::max();
 }
 
 template class logMap<XWC_DEFAULT_VERBOSITY>;

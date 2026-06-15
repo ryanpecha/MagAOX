@@ -76,6 +76,9 @@ struct logInMemory
 
     /// Get the source file name for a log entry pointer.
     std::string sourceFile( char *log /**< [in] pointer to a log entry in m_memory */ ) const;
+
+    /// Get the byte offset in the source file for a log entry pointer.
+    size_t sourceOffset( char *log /**< [in] pointer to a log entry in m_memory */ ) const;
 };
 
 /// Map of log entries by application name, mapping both to files and to loaded buffers.

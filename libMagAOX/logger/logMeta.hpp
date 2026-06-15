@@ -11,6 +11,8 @@
 #ifndef logger_logMeta_hpp
 #define logger_logMeta_hpp
 
+#include <limits>
+
 #include <mx/ioutils/fits/fitsHeaderCard.hpp>
 // #define HARD_EXIT
 #include "logMap.hpp"
@@ -150,6 +152,7 @@ reportUnverifiableLogEntry( const std::string   &appName, /**< [in] app/device n
                             char *failure, /**< [in] unverifiable entry that was skipped */
                             char *after,   /**< [in] verified entry after the bad entry, or null if none was found */
                             const std::string &sourceFile, /**< [in] source log file containing the bad entry */
+                            size_t             sourceByte, /**< [in] byte offset of the bad entry in the source file */
                             const std::string &context     /**< [in] search context that encountered the bad entry */
 )
 {
@@ -158,7 +161,8 @@ reportUnverifiableLogEntry( const std::string   &appName, /**< [in] app/device n
         static std::set<std::string> reported;
         flatlogs::timespecX          failureTs = flatlogs::logHeader::timespec( failure );
         std::string                  reportKey = appName + "|" + std::to_string( ev ) + "|" + sourceFile + "|" +
-                                std::to_string( failureTs.time_s ) + "|" + std::to_string( failureTs.time_ns );
+                                std::to_string( sourceByte ) + "|" + std::to_string( failureTs.time_s ) + "|" +
+                                std::to_string( failureTs.time_ns );
 
         if( reported.count( reportKey ) > 0 )
         {
@@ -170,6 +174,15 @@ reportUnverifiableLogEntry( const std::string   &appName, /**< [in] app/device n
 
     std::cerr << "Unverifiable log entry skipped while processing FITS metadata: app=" << appName << " ev=" << ev
               << " source=" << sourceFile;
+
+    if( sourceByte != std::numeric_limits<size_t>::max() )
+    {
+        std::cerr << " sourceByte=" << sourceByte;
+    }
+    else
+    {
+        std::cerr << " sourceByte=<unknown>";
+    }
 
     if( before != nullptr )
     {
@@ -274,9 +287,10 @@ char *getPriorVerifiedLog( logMap<verboseT>          &lm,      /**< [in] loaded 
 
 /// Find the next log entry that also passes flatbuffer schema verification.
 template <class verboseT = XWC_DEFAULT_VERBOSITY>
-char *getNextVerifiedLog( logMap<verboseT>  &lm,         /**< [in] loaded log map to search */
-                          char              *logCurrent, /**< [in] entry before the desired verified entry */
-                          const std::string &appName     /**< [in] app/device name to search */
+char *getNextVerifiedLog( logMap<verboseT>  &lm,                 /**< [in] loaded log map to search */
+                          char              *logCurrent,         /**< [in] entry before the desired verified entry */
+                          const std::string &appName,            /**< [in] app/device name to search */
+                          char              *logBefore = nullptr /**< [in] verified entry before logCurrent, if any */
 )
 {
     if( logCurrent == nullptr )
@@ -296,6 +310,10 @@ char *getNextVerifiedLog( logMap<verboseT>  &lm,         /**< [in] loaded log ma
     std::vector<rejectedLog> rejected;
 
     auto appBuffer = lm.m_appToBufferMap.find( appName );
+    if( appBuffer != lm.m_appToBufferMap.end() && !verifyLogEntry( ev, logCurrent ) )
+    {
+        rejected.push_back( { logBefore, logCurrent } );
+    }
 
     while( lm.getNextLog( candidate, current, appName ) == 0 )
     {
@@ -316,6 +334,7 @@ char *getNextVerifiedLog( logMap<verboseT>  &lm,         /**< [in] loaded log ma
                                                 badLog.m_failure,
                                                 candidate,
                                                 appBuffer->second.sourceFile( badLog.m_failure ),
+                                                appBuffer->second.sourceOffset( badLog.m_failure ),
                                                 "next-verified-search" );
                 }
             }
@@ -345,6 +364,7 @@ char *getNextVerifiedLog( logMap<verboseT>  &lm,         /**< [in] loaded log ma
                                         badLog.m_failure,
                                         nullptr,
                                         appBuffer->second.sourceFile( badLog.m_failure ),
+                                        appBuffer->second.sourceOffset( badLog.m_failure ),
                                         "next-verified-search" );
         }
     }
@@ -419,7 +439,7 @@ int getLogStateVal( valT                      &val,
     {
         DEBUG_CRUMB( "getLogStateVal next verify failed app=" + appName + " ev=" + std::to_string( ev ) +
                      " logTs=" + logMapDebugTime( flatlogs::logHeader::timespec( atprior ) ) + " " );
-        atprior = getNextVerifiedLog( lm, atprior, appName );
+        atprior = getNextVerifiedLog( lm, atprior, appName, stprior );
         if( atprior == nullptr )
         {
             return -1;
@@ -453,7 +473,7 @@ int getLogStateVal( valT                      &val,
         {
             DEBUG_CRUMB( "getLogStateVal next verify failed app=" + appName + " ev=" + std::to_string( ev ) +
                          " logTs=" + logMapDebugTime( flatlogs::logHeader::timespec( atprior ) ) + " " );
-            atprior = getNextVerifiedLog( lm, atprior, appName );
+            atprior = getNextVerifiedLog( lm, atprior, appName, stprior );
             if( atprior == nullptr )
             {
                 return -1;
@@ -528,7 +548,7 @@ int getLogContVal( valT                      &val,
     {
         DEBUG_CRUMB( "getLogContVal next verify failed app=" + appName + " ev=" + std::to_string( ev ) +
                      " logTs=" + logMapDebugTime( flatlogs::logHeader::timespec( atafter ) ) + " " );
-        atafter = getNextVerifiedLog( lm, atafter, appName );
+        atafter = getNextVerifiedLog( lm, atafter, appName, stprior );
         if( atafter == nullptr )
         {
             return 1;
