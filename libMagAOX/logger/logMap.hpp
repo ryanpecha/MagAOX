@@ -56,13 +56,26 @@ struct logInMemory
 {
     typedef XWC_DEFAULT_VERBOSITY verboseT;
 
+    /// Source file range in the loaded log buffer.
+    struct loadedFile
+    {
+        size_t      m_begin{ 0 }; ///< First byte offset from this source file.
+        size_t      m_end{ 0 };   ///< One past the last byte offset from this source file.
+        std::string m_name;       ///< Full source file path.
+    };
+
     std::vector<char> m_memory; ///< The buffer holding the log data.
 
     flatlogs::timespecX m_startTime{ 0, 0 }; ///< Earliest timestamp covered by the loaded buffer.
     flatlogs::timespecX m_endTime{ 0, 0 };   ///< Latest timestamp covered by the loaded buffer.
 
+    std::vector<loadedFile> m_loadedFiles; ///< Source-file provenance ranges for the loaded buffer.
+
     /// Load one flatlog file into memory.
     int loadFile( file::stdFileName<verboseT> const &lfn /**< [in] standard file name to load */ );
+
+    /// Get the source file name for a log entry pointer.
+    std::string sourceFile( char *log /**< [in] pointer to a log entry in m_memory */ ) const;
 };
 
 /// Map of log entries by application name, mapping both to files and to loaded buffers.

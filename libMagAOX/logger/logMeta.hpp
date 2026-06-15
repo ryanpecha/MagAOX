@@ -142,6 +142,67 @@ bool verifyLogEntry( flatlogs::eventCodeT ev, /**< [in] expected event code for 
                      char                *log /**< [in] raw log entry buffer to verify */
 );
 
+/// Report a skipped unverifiable log entry without aborting metadata processing.
+inline void
+reportUnverifiableLogEntry( const std::string   &appName, /**< [in] app/device name being searched */
+                            flatlogs::eventCodeT ev,      /**< [in] event code being searched */
+                            char *before,  /**< [in] verified entry before the bad entry, or null if unknown */
+                            char *failure, /**< [in] unverifiable entry that was skipped */
+                            char *after,   /**< [in] verified entry after the bad entry, or null if none was found */
+                            const std::string &sourceFile, /**< [in] source log file containing the bad entry */
+                            const std::string &context     /**< [in] search context that encountered the bad entry */
+)
+{
+    if( failure != nullptr )
+    {
+        static std::set<std::string> reported;
+        flatlogs::timespecX          failureTs = flatlogs::logHeader::timespec( failure );
+        std::string                  reportKey = appName + "|" + std::to_string( ev ) + "|" + sourceFile + "|" +
+                                std::to_string( failureTs.time_s ) + "|" + std::to_string( failureTs.time_ns );
+
+        if( reported.count( reportKey ) > 0 )
+        {
+            return;
+        }
+
+        reported.insert( reportKey );
+    }
+
+    std::cerr << "Unverifiable log entry skipped while processing FITS metadata: app=" << appName << " ev=" << ev
+              << " source=" << sourceFile;
+
+    if( before != nullptr )
+    {
+        std::cerr << " beforeTs=" << logMapDebugTime( flatlogs::logHeader::timespec( before ) );
+    }
+    else
+    {
+        std::cerr << " beforeTs=<none>";
+    }
+
+    if( failure != nullptr )
+    {
+        std::cerr << " failureTs=" << logMapDebugTime( flatlogs::logHeader::timespec( failure ) )
+                  << " msgLen=" << flatlogs::logHeader::msgLen( failure )
+                  << " totalSize=" << flatlogs::logHeader::totalSize( failure );
+    }
+    else
+    {
+        std::cerr << " failureTs=<none>";
+    }
+
+    if( after != nullptr )
+    {
+        std::cerr << " afterTs=" << logMapDebugTime( flatlogs::logHeader::timespec( after ) );
+    }
+    else
+    {
+        std::cerr << " afterTs=<none>";
+    }
+
+    std::cerr << " context=" << context << "\n";
+}
+
 /// Find the nearest prior log entry that also passes flatbuffer schema verification.
 template <class verboseT = XWC_DEFAULT_VERBOSITY>
 char *getPriorVerifiedLog( logMap<verboseT>          &lm,      /**< [in] loaded log map to search */
@@ -211,6 +272,89 @@ char *getPriorVerifiedLog( logMap<verboseT>          &lm,      /**< [in] loaded 
     return prior;
 }
 
+/// Find the next log entry that also passes flatbuffer schema verification.
+template <class verboseT = XWC_DEFAULT_VERBOSITY>
+char *getNextVerifiedLog( logMap<verboseT>  &lm,         /**< [in] loaded log map to search */
+                          char              *logCurrent, /**< [in] entry before the desired verified entry */
+                          const std::string &appName     /**< [in] app/device name to search */
+)
+{
+    if( logCurrent == nullptr )
+    {
+        return nullptr;
+    }
+
+    flatlogs::eventCodeT ev = flatlogs::logHeader::eventCode( logCurrent );
+    char                *candidate{ nullptr };
+    char                *current{ logCurrent };
+    struct rejectedLog
+    {
+        char *m_before{ nullptr };  ///< Entry immediately before the unverifiable entry in the search.
+        char *m_failure{ nullptr }; ///< Unverifiable entry skipped during the search.
+    };
+
+    std::vector<rejectedLog> rejected;
+
+    auto appBuffer = lm.m_appToBufferMap.find( appName );
+
+    while( lm.getNextLog( candidate, current, appName ) == 0 )
+    {
+        if( candidate == nullptr )
+        {
+            return nullptr;
+        }
+
+        if( verifyLogEntry( ev, candidate ) )
+        {
+            if( appBuffer != lm.m_appToBufferMap.end() )
+            {
+                for( const rejectedLog &badLog : rejected )
+                {
+                    reportUnverifiableLogEntry( appName,
+                                                ev,
+                                                badLog.m_before,
+                                                badLog.m_failure,
+                                                candidate,
+                                                appBuffer->second.sourceFile( badLog.m_failure ),
+                                                "next-verified-search" );
+                }
+            }
+
+            DEBUG_CRUMB( "getNextVerifiedLog found app=" + appName + " ev=" + std::to_string( ev ) +
+                         " currentTs=" + logMapDebugTime( flatlogs::logHeader::timespec( logCurrent ) ) +
+                         " logTs=" + logMapDebugTime( flatlogs::logHeader::timespec( candidate ) ) + " " );
+            return candidate;
+        }
+
+        DEBUG_CRUMB( "getNextVerifiedLog rejected app=" + appName + " ev=" + std::to_string( ev ) +
+                     " logTs=" + logMapDebugTime( flatlogs::logHeader::timespec( candidate ) ) +
+                     " msgLen=" + std::to_string( flatlogs::logHeader::msgLen( candidate ) ) +
+                     " totalSize=" + std::to_string( flatlogs::logHeader::totalSize( candidate ) ) + " " );
+
+        rejected.push_back( { current, candidate } );
+        current = candidate;
+    }
+
+    if( appBuffer != lm.m_appToBufferMap.end() )
+    {
+        for( const rejectedLog &badLog : rejected )
+        {
+            reportUnverifiableLogEntry( appName,
+                                        ev,
+                                        badLog.m_before,
+                                        badLog.m_failure,
+                                        nullptr,
+                                        appBuffer->second.sourceFile( badLog.m_failure ),
+                                        "next-verified-search" );
+        }
+    }
+
+    DEBUG_CRUMB( "getNextVerifiedLog no match app=" + appName + " ev=" + std::to_string( ev ) +
+                 " currentTs=" + logMapDebugTime( flatlogs::logHeader::timespec( logCurrent ) ) + " " );
+
+    return nullptr;
+}
+
 template <typename valT, class verboseT = XWC_DEFAULT_VERBOSITY>
 int getLogStateVal( valT                      &val,
                     logMap<verboseT>          &lm,
@@ -275,7 +419,11 @@ int getLogStateVal( valT                      &val,
     {
         DEBUG_CRUMB( "getLogStateVal next verify failed app=" + appName + " ev=" + std::to_string( ev ) +
                      " logTs=" + logMapDebugTime( flatlogs::logHeader::timespec( atprior ) ) + " " );
-        return -1;
+        atprior = getNextVerifiedLog( lm, atprior, appName );
+        if( atprior == nullptr )
+        {
+            return -1;
+        }
     }
 
 #ifdef DEBUG
@@ -305,7 +453,11 @@ int getLogStateVal( valT                      &val,
         {
             DEBUG_CRUMB( "getLogStateVal next verify failed app=" + appName + " ev=" + std::to_string( ev ) +
                          " logTs=" + logMapDebugTime( flatlogs::logHeader::timespec( atprior ) ) + " " );
-            return -1;
+            atprior = getNextVerifiedLog( lm, atprior, appName );
+            if( atprior == nullptr )
+            {
+                return -1;
+            }
         }
     }
 
@@ -376,7 +528,11 @@ int getLogContVal( valT                      &val,
     {
         DEBUG_CRUMB( "getLogContVal next verify failed app=" + appName + " ev=" + std::to_string( ev ) +
                      " logTs=" + logMapDebugTime( flatlogs::logHeader::timespec( atafter ) ) + " " );
-        return 1;
+        atafter = getNextVerifiedLog( lm, atafter, appName );
+        if( atafter == nullptr )
+        {
+            return 1;
+        }
     }
     valT atprV = getter( flatlogs::logHeader::messageBuffer( atafter ) );
 

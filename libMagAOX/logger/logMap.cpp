@@ -81,6 +81,7 @@ int logInMemory::loadFile( file::stdFileName<verboseT> const &lfn )
         m_memory.swap( memory );
         m_startTime = startTime;
         m_endTime   = endTime;
+        m_loadedFiles.push_back( { 0, m_memory.size(), lfn.fullName() } );
 
         DEBUG_CRUMB( "logInMemory loadFile initial file=" + lfn.fullName() +
                      " loadedStart=" + logMapDebugTime( m_startTime ) + " loadedEnd=" + logMapDebugTime( m_endTime ) +
@@ -99,6 +100,12 @@ int logInMemory::loadFile( file::stdFileName<verboseT> const &lfn )
         }
 
         m_memory.insert( m_memory.begin(), memory.begin(), memory.end() );
+        for( loadedFile &loaded : m_loadedFiles )
+        {
+            loaded.m_begin += memory.size();
+            loaded.m_end += memory.size();
+        }
+        m_loadedFiles.insert( m_loadedFiles.begin(), { 0, memory.size(), lfn.fullName() } );
         m_startTime = startTime;
         DEBUG_CRUMB( "logInMemory loadFile prepended file=" + lfn.fullName() +
                      " loadedStart=" + logMapDebugTime( m_startTime ) + " loadedEnd=" + logMapDebugTime( m_endTime ) +
@@ -108,7 +115,9 @@ int logInMemory::loadFile( file::stdFileName<verboseT> const &lfn )
 
     if( startTime > m_endTime )
     {
+        size_t loadedBegin = m_memory.size();
         m_memory.insert( m_memory.end(), memory.begin(), memory.end() );
+        m_loadedFiles.push_back( { loadedBegin, m_memory.size(), lfn.fullName() } );
         m_endTime = endTime;
 
         DEBUG_CRUMB( "logInMemory loadFile appended file=" + lfn.fullName() +
@@ -123,6 +132,32 @@ int logInMemory::loadFile( file::stdFileName<verboseT> const &lfn )
     std::cerr << startTime.time_s << " " << startTime.time_ns << "\n";
 
     return -1;
+}
+
+std::string logInMemory::sourceFile( char *log ) const
+{
+    if( log == nullptr || m_memory.empty() )
+    {
+        return "<unknown>";
+    }
+
+    const char *bufferStart = m_memory.data();
+    const char *bufferEnd   = m_memory.data() + m_memory.size();
+    if( log < bufferStart || log >= bufferEnd )
+    {
+        return "<outside-loaded-buffer>";
+    }
+
+    size_t offset = static_cast<size_t>( log - bufferStart );
+    for( const loadedFile &loaded : m_loadedFiles )
+    {
+        if( offset >= loaded.m_begin && offset < loaded.m_end )
+        {
+            return loaded.m_name;
+        }
+    }
+
+    return "<unknown-loaded-file>";
 }
 
 template class logMap<XWC_DEFAULT_VERBOSITY>;
