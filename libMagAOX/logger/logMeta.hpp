@@ -142,6 +142,75 @@ bool verifyLogEntry( flatlogs::eventCodeT ev, /**< [in] expected event code for 
                      char                *log /**< [in] raw log entry buffer to verify */
 );
 
+/// Find the nearest prior log entry that also passes flatbuffer schema verification.
+template <class verboseT = XWC_DEFAULT_VERBOSITY>
+char *getPriorVerifiedLog( logMap<verboseT>          &lm,      /**< [in] loaded log map to search */
+                           const std::string         &appName, /**< [in] app/device name to search */
+                           flatlogs::eventCodeT       ev,      /**< [in] event code to search for */
+                           const flatlogs::timespecX &ts       /**< [in] timestamp to be prior to */
+)
+{
+    auto appBuffer = lm.m_appToBufferMap.find( appName );
+    if( appBuffer == lm.m_appToBufferMap.end() || appBuffer->second.m_memory.size() == 0 )
+    {
+        return nullptr;
+    }
+
+    logInMemory &lim       = appBuffer->second;
+    char        *buffer    = lim.m_memory.data();
+    char        *bufferEnd = lim.m_memory.data() + lim.m_memory.size();
+    char        *prior     = nullptr;
+
+    while( buffer < bufferEnd )
+    {
+        size_t totalSize = flatlogs::logHeader::totalSize( buffer );
+        if( totalSize == 0 || buffer + totalSize > bufferEnd )
+        {
+            DEBUG_CRUMB( "getPriorVerifiedLog invalid entry app=" + appName + " ev=" + std::to_string( ev ) +
+                         " offset=" + std::to_string( buffer - lim.m_memory.data() ) + " totalSize=" +
+                         std::to_string( totalSize ) + " memoryBytes=" + std::to_string( lim.m_memory.size() ) + " " );
+            return prior;
+        }
+
+        flatlogs::timespecX logTs = flatlogs::logHeader::timespec( buffer );
+        if( ts < logTs )
+        {
+            break;
+        }
+
+        if( flatlogs::logHeader::eventCode( buffer ) == ev )
+        {
+            if( verifyLogEntry( ev, buffer ) )
+            {
+                prior = buffer;
+            }
+            else
+            {
+                DEBUG_CRUMB( "getPriorVerifiedLog rejected app=" + appName + " ev=" + std::to_string( ev ) +
+                             " logTs=" + logMapDebugTime( logTs ) +
+                             " msgLen=" + std::to_string( flatlogs::logHeader::msgLen( buffer ) ) +
+                             " totalSize=" + std::to_string( totalSize ) + " " );
+            }
+        }
+
+        buffer += totalSize;
+    }
+
+    if( prior != nullptr )
+    {
+        DEBUG_CRUMB( "getPriorVerifiedLog found app=" + appName + " ev=" + std::to_string( ev ) +
+                     " queryTs=" + logMapDebugTime( ts ) +
+                     " logTs=" + logMapDebugTime( flatlogs::logHeader::timespec( prior ) ) + " " );
+    }
+    else
+    {
+        DEBUG_CRUMB( "getPriorVerifiedLog no match app=" + appName + " ev=" + std::to_string( ev ) +
+                     " queryTs=" + logMapDebugTime( ts ) + " " );
+    }
+
+    return prior;
+}
+
 template <typename valT, class verboseT = XWC_DEFAULT_VERBOSITY>
 int getLogStateVal( valT                      &val,
                     logMap<verboseT>          &lm,
@@ -171,9 +240,19 @@ int getLogStateVal( valT                      &val,
         return -1;
     }
 
-    if( stprior == nullptr || flatlogs::logHeader::eventCode( stprior ) != ev || !verifyLogEntry( ev, stprior ) )
+    if( stprior == nullptr || flatlogs::logHeader::eventCode( stprior ) != ev )
     {
         return -1;
+    }
+    if( !verifyLogEntry( ev, stprior ) )
+    {
+        DEBUG_CRUMB( "getLogStateVal prior verify failed app=" + appName + " ev=" + std::to_string( ev ) +
+                     " logTs=" + logMapDebugTime( flatlogs::logHeader::timespec( stprior ) ) + " " );
+        stprior = getPriorVerifiedLog( lm, appName, ev, stime );
+        if( stprior == nullptr )
+        {
+            return -1;
+        }
     }
 
     valT stprV = getter( flatlogs::logHeader::messageBuffer( stprior ) );
@@ -188,8 +267,14 @@ int getLogStateVal( valT                      &val,
     {
         return -1;
     }
-    if( atprior == nullptr || !verifyLogEntry( ev, atprior ) )
+    if( atprior == nullptr )
     {
+        return -1;
+    }
+    if( !verifyLogEntry( ev, atprior ) )
+    {
+        DEBUG_CRUMB( "getLogStateVal next verify failed app=" + appName + " ev=" + std::to_string( ev ) +
+                     " logTs=" + logMapDebugTime( flatlogs::logHeader::timespec( atprior ) ) + " " );
         return -1;
     }
 
@@ -212,8 +297,14 @@ int getLogStateVal( valT                      &val,
         {
             return -1;
         }
-        if( atprior == nullptr || !verifyLogEntry( ev, atprior ) )
+        if( atprior == nullptr )
         {
+            return -1;
+        }
+        if( !verifyLogEntry( ev, atprior ) )
+        {
+            DEBUG_CRUMB( "getLogStateVal next verify failed app=" + appName + " ev=" + std::to_string( ev ) +
+                         " logTs=" + logMapDebugTime( flatlogs::logHeader::timespec( atprior ) ) + " " );
             return -1;
         }
     }
@@ -252,9 +343,19 @@ int getLogContVal( valT                      &val,
         return 1;
     }
 
-    if( stprior == nullptr || flatlogs::logHeader::eventCode( stprior ) != ev || !verifyLogEntry( ev, stprior ) )
+    if( stprior == nullptr || flatlogs::logHeader::eventCode( stprior ) != ev )
     {
         return 1;
+    }
+    if( !verifyLogEntry( ev, stprior ) )
+    {
+        DEBUG_CRUMB( "getLogContVal prior verify failed app=" + appName + " ev=" + std::to_string( ev ) +
+                     " logTs=" + logMapDebugTime( flatlogs::logHeader::timespec( stprior ) ) + " " );
+        stprior = getPriorVerifiedLog( lm, appName, ev, midexp );
+        if( stprior == nullptr )
+        {
+            return 1;
+        }
     }
 
     valT stprV = getter( flatlogs::logHeader::messageBuffer( stprior ) );
@@ -267,8 +368,14 @@ int getLogContVal( valT                      &val,
 #endif
         return 1;
     }
-    if( atafter == nullptr || !verifyLogEntry( ev, atafter ) )
+    if( atafter == nullptr )
     {
+        return 1;
+    }
+    if( !verifyLogEntry( ev, atafter ) )
+    {
+        DEBUG_CRUMB( "getLogContVal next verify failed app=" + appName + " ev=" + std::to_string( ev ) +
+                     " logTs=" + logMapDebugTime( flatlogs::logHeader::timespec( atafter ) ) + " " );
         return 1;
     }
     valT atprV = getter( flatlogs::logHeader::messageBuffer( atafter ) );
