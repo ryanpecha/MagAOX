@@ -186,6 +186,32 @@ TEST_CASE( "xrif2fits unavailable metadata cards use NOT AVAILABLE", "[xrif2fits
     REQUIRE( errc == mx::error_t::noerror );
 }
 
+/// Verify empty loaded-log buffers fail lookup without dereferencing invalid memory.
+/**
+ * \ingroup xrif2fits_unit_test
+ */
+TEST_CASE( "xrif2fits log metadata lookup handles empty loaded buffers", "[xrif2fits]" )
+{
+    // clang-format off
+    #ifdef XRIF2FITS_TEST_DOXYGEN_REF
+    MagAOX::logger::logMap<>::getPriorLog();
+    #endif
+    // clang-format on
+
+    MagAOX::logger::logMap<>                         logMap;
+    MagAOX::file::stdFileName<XWC_DEFAULT_VERBOSITY> logFile( "cam1/1970_01_01/cam1_19700101000000000000000.bintel" );
+
+    logMap.m_appToFileMap["cam1"].insert( logFile );
+
+    char                *prior = nullptr;
+    flatlogs::timespecX  ts{ 10, 0 };
+    flatlogs::eventCodeT ev = MagAOX::logger::telem_stdcam::eventCode;
+    int                  rv = logMap.getPriorLog( prior, "cam1", ev, ts );
+
+    REQUIRE( rv == -1 );
+    REQUIRE( prior == nullptr );
+}
+
 } // namespace xrif2fitsTest
 
 } // namespace libXWCTest

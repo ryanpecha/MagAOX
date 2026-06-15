@@ -590,6 +590,11 @@ int logMap<verboseT>::getPriorLog( char                      *&logBefore,
         }
     }
 
+    if( lim.m_memory.size() == 0 )
+    {
+        return -1;
+    }
+
     char *buffer, *priorBuffer;
 
     if( hint )
@@ -678,6 +683,11 @@ int logMap<verboseT>::getNextLog( char *&logAfter, char *logCurrent, const std::
     flatlogs::eventCodeT ev, evL;
 
     logInMemory &lim = m_appToBufferMap[appName];
+
+    if( logCurrent == nullptr || lim.m_memory.size() == 0 )
+    {
+        return -1;
+    }
 
     char *buffer;
 

@@ -711,23 +711,30 @@ inline void xrif2fits::appendMetadata( mx::fits::fitsHeader<verboseT> &fh,
                                        const flatlogs::timespecX      &stime,
                                        const flatlogs::timespecX      &atime )
 {
+    DEBUG_CRUMB( "metadata begin: " + meta.device() + " " + meta.keyword() );
+
     if( canLookup && hasTelemetry( meta.device() ) )
     {
         mx::fits::fitsHeaderCard<verboseT> fc = meta.card( m_tels, stime, atime );
+        DEBUG_CRUMB( "metadata append card: " + meta.device() + " " + meta.keyword() );
         fh.append( fc );
         if( writeMeta )
         {
+            DEBUG_CRUMB( "metadata write text: " + meta.device() + " " + meta.keyword() );
             metaOut << " " << meta.value( m_tels, stime, atime );
         }
     }
     else
     {
+        DEBUG_CRUMB( "metadata unavailable: " + meta.device() + " " + meta.keyword() );
         fh.append( meta.unavailableCard() );
         if( writeMeta )
         {
             metaOut << " " << logMeta::unavailableValue();
         }
     }
+
+    DEBUG_CRUMB( "metadata end: " + meta.device() + " " + meta.keyword() );
 }
 
 inline int xrif2fits::execute()
