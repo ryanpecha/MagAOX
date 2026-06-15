@@ -27,6 +27,8 @@ namespace logger
 
 int logInMemory::loadFile( file::stdFileName<verboseT> const &lfn )
 {
+    DEBUG_CRUMB( "logInMemory loadFile begin file=" + lfn.fullName() );
+
     int fd = open( lfn.fullName().c_str(), O_RDONLY );
 
     off_t fsz = mx::ioutils::fileSize( fd );
@@ -71,19 +73,18 @@ int logInMemory::loadFile( file::stdFileName<verboseT> const &lfn )
 
     flatlogs::timespecX endTime = logHeader::timespec( memory.data() + st );
 
+    DEBUG_CRUMB( "logInMemory loadFile read file=" + lfn.fullName() + " bytes=" + std::to_string( memory.size() ) +
+                 " start=" + logMapDebugTime( startTime ) + " end=" + logMapDebugTime( endTime ) );
+
     if( m_memory.size() == 0 )
     {
         m_memory.swap( memory );
         m_startTime = startTime;
         m_endTime   = endTime;
 
-        std::string timestamp;
-        timespec    ts{ endTime.time_s, endTime.time_ns };
-        mx::sys::timeStamp( timestamp, ts );
-
-#ifdef DEBUG
-        std::cerr << __FILE__ << " " << __LINE__ << " loading: " << lfn.fullName() << " " << timestamp << "\n";
-#endif
+        DEBUG_CRUMB( "logInMemory loadFile initial file=" + lfn.fullName() +
+                     " loadedStart=" + logMapDebugTime( m_startTime ) + " loadedEnd=" + logMapDebugTime( m_endTime ) +
+                     " memoryBytes=" + std::to_string( m_memory.size() ) );
 
         return 0;
     }
@@ -99,21 +100,20 @@ int logInMemory::loadFile( file::stdFileName<verboseT> const &lfn )
 
         m_memory.insert( m_memory.begin(), memory.begin(), memory.end() );
         m_startTime = startTime;
+        DEBUG_CRUMB( "logInMemory loadFile prepended file=" + lfn.fullName() +
+                     " loadedStart=" + logMapDebugTime( m_startTime ) + " loadedEnd=" + logMapDebugTime( m_endTime ) +
+                     " memoryBytes=" + std::to_string( m_memory.size() ) );
         return 0;
     }
 
     if( startTime > m_endTime )
     {
-#ifdef DEBUG
-        std::cerr << __FILE__ << " " << __LINE__ << " gonna append\n";
-#endif
-
         m_memory.insert( m_memory.end(), memory.begin(), memory.end() );
         m_endTime = endTime;
 
-#ifdef DEBUG
-        std::cerr << __FILE__ << " " << __LINE__ << " added after!\n";
-#endif
+        DEBUG_CRUMB( "logInMemory loadFile appended file=" + lfn.fullName() +
+                     " loadedStart=" + logMapDebugTime( m_startTime ) + " loadedEnd=" + logMapDebugTime( m_endTime ) +
+                     " memoryBytes=" + std::to_string( m_memory.size() ) );
 
         return 0;
     }

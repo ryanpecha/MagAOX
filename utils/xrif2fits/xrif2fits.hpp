@@ -641,6 +641,8 @@ inline mx::error_t xrif2fits::loadMetaFileMaps( logMap<verboseT>               &
 
         foundAppDir = true;
         mx_error_check( logMap.loadAppToFileMap( dirs[n], app, ext, firstFile, lastFile ) );
+        XRIF2FITS_DEBUG_CRUMB( "metadata map source loaded: source=" + source + " app=" + app + " dir=" + dirs[n] +
+                               " mappedFiles=" + std::to_string( logMap.m_appToFileMap[app].size() ) );
     }
 
     if( !foundAppDir )
@@ -687,6 +689,10 @@ inline bool xrif2fits::exposureTime( timespec &stime, double &exptime, const std
 
     exptime = telem_stdcam::exptime( logHeader::messageBuffer( prior ) );
     stime   = atime - exptime;
+
+    XRIF2FITS_DEBUG_CRUMB( "exposureTime app=" + app + " atime=" + std::to_string( atime.tv_sec ) + "." +
+                           std::to_string( atime.tv_nsec ) + " exptime=" + std::to_string( exptime ) +
+                           " stime=" + std::to_string( stime.tv_sec ) + "." + std::to_string( stime.tv_nsec ) );
 
     char *priorprior = nullptr;
     if( m_tels.getPriorLog( priorprior, app, eventCodes::TELEM_STDCAM, stime ) == 0 && priorprior != nullptr )
@@ -870,6 +876,9 @@ inline int xrif2fits::execute()
         {
             if( hasTelemetry( m_fileNames[n].appName() ) )
             {
+                XRIF2FITS_DEBUG_CRUMB( "archive telemetry load request app=" + m_fileNames[n].appName() +
+                                       " archiveTs=" + std::to_string( m_fileNames[n].timestamp().time_s ) + "." +
+                                       std::to_string( m_fileNames[n].timestamp().time_ns ) + " file=" + m_files[n] );
                 m_tels.loadFiles( m_fileNames[n].appName(), m_fileNames[n].timestamp() );
             }
         }
@@ -1416,6 +1425,12 @@ int xrif2fits::writeImages( int n, stdFileNameT &lfn )
             atime.tv_nsec = curr_timing[2];
             wtime.tv_sec  = curr_timing[3];
             wtime.tv_nsec = curr_timing[4];
+
+            XRIF2FITS_DEBUG_CRUMB( "frame timing q=" + std::to_string( q ) + " cnt=" + std::to_string( cnt0 ) +
+                                   " archiveTs=" + std::to_string( lfn.timestamp().time_s ) + "." +
+                                   std::to_string( lfn.timestamp().time_ns ) +
+                                   " atime=" + std::to_string( atime.tv_sec ) + "." + std::to_string( atime.tv_nsec ) +
+                                   " wtime=" + std::to_string( wtime.tv_sec ) + "." + std::to_string( wtime.tv_nsec ) );
 
             double exptime          = -1;
             bool   haveExposureTime = false;
