@@ -634,8 +634,6 @@ int logMap<verboseT>::getPriorLog( char                      *&logBefore,
 template <class verboseT>
 int logMap<verboseT>::getNextLog( char *&logAfter, char *logCurrent, const std::string &appName )
 {
-    flatlogs::eventCodeT ev, evL;
-
     logInMemory &lim = m_appToBufferMap[appName];
 
     if( logCurrent == nullptr || lim.m_memory.size() == 0 )
@@ -643,40 +641,42 @@ int logMap<verboseT>::getNextLog( char *&logAfter, char *logCurrent, const std::
         return -1;
     }
 
-    char *buffer;
-
-    ev = flatlogs::logHeader::eventCode( logCurrent );
-
-    buffer = logCurrent;
-
-    buffer += flatlogs::logHeader::totalSize( buffer );
-    if( buffer >= lim.m_memory.data() + lim.m_memory.size() )
-    {
-        // propoer action is to load the next file if possible.
-        return 1;
-    }
-
-    evL = flatlogs::logHeader::eventCode( buffer );
-
-    while( evL != ev )
-    {
-        buffer += flatlogs::logHeader::totalSize( buffer );
-        if( buffer >= lim.m_memory.data() + lim.m_memory.size() )
-        {
-            // propoer action is to load the next file if possible.
-            return 1;
-        }
-        evL = flatlogs::logHeader::eventCode( buffer );
-    }
-
-    if( evL != ev )
+    char *bufferStart = lim.m_memory.data();
+    char *bufferEnd   = lim.m_memory.data() + lim.m_memory.size();
+    if( logCurrent < bufferStart || logCurrent >= bufferEnd )
     {
         return -1;
     }
 
-    logAfter = buffer;
+    size_t currentSize = flatlogs::logHeader::totalSize( logCurrent );
+    if( currentSize == 0 || logCurrent + currentSize > bufferEnd )
+    {
+        std::cerr << "attempt to read invalid log entry, possible log corruption.\n";
+        return -1;
+    }
 
-    return 0;
+    flatlogs::eventCodeT ev     = flatlogs::logHeader::eventCode( logCurrent );
+    char                *buffer = logCurrent + currentSize;
+
+    while( buffer < bufferEnd )
+    {
+        size_t totalSize = flatlogs::logHeader::totalSize( buffer );
+        if( totalSize == 0 || buffer + totalSize > bufferEnd )
+        {
+            std::cerr << "attempt to read invalid log entry, possible log corruption.\n";
+            return -1;
+        }
+
+        if( flatlogs::logHeader::eventCode( buffer ) == ev )
+        {
+            logAfter = buffer;
+            return 0;
+        }
+
+        buffer += totalSize;
+    }
+
+    return 1;
 }
 
 template <class verboseT>
