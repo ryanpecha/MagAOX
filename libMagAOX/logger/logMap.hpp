@@ -565,7 +565,7 @@ int logMap<verboseT>::getPriorLog( char                      *&logBefore,
                                    const flatlogs::timespecX  &ts,
                                    char                       *hint )
 {
-    flatlogs::eventCodeT evL;
+    static_cast<void>( hint );
 
     DEBUG_CRUMB( "" );
 
@@ -595,93 +595,35 @@ int logMap<verboseT>::getPriorLog( char                      *&logBefore,
         return -1;
     }
 
-    char *buffer, *priorBuffer;
+    char *buffer      = lim.m_memory.data();
+    char *bufferEnd   = lim.m_memory.data() + lim.m_memory.size();
+    char *priorBuffer = nullptr;
 
-    if( hint )
+    while( buffer < bufferEnd )
     {
-        if( flatlogs::logHeader::timespec( hint ) <= ts )
+        size_t totalSize = flatlogs::logHeader::totalSize( buffer );
+        if( totalSize == 0 || buffer + totalSize > bufferEnd )
         {
-            buffer = hint;
+            std::cerr << "attempt to read invalid log entry, possible log corruption.\n";
+            return -1;
         }
-        else
+
+        if( ts < flatlogs::logHeader::timespec( buffer ) )
         {
-            buffer = lim.m_memory.data();
-        }
-    }
-    else
-    {
-        buffer = lim.m_memory.data();
-    }
-
-    evL = flatlogs::logHeader::eventCode( buffer );
-
-    while( evL != ev )
-    {
-        buffer += flatlogs::logHeader::totalSize( buffer );
-        if( buffer >= lim.m_memory.data() + lim.m_memory.size() )
             break;
-        evL = flatlogs::logHeader::eventCode( buffer );
-    }
+        }
 
-    if( evL != ev )
-    {
-        return -1;
-    }
-
-    if( ts < flatlogs::logHeader::timespec( buffer ) )
-    {
-        return -1;
-    }
-
-    priorBuffer = buffer;
-
-    if( flatlogs::logHeader::timespec( buffer ) < ts )
-    {
-        while( flatlogs::logHeader::timespec( buffer ) < ts ) // Loop until buffer is after the timestamp we want
+        if( flatlogs::logHeader::eventCode( buffer ) == ev )
         {
-            if( buffer > lim.m_memory.data() + lim.m_memory.size() )
-            {
-                std::cerr << "attempt to read too much data, possible log corruption.\n";
-                return -1;
-            }
-
-            if( buffer == lim.m_memory.data() + lim.m_memory.size() )
-            {
-                // Proper action here is to load the next file if possible...
-                return 1;
-            }
-
-            priorBuffer = buffer;
-
-            buffer += flatlogs::logHeader::totalSize( buffer );
-
-            evL = flatlogs::logHeader::eventCode( buffer );
-
-            while( evL != ev ) // Find the next log with the event code we want.
-            {
-                if( buffer > lim.m_memory.data() + lim.m_memory.size() )
-                {
-                    std::cerr << "attempt to read too much data, possible log corruption.\n";
-                    return -1;
-                }
-
-                if( buffer == lim.m_memory.data() + lim.m_memory.size() )
-                {
-                    // Proper action here is to load the next file if possible...
-                    return 1;
-                }
-
-                buffer += flatlogs::logHeader::totalSize( buffer );
-                evL = flatlogs::logHeader::eventCode( buffer );
-            }
-
-            if( ts < flatlogs::logHeader::timespec( buffer ) )
-            {
-                break;
-            }
-
             priorBuffer = buffer;
         }
+
+        buffer += totalSize;
+    }
+
+    if( priorBuffer == nullptr )
+    {
+        return -1;
     }
 
     logBefore = priorBuffer;

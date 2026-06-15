@@ -30,6 +30,12 @@ int logInMemory::loadFile( file::stdFileName<verboseT> const &lfn )
     int fd = open( lfn.fullName().c_str(), O_RDONLY );
 
     off_t fsz = mx::ioutils::fileSize( fd );
+    if( fsz <= 0 )
+    {
+        close( fd );
+        std::cerr << "logInMemory::loadFile(" << lfn.fullName() << ") is empty\n";
+        return -1;
+    }
 
     std::vector<char> memory( fsz );
 
@@ -102,7 +108,7 @@ int logInMemory::loadFile( file::stdFileName<verboseT> const &lfn )
         std::cerr << __FILE__ << " " << __LINE__ << " gonna append\n";
 #endif
 
-        // m_memory.insert( m_memory.end(), memory.begin(), memory.end() );
+        m_memory.insert( m_memory.end(), memory.begin(), memory.end() );
         m_endTime = endTime;
 
 #ifdef DEBUG
@@ -118,7 +124,6 @@ int logInMemory::loadFile( file::stdFileName<verboseT> const &lfn )
 
     return -1;
 }
-
 
 template class logMap<XWC_DEFAULT_VERBOSITY>;
 
