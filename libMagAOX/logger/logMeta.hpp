@@ -137,6 +137,11 @@ struct logMetaDetail
                                );
 */
 
+/// Verify that a raw log entry matches its flatbuffer schema.
+bool verifyLogEntry( flatlogs::eventCodeT ev, /**< [in] expected event code for the raw log entry */
+                     char                *log /**< [in] raw log entry buffer to verify */
+);
+
 template <typename valT, class verboseT = XWC_DEFAULT_VERBOSITY>
 int getLogStateVal( valT                      &val,
                     logMap<verboseT>          &lm,
@@ -166,7 +171,7 @@ int getLogStateVal( valT                      &val,
         return -1;
     }
 
-    if( flatlogs::logHeader::eventCode( stprior ) != ev )
+    if( stprior == nullptr || flatlogs::logHeader::eventCode( stprior ) != ev || !verifyLogEntry( ev, stprior ) )
     {
         return -1;
     }
@@ -180,6 +185,10 @@ int getLogStateVal( valT                      &val,
 #endif
 
     if( lm.getNextLog( atprior, stprior, appName ) != 0 )
+    {
+        return -1;
+    }
+    if( atprior == nullptr || !verifyLogEntry( ev, atprior ) )
     {
         return -1;
     }
@@ -200,6 +209,10 @@ int getLogStateVal( valT                      &val,
         }
         stprior = atprior;
         if( lm.getNextLog( atprior, stprior, appName ) != 0 )
+        {
+            return -1;
+        }
+        if( atprior == nullptr || !verifyLogEntry( ev, atprior ) )
         {
             return -1;
         }
@@ -239,7 +252,7 @@ int getLogContVal( valT                      &val,
         return 1;
     }
 
-    if( flatlogs::logHeader::eventCode( stprior ) != ev )
+    if( stprior == nullptr || flatlogs::logHeader::eventCode( stprior ) != ev || !verifyLogEntry( ev, stprior ) )
     {
         return 1;
     }
@@ -252,6 +265,10 @@ int getLogContVal( valT                      &val,
 #ifdef HARD_EXIT
         exit( -1 );
 #endif
+        return 1;
+    }
+    if( atafter == nullptr || !verifyLogEntry( ev, atafter ) )
+    {
         return 1;
     }
     valT atprV = getter( flatlogs::logHeader::messageBuffer( atafter ) );

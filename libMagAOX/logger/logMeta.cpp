@@ -57,6 +57,151 @@ const std::string &logMeta::unavailableValue()
     return value;
 }
 
+bool verifyLogEntry( flatlogs::eventCodeT ev, char *log )
+{
+    if( log == nullptr )
+    {
+        return false;
+    }
+
+    flatlogs::bufferPtrT logBuff( log, []( char * ) {} );
+    flatlogs::msgLenT    len = flatlogs::logHeader::msgLen( log );
+
+    switch( ev )
+    {
+    case eventCodes::GIT_STATE:
+        return git_state::verify( logBuff, len );
+    case eventCodes::TEXT_LOG:
+        return text_log::verify( logBuff, len );
+    case eventCodes::USER_LOG:
+        return user_log::verify( logBuff, len );
+    case eventCodes::STATE_CHANGE:
+        return state_change::verify( logBuff, len );
+    case eventCodes::SOFTWARE_LOG:
+        return software_log::verify( logBuff, len );
+    case eventCodes::CONFIG_LOG:
+        return config_log::verify( logBuff, len );
+    case eventCodes::INDIDRIVER_START:
+        return indidriver_start::verify( logBuff, len );
+    case eventCodes::INDIDRIVER_STOP:
+        return indidriver_stop::verify( logBuff, len );
+    case eventCodes::LOOP_CLOSED:
+        return loop_closed::verify( logBuff, len );
+    case eventCodes::LOOP_PAUSED:
+        return loop_paused::verify( logBuff, len );
+    case eventCodes::LOOP_OPEN:
+        return loop_open::verify( logBuff, len );
+    case eventCodes::OBSERVER:
+        return observer::verify( logBuff, len );
+    case eventCodes::AO_OPERATOR:
+        return ao_operator::verify( logBuff, len );
+    case eventCodes::PICO_CHANNEL:
+        return pico_channel::verify( logBuff, len );
+    case eventCodes::OUTLET_STATE:
+        return outlet_state::verify( logBuff, len );
+    case eventCodes::OUTLET_CHANNEL_STATE:
+        return outlet_channel_state::verify( logBuff, len );
+    case eventCodes::TELEM_SAVING_STATE:
+        return telem_saving_state::verify( logBuff, len );
+    case eventCodes::TELEM_FXNGEN:
+        return telem_fxngen::verify( logBuff, len );
+    case eventCodes::TTMMOD_PARAMS:
+        return ttmmod_params::verify( logBuff, len );
+    case eventCodes::OCAM_TEMPS:
+        return ocam_temps::verify( logBuff, len );
+    case eventCodes::CRED2_TEMPS:
+        return cred2_temps::verify( logBuff, len );
+    case eventCodes::SAVING_START:
+        return saving_start::verify( logBuff, len );
+    case eventCodes::SAVING_STOP:
+        return saving_stop::verify( logBuff, len );
+    case eventCodes::TELEM_SAVING:
+        return telem_saving::verify( logBuff, len );
+    case eventCodes::TELEM_TELPOS:
+        return telem_telpos::verify( logBuff, len );
+    case eventCodes::TELEM_TELDATA:
+        return telem_teldata::verify( logBuff, len );
+    case eventCodes::TELEM_TELVANE:
+        return telem_telvane::verify( logBuff, len );
+    case eventCodes::TELEM_TELENV:
+        return telem_telenv::verify( logBuff, len );
+    case eventCodes::TELEM_TELCAT:
+        return telem_telcat::verify( logBuff, len );
+    case eventCodes::TELEM_TELSEE:
+        return telem_telsee::verify( logBuff, len );
+    case eventCodes::TELEM_TCSI_TIPTILT:
+        return telem_tcsi_tiptilt::verify( logBuff, len );
+    case eventCodes::TELEM_TCSI_FOCUS:
+        return telem_tcsi_focus::verify( logBuff, len );
+    case eventCodes::TELEM_TCSI_LABMODE:
+        return telem_tcsi_labmode::verify( logBuff, len );
+    case eventCodes::TELEM_STAGE:
+        return telem_stage::verify( logBuff, len );
+    case eventCodes::TELEM_ZABER:
+        return telem_zaber::verify( logBuff, len );
+    case eventCodes::TELEM_PICO:
+        return telem_pico::verify( logBuff, len );
+    case eventCodes::TELEM_POSITION:
+        return telem_position::verify( logBuff, len );
+    case eventCodes::TELEM_PSFACQ:
+        return telem_psfacq::verify( logBuff, len );
+    case eventCodes::TELEM_POKECENTER:
+        return telem_pokecenter::verify( logBuff, len );
+    case eventCodes::TELEM_POKELOOP:
+        return telem_pokeloop::verify( logBuff, len );
+    case eventCodes::TELEM_OBSERVER:
+        return telem_observer::verify( logBuff, len );
+    case eventCodes::TELEM_RHUSB:
+        return telem_rhusb::verify( logBuff, len );
+    case eventCodes::TELEM_TEMPS:
+        return telem_temps::verify( logBuff, len );
+    case eventCodes::TELEM_STDCAM:
+        return telem_stdcam::verify( logBuff, len );
+    case eventCodes::TELEM_CORETEMPS:
+        return telem_coretemps::verify( logBuff, len );
+    case eventCodes::TELEM_CORELOADS:
+        return telem_coreloads::verify( logBuff, len );
+    case eventCodes::TELEM_DRIVETEMPS:
+        return telem_drivetemps::verify( logBuff, len );
+    case eventCodes::TELEM_USAGE:
+        return telem_usage::verify( logBuff, len );
+    case eventCodes::TELEM_COOLER:
+        return telem_cooler::verify( logBuff, len );
+    case eventCodes::TELEM_CHRONY_STATUS:
+        return telem_chrony_status::verify( logBuff, len );
+    case eventCodes::TELEM_CHRONY_STATS:
+        return telem_chrony_stats::verify( logBuff, len );
+    case eventCodes::TELEM_DMSPECK:
+        return telem_dmspeck::verify( logBuff, len );
+    case eventCodes::TELEM_FGTIMINGS:
+        return telem_fgtimings::verify( logBuff, len );
+    case eventCodes::TELEM_DMMODES:
+        return telem_dmmodes::verify( logBuff, len );
+    case eventCodes::TELEM_LOOPGAIN:
+        return telem_loopgain::verify( logBuff, len );
+    case eventCodes::TELEM_MODALGAINOPT:
+        return telem_modalgainopt::verify( logBuff, len );
+    case eventCodes::TELEM_BLOCKGAINS:
+        return telem_blockgains::verify( logBuff, len );
+    case eventCodes::TELEM_OFFLOADING:
+        return telem_offloading::verify( logBuff, len );
+    case eventCodes::TELEM_W2TCSOFFLOADER:
+        return telem_w2tcsoffloader::verify( logBuff, len );
+    case eventCodes::TELEM_FLOWRPM:
+        return telem_flowrpm::verify( logBuff, len );
+    case eventCodes::TELEM_PI335:
+        return telem_pi335::verify( logBuff, len );
+    case eventCodes::TELEM_SPARKLECLOCK:
+        return telem_sparkleclock::verify( logBuff, len );
+    case eventCodes::TELEM_POLTRACK:
+        return telem_poltrack::verify( logBuff, len );
+    case eventCodes::TELEM_ADCTRACK:
+        return telem_adctrack::verify( logBuff, len );
+    default:
+        return false;
+    }
+}
+
 std::string logMeta::fitsKeyword() const
 {
     std::string keyw;
