@@ -38,6 +38,17 @@ using namespace mx::sys::tsop;
     #endif
 #endif
 
+#ifndef XRIF2FITS_DEBUG_CRUMB
+    #if defined( XRIF2FITS_DEBUG ) || defined( DEBUG )
+        #define XRIF2FITS_DEBUG_CRUMB( msg )                                                                           \
+            {                                                                                                          \
+                std::cerr << msg << " (" << __FILE__ << ' ' << __LINE__ << ")\n";                                      \
+            }
+    #else
+        #define XRIF2FITS_DEBUG_CRUMB( msg )
+    #endif
+#endif
+
 #define ERR_INVOKED_NAME( msg )                                                                                        \
     std::cerr << invokedName + ": " << msg << "\n  at:" << __FILE__ << ' ' << __LINE__ << '\n';
 
@@ -456,7 +467,7 @@ inline mx::error_t xrif2fits::readHeaderConfig( const std::string &hcfile )
 
     try
     {
-        DEBUG_CRUMB( "reading: " + hcfile );
+        XRIF2FITS_DEBUG_CRUMB( "reading: " + hcfile );
 
         if( hconfig.readConfig( hcfile, true ) != 0 )
         {
@@ -482,7 +493,7 @@ inline mx::error_t xrif2fits::readHeaderConfig( const std::string &hcfile )
             }
         }
 
-        DEBUG_CRUMB( "reading include: " + mx::app::application::m_configPathCLBase + include );
+        XRIF2FITS_DEBUG_CRUMB( "reading include: " + mx::app::application::m_configPathCLBase + include );
 
         mx_error_check( readHeaderConfig( mx::app::application::m_configPathCLBase + include ) );
     }
@@ -711,22 +722,23 @@ inline void xrif2fits::appendMetadata( mx::fits::fitsHeader<verboseT> &fh,
                                        const flatlogs::timespecX      &stime,
                                        const flatlogs::timespecX      &atime )
 {
-    DEBUG_CRUMB( "metadata begin: " + meta.device() + " " + meta.keyword() );
+    XRIF2FITS_DEBUG_CRUMB( "metadata begin: " + meta.device() + " " + meta.keyword() );
 
     if( canLookup && hasTelemetry( meta.device() ) )
     {
+        XRIF2FITS_DEBUG_CRUMB( "metadata build card: " + meta.device() + " " + meta.keyword() );
         mx::fits::fitsHeaderCard<verboseT> fc = meta.card( m_tels, stime, atime );
-        DEBUG_CRUMB( "metadata append card: " + meta.device() + " " + meta.keyword() );
+        XRIF2FITS_DEBUG_CRUMB( "metadata append card: " + meta.device() + " " + meta.keyword() );
         fh.append( fc );
         if( writeMeta )
         {
-            DEBUG_CRUMB( "metadata write text: " + meta.device() + " " + meta.keyword() );
+            XRIF2FITS_DEBUG_CRUMB( "metadata write text: " + meta.device() + " " + meta.keyword() );
             metaOut << " " << meta.value( m_tels, stime, atime );
         }
     }
     else
     {
-        DEBUG_CRUMB( "metadata unavailable: " + meta.device() + " " + meta.keyword() );
+        XRIF2FITS_DEBUG_CRUMB( "metadata unavailable: " + meta.device() + " " + meta.keyword() );
         fh.append( meta.unavailableCard() );
         if( writeMeta )
         {
@@ -734,11 +746,13 @@ inline void xrif2fits::appendMetadata( mx::fits::fitsHeader<verboseT> &fh,
         }
     }
 
-    DEBUG_CRUMB( "metadata end: " + meta.device() + " " + meta.keyword() );
+    XRIF2FITS_DEBUG_CRUMB( "metadata end: " + meta.device() + " " + meta.keyword() );
 }
 
 inline int xrif2fits::execute()
 {
+    XRIF2FITS_DEBUG_CRUMB( "execute begin" );
+
     // Install signal handling
     struct sigaction act;
     sigset_t         set;
@@ -771,12 +785,14 @@ inline int xrif2fits::execute()
 
     try
     {
+        XRIF2FITS_DEBUG_CRUMB( "prepareFiles begin" );
         mx::error_t errc = prepareFiles();
         if( !!errc )
         {
             mx::error_report<verboseT>( errc, "error from prepareFiles" );
             return -1;
         }
+        XRIF2FITS_DEBUG_CRUMB( "prepareFiles end" );
     }
     catch( ... )
     {
@@ -788,6 +804,7 @@ inline int xrif2fits::execute()
     stdFileNameT &lastFile  = m_fileNames.back();
 
     xrif_error_t rv;
+    XRIF2FITS_DEBUG_CRUMB( "xrif_new image begin" );
     rv = xrif_new( &m_xrif );
 
     if( rv < 0 )
@@ -795,7 +812,9 @@ inline int xrif2fits::execute()
         std::cerr << " (" << invokedName << "): Error allocating xrif.\n";
         return -1;
     }
+    XRIF2FITS_DEBUG_CRUMB( "xrif_new image end" );
 
+    XRIF2FITS_DEBUG_CRUMB( "xrif_new timing begin" );
     rv = xrif_new( &m_xrif_timing );
 
     if( rv < 0 )
@@ -803,9 +822,11 @@ inline int xrif2fits::execute()
         std::cerr << " (" << invokedName << "): Error allocating xrif_timing.\n";
         return -1;
     }
+    XRIF2FITS_DEBUG_CRUMB( "xrif_new timing end" );
 
     if( !m_noHeader )
     {
+        XRIF2FITS_DEBUG_CRUMB( "metadata map load begin" );
         m_logMetas.push_back( logMetaSpec( { firstFile.appName(), telem_stdcam::eventCode, "exptime" } ) );
 
         // Build list of apps, this will be automagic as part of config
@@ -834,6 +855,7 @@ inline int xrif2fits::execute()
                 return -1;
             }
         }
+        XRIF2FITS_DEBUG_CRUMB( "metadata map load end" );
     }
 
     // Now de-compress and load the frames
@@ -858,6 +880,8 @@ inline int xrif2fits::execute()
             std::cout << "* xrif2fits: decoding for " << m_fileNames[n].appName() << " (" + m_files[n] << ")\n";
             std::cout << "******************************************************\n";
         }
+
+        XRIF2FITS_DEBUG_CRUMB( "archive begin: " + m_files[n] );
 
         FILE *fp_xrif = fopen( m_files[n].c_str(), "rb" );
         if( fp_xrif == nullptr )
@@ -994,6 +1018,7 @@ inline int xrif2fits::execute()
 
         if( !m_metaOnly )
         {
+            XRIF2FITS_DEBUG_CRUMB( "xrif_decode image begin: " + m_files[n] );
             rv = xrif_decode( m_xrif );
             if( rv != XRIF_NOERROR )
             {
@@ -1001,8 +1026,10 @@ inline int xrif2fits::execute()
                 std::cerr << "\t code: " << rv << "\n";
                 return -1;
             }
+            XRIF2FITS_DEBUG_CRUMB( "xrif_decode image end: " + m_files[n] );
         }
 
+        XRIF2FITS_DEBUG_CRUMB( "xrif_decode timing begin: " + m_files[n] );
         rv = xrif_decode( m_xrif_timing );
         if( rv != XRIF_NOERROR )
         {
@@ -1010,6 +1037,7 @@ inline int xrif2fits::execute()
             std::cerr << "\t code: " << rv << "\n";
             return -1;
         }
+        XRIF2FITS_DEBUG_CRUMB( "xrif_decode timing end: " + m_files[n] );
 
         if( g_timeToDie == true )
         {
@@ -1072,83 +1100,103 @@ inline int xrif2fits::execute()
         {
             if( m_xrif->type_code == XRIF_TYPECODE_UINT8 )
             {
+                XRIF2FITS_DEBUG_CRUMB( "writeImages<uint8_t> begin: " + m_files[n] );
                 if( writeImages<uint8_t>( n, m_fileNames[n] ) < 0 )
                 {
                     ERR_INVOKED_NAME( "error writing to file: " + m_files[n] );
                     return -1;
                 }
+                XRIF2FITS_DEBUG_CRUMB( "writeImages<uint8_t> end: " + m_files[n] );
             }
             else if( m_xrif->type_code == XRIF_TYPECODE_INT8 )
             {
+                XRIF2FITS_DEBUG_CRUMB( "writeImages<int8_t> begin: " + m_files[n] );
                 if( writeImages<int8_t>( n, m_fileNames[n] ) < 0 )
                 {
                     ERR_INVOKED_NAME( "error writing to file: " + m_files[n] );
                     return -1;
                 }
+                XRIF2FITS_DEBUG_CRUMB( "writeImages<int8_t> end: " + m_files[n] );
             }
             if( m_xrif->type_code == XRIF_TYPECODE_UINT16 )
             {
+                XRIF2FITS_DEBUG_CRUMB( "writeImages<uint16_t> begin: " + m_files[n] );
                 if( writeImages<uint16_t>( n, m_fileNames[n] ) < 0 )
                 {
                     ERR_INVOKED_NAME( "error writing to file: " + m_files[n] );
                     return -1;
                 }
+                XRIF2FITS_DEBUG_CRUMB( "writeImages<uint16_t> end: " + m_files[n] );
             }
             else if( m_xrif->type_code == XRIF_TYPECODE_INT16 )
             {
+                XRIF2FITS_DEBUG_CRUMB( "writeImages<int16_t> begin: " + m_files[n] );
                 if( writeImages<int16_t>( n, m_fileNames[n] ) < 0 )
                 {
                     ERR_INVOKED_NAME( "error writing to file: " + m_files[n] );
                     return -1;
                 }
+                XRIF2FITS_DEBUG_CRUMB( "writeImages<int16_t> end: " + m_files[n] );
             }
             else if( m_xrif->type_code == XRIF_TYPECODE_UINT32 )
             {
+                XRIF2FITS_DEBUG_CRUMB( "writeImages<uint32_t> begin: " + m_files[n] );
                 if( writeImages<uint32_t>( n, m_fileNames[n] ) < 0 )
                 {
                     ERR_INVOKED_NAME( "error writing to file: " + m_files[n] );
                     return -1;
                 }
+                XRIF2FITS_DEBUG_CRUMB( "writeImages<uint32_t> end: " + m_files[n] );
             }
             else if( m_xrif->type_code == XRIF_TYPECODE_INT32 )
             {
+                XRIF2FITS_DEBUG_CRUMB( "writeImages<int32_t> begin: " + m_files[n] );
                 if( writeImages<int32_t>( n, m_fileNames[n] ) < 0 )
                 {
                     ERR_INVOKED_NAME( "error writing to file: " + m_files[n] );
                     return -1;
                 }
+                XRIF2FITS_DEBUG_CRUMB( "writeImages<int32_t> end: " + m_files[n] );
             }
             else if( m_xrif->type_code == XRIF_TYPECODE_UINT64 )
             {
+                XRIF2FITS_DEBUG_CRUMB( "writeImages<uint64_t-as-uint32_t> begin: " + m_files[n] );
                 if( writeImages<uint32_t>( n, m_fileNames[n] ) < 0 )
                 {
                     ERR_INVOKED_NAME( "error writing to file: " + m_files[n] );
                     return -1;
                 }
+                XRIF2FITS_DEBUG_CRUMB( "writeImages<uint64_t-as-uint32_t> end: " + m_files[n] );
             }
             else if( m_xrif->type_code == XRIF_TYPECODE_INT64 )
             {
+                XRIF2FITS_DEBUG_CRUMB( "writeImages<int64_t-as-int32_t> begin: " + m_files[n] );
                 if( writeImages<int32_t>( n, m_fileNames[n] ) < 0 )
                 {
                     ERR_INVOKED_NAME( "error writing to file: " + m_files[n] );
                     return -1;
                 }
+                XRIF2FITS_DEBUG_CRUMB( "writeImages<int64_t-as-int32_t> end: " + m_files[n] );
             }
             else if( m_xrif->type_code == XRIF_TYPECODE_FLOAT )
             {
+                XRIF2FITS_DEBUG_CRUMB( "writeImages<float> begin: " + m_files[n] );
                 if( writeImages<float>( n, m_fileNames[n] ) < 0 )
                 {
                     ERR_INVOKED_NAME( "error writing to file: " + m_files[n] );
                     return -1;
                 }
+                XRIF2FITS_DEBUG_CRUMB( "writeImages<float> end: " + m_files[n] );
             }
             else if( m_xrif->type_code == XRIF_TYPECODE_DOUBLE )
             {
+                XRIF2FITS_DEBUG_CRUMB( "writeImages<double-as-float> begin: " + m_files[n] );
                 if( writeImages<float>( n, m_fileNames[n] ) < 0 )
                 {
                     ERR_INVOKED_NAME( "error writing to file: " + m_files[n] );
                     return -1;
                 }
+                XRIF2FITS_DEBUG_CRUMB( "writeImages<double-as-float> end: " + m_files[n] );
             }
             else
             {
@@ -1354,6 +1402,8 @@ int xrif2fits::writeImages( int n, stdFileNameT &lfn )
     {
         for( int q = 0; q < tmpc.planes(); ++q )
         {
+            XRIF2FITS_DEBUG_CRUMB( "frame begin: " + std::to_string( q ) );
+
             uint64_t cnt0;
             timespec atime; // This is the acquisition time of the exposure
             timespec wtime;
@@ -1380,10 +1430,12 @@ int xrif2fits::writeImages( int n, stdFileNameT &lfn )
             mx::sys::timeStamp( timestamp, atime );
             std::string outfname = m_outDir + lfn.appName() + "_" + timestamp + ".fits";
 
+            XRIF2FITS_DEBUG_CRUMB( "header clear: " + outfname );
             fh.clear();
 
             std::string dateobs = mx::sys::ISO8601DateTimeStr( atime, 1 );
 
+            XRIF2FITS_DEBUG_CRUMB( "header append standard cards: " + outfname );
             fh.append( "DATE-OBS", dateobs, "Date of obs. YYYY-mm-ddTHH:MM:SS" );
             fh.append( "INSTRUME", "MagAO-X " + lfn.appName() );
             fh.append( "CAMERA", lfn.appName() );
@@ -1413,10 +1465,13 @@ int xrif2fits::writeImages( int n, stdFileNameT &lfn )
                 // Then output each value in turn
                 for( size_t u = 0; u < m_logMetas.size(); ++u )
                 {
+                    XRIF2FITS_DEBUG_CRUMB( "metadata index: " + std::to_string( u ) + " of " +
+                                           std::to_string( m_logMetas.size() ) );
                     appendMetadata( fh, metaOut, m_logMetas[u], !m_noMeta, haveExposureTime, stime, atime );
                 }
             }
 
+            XRIF2FITS_DEBUG_CRUMB( "header append timing cards: " + outfname );
             fh.append( "FRAMENO", cnt0 );
             fh.append( "ACQSEC", atime.tv_sec, "Image acq. time, seconds since Unix epoch" );
             fh.append( "ACQNSEC", atime.tv_nsec, "Image acq. time, nanosecond component" );
@@ -1429,9 +1484,13 @@ int xrif2fits::writeImages( int n, stdFileNameT &lfn )
             }
             if( !m_metaOnly )
             {
+                XRIF2FITS_DEBUG_CRUMB( "fits write begin: " + outfname );
                 mx::improc::eigenImage<dataT> im = tmpc.image( q );
                 ff.write( outfname, tmpc.image( q ), fh );
+                XRIF2FITS_DEBUG_CRUMB( "fits write end: " + outfname );
             }
+
+            XRIF2FITS_DEBUG_CRUMB( "frame end: " + std::to_string( q ) );
         }
     }
 
