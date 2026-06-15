@@ -165,6 +165,12 @@ int getLogStateVal( valT                      &val,
     {
         return -1;
     }
+
+    if( flatlogs::logHeader::eventCode( stprior ) != ev )
+    {
+        return -1;
+    }
+
     valT stprV = getter( flatlogs::logHeader::messageBuffer( stprior ) );
 
     valT atprV;
@@ -232,6 +238,12 @@ int getLogContVal( valT                      &val,
     {
         return 1;
     }
+
+    if( flatlogs::logHeader::eventCode( stprior ) != ev )
+    {
+        return 1;
+    }
+
     valT stprV = getter( flatlogs::logHeader::messageBuffer( stprior ) );
 
     // Get log entry after.

@@ -613,12 +613,10 @@ int logMap<verboseT>::getPriorLog( char                      *&logBefore,
         buffer = lim.m_memory.data();
     }
 
-    priorBuffer = buffer;
-    evL         = flatlogs::logHeader::eventCode( buffer );
+    evL = flatlogs::logHeader::eventCode( buffer );
 
     while( evL != ev )
     {
-        priorBuffer = buffer;
         buffer += flatlogs::logHeader::totalSize( buffer );
         if( buffer >= lim.m_memory.data() + lim.m_memory.size() )
             break;
@@ -629,6 +627,13 @@ int logMap<verboseT>::getPriorLog( char                      *&logBefore,
     {
         return -1;
     }
+
+    if( ts < flatlogs::logHeader::timespec( buffer ) )
+    {
+        return -1;
+    }
+
+    priorBuffer = buffer;
 
     if( flatlogs::logHeader::timespec( buffer ) < ts )
     {
@@ -669,6 +674,13 @@ int logMap<verboseT>::getPriorLog( char                      *&logBefore,
                 buffer += flatlogs::logHeader::totalSize( buffer );
                 evL = flatlogs::logHeader::eventCode( buffer );
             }
+
+            if( ts < flatlogs::logHeader::timespec( buffer ) )
+            {
+                break;
+            }
+
+            priorBuffer = buffer;
         }
     }
 
