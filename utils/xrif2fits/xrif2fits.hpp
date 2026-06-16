@@ -39,7 +39,7 @@ using namespace mx::sys::tsop;
 #endif
 
 #ifndef XRIF2FITS_DEBUG_CRUMB
-    #if defined( XRIF2FITS_DEBUG ) || defined( DEBUG )
+    #ifdef XRIF2FITS_DEBUG
         #define XRIF2FITS_DEBUG_CRUMB( msg )                                                                           \
             {                                                                                                          \
                 std::cerr << msg << " (" << __FILE__ << ' ' << __LINE__ << ")\n";                                      \
