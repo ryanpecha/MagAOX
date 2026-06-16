@@ -70,7 +70,7 @@ int logInMemory::loadFile( file::stdFileName<verboseT> const &lfn )
         if( !logMapEntrySane( totalSize, buffer, bufferEnd, minTsPtr ) )
         {
             char *resynced = logMapResync( buffer, bufferEnd, minTsPtr );
-            std::cerr << "Invalid log entry skipped while loading log file: source=" << lfn.fullName()
+            std::cerr << m_reportPrefix << "Invalid log entry skipped while loading log file: source=" << lfn.fullName()
                       << " sourceByte=" << buffer - bufferStart;
             m_recoverableErrors++;
             if( resynced != nullptr )

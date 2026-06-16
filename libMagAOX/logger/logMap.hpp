@@ -179,6 +179,8 @@ struct logInMemory
 
     size_t m_recoverableErrors{ 0 }; ///< Count of recoverable log parsing errors encountered while loading.
 
+    std::string m_reportPrefix; ///< Optional prefix for user-facing recoverable log parsing reports.
+
     /// Load one flatlog file into memory.
     int loadFile( file::stdFileName<verboseT> const &lfn /**< [in] standard file name to load */ );
 
@@ -208,6 +210,8 @@ struct logMap
     appToFileMapT m_appToFileMap; ///< Available log files grouped by app/device name.
 
     appToBufferMapT m_appToBufferMap; ///< Loaded log buffers grouped by app/device name.
+
+    std::string m_reportPrefix; ///< Optional prefix for user-facing recoverable log parsing reports.
 
     /// Record one recoverable log-processing error.
     void recordRecoverableError( const std::string &appName /**< [in] app/device associated with the error */ );
@@ -967,6 +971,7 @@ int logMap<verboseT>::loadFiles( const std::string &appName, const flatlogs::tim
             {
                 DEBUG_CRUMB( "loadFiles append backward app=" + appName + " file=" + it->fullName() +
                              " timestamp=" + logMapDebugTime( it->timestamp() ) );
+                m_appToBufferMap[appName].m_reportPrefix = m_reportPrefix;
                 m_appToBufferMap[appName].loadFile( *it );
             }
 
@@ -997,6 +1002,7 @@ int logMap<verboseT>::loadFiles( const std::string &appName, const flatlogs::tim
             {
                 DEBUG_CRUMB( "loadFiles append forward app=" + appName + " file=" + it->fullName() +
                              " timestamp=" + logMapDebugTime( it->timestamp() ) );
+                m_appToBufferMap[appName].m_reportPrefix = m_reportPrefix;
                 m_appToBufferMap[appName].loadFile( *it );
             }
             return 0;
@@ -1038,11 +1044,13 @@ int logMap<verboseT>::loadFiles( const std::string &appName, const flatlogs::tim
     std::cerr << __FILE__ << " " << __LINE__ << "\n";
 #endif
 
+    m_appToBufferMap[appName].m_reportPrefix = m_reportPrefix;
     m_appToBufferMap[appName].loadFile( *before );
     DEBUG_CRUMB( "loadFiles initial before app=" + appName + " file=" + before->fullName() +
                  " timestamp=" + logMapDebugTime( before->timestamp() ) );
     if( ++before != m_appToFileMap[appName].end() )
     {
+        m_appToBufferMap[appName].m_reportPrefix = m_reportPrefix;
         m_appToBufferMap[appName].loadFile( *before );
         DEBUG_CRUMB( "loadFiles initial after app=" + appName + " file=" + before->fullName() +
                      " timestamp=" + logMapDebugTime( before->timestamp() ) );

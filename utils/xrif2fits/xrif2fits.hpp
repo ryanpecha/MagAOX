@@ -253,6 +253,9 @@ class xrif2fits : public mx::app::application
 
 inline xrif2fits::xrif2fits()
 {
+    m_logs.m_reportPrefix = "(xrif2fits): ";
+    m_tels.m_reportPrefix = "(xrif2fits): ";
+
     // setup the default config path
     MagAOXPath = mx::sys::getEnv( MAGAOX_env_path );
 

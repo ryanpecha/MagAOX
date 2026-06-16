@@ -189,7 +189,7 @@ The resync warning reports the byte span from the failed traversal point to the
 resync point:
 
 ```
-Invalid log entry skipped while loading log file: source=/path/file.bintel sourceByte=8155228 resyncByte=8155292 (64 byte resync span; corrupt section may begin earlier)
+(xrif2fits): Invalid log entry skipped while loading log file: source=/path/file.bintel sourceByte=8155228 resyncByte=8155292 (64 byte resync span; corrupt section may begin earlier)
 ```
 
 That span is not necessarily the same as the total corrupt section that
