@@ -390,23 +390,28 @@ int logMeta::setLog( const logMetaSpec &lms )
     return 0;
 }
 
-std::string logMeta::value( logMap<verboseT> &lm, const flatlogs::timespecX &stime, const flatlogs::timespecX &atime )
+std::string logMeta::value( logMap<verboseT>          &lm,
+                            const flatlogs::timespecX &stime,
+                            const flatlogs::timespecX &atime,
+                            double                     maxGap )
 {
     if( m_detail.accessor == nullptr )
         return m_invalidValue;
 
     if( m_detail.valType == valTypes::String )
     {
-        return valueString( lm, stime, atime );
+        return valueString( lm, stime, atime, maxGap );
     }
     else
     {
-        return valueNumber( lm, stime, atime );
+        return valueNumber( lm, stime, atime, maxGap );
     }
 }
 
-std::string
-logMeta::valueNumber( logMap<verboseT> &lm, const flatlogs::timespecX &stime, const flatlogs::timespecX &atime )
+std::string logMeta::valueNumber( logMap<verboseT>          &lm,
+                                  const flatlogs::timespecX &stime,
+                                  const flatlogs::timespecX &atime,
+                                  double                     maxGap )
 {
     char str[64];
 
@@ -424,7 +429,8 @@ logMeta::valueNumber( logMap<verboseT> &lm, const flatlogs::timespecX &stime, co
                                 stime,
                                 atime,
                                 reinterpret_cast<bool ( * )( void * )>( m_detail.accessor ),
-                                &m_hint ) != 0 )
+                                &m_hint,
+                                maxGap ) != 0 )
                 return m_invalidValue;
             snprintf( str, sizeof( str ), m_spec.format.c_str(), val );
             return std::string( str );
@@ -439,7 +445,8 @@ logMeta::valueNumber( logMap<verboseT> &lm, const flatlogs::timespecX &stime, co
                                 stime,
                                 atime,
                                 reinterpret_cast<char ( * )( void * )>( m_detail.accessor ),
-                                &m_hint ) != 0 )
+                                &m_hint,
+                                maxGap ) != 0 )
             {
                 return m_invalidValue;
             }
@@ -456,7 +463,8 @@ logMeta::valueNumber( logMap<verboseT> &lm, const flatlogs::timespecX &stime, co
                                 stime,
                                 atime,
                                 reinterpret_cast<unsigned char ( * )( void * )>( m_detail.accessor ),
-                                &m_hint ) != 0 )
+                                &m_hint,
+                                maxGap ) != 0 )
                 return m_invalidValue;
             snprintf( str, sizeof( str ), m_spec.format.c_str(), val );
             return std::string( str );
@@ -471,7 +479,8 @@ logMeta::valueNumber( logMap<verboseT> &lm, const flatlogs::timespecX &stime, co
                                 stime,
                                 atime,
                                 reinterpret_cast<short ( * )( void * )>( m_detail.accessor ),
-                                &m_hint ) != 0 )
+                                &m_hint,
+                                maxGap ) != 0 )
                 return m_invalidValue;
             snprintf( str, sizeof( str ), m_spec.format.c_str(), val );
             return std::string( str );
@@ -486,7 +495,8 @@ logMeta::valueNumber( logMap<verboseT> &lm, const flatlogs::timespecX &stime, co
                                 stime,
                                 atime,
                                 reinterpret_cast<unsigned short ( * )( void * )>( m_detail.accessor ),
-                                &m_hint ) != 0 )
+                                &m_hint,
+                                maxGap ) != 0 )
                 return m_invalidValue;
             snprintf( str, sizeof( str ), m_spec.format.c_str(), val );
             return std::string( str );
@@ -501,7 +511,8 @@ logMeta::valueNumber( logMap<verboseT> &lm, const flatlogs::timespecX &stime, co
                                 stime,
                                 atime,
                                 reinterpret_cast<int ( * )( void * )>( m_detail.accessor ),
-                                &m_hint ) != 0 )
+                                &m_hint,
+                                maxGap ) != 0 )
                 return m_invalidValue;
             snprintf( str, sizeof( str ), m_spec.format.c_str(), val );
             return std::string( str );
@@ -516,7 +527,8 @@ logMeta::valueNumber( logMap<verboseT> &lm, const flatlogs::timespecX &stime, co
                                 stime,
                                 atime,
                                 reinterpret_cast<unsigned int ( * )( void * )>( m_detail.accessor ),
-                                &m_hint ) != 0 )
+                                &m_hint,
+                                maxGap ) != 0 )
                 return m_invalidValue;
             snprintf( str, sizeof( str ), m_spec.format.c_str(), val );
             return std::string( str );
@@ -531,7 +543,8 @@ logMeta::valueNumber( logMap<verboseT> &lm, const flatlogs::timespecX &stime, co
                                 stime,
                                 atime,
                                 reinterpret_cast<long ( * )( void * )>( m_detail.accessor ),
-                                &m_hint ) != 0 )
+                                &m_hint,
+                                maxGap ) != 0 )
                 return m_invalidValue;
             snprintf( str, sizeof( str ), m_spec.format.c_str(), val );
             return std::string( str );
@@ -546,7 +559,8 @@ logMeta::valueNumber( logMap<verboseT> &lm, const flatlogs::timespecX &stime, co
                                 stime,
                                 atime,
                                 reinterpret_cast<unsigned long ( * )( void * )>( m_detail.accessor ),
-                                &m_hint ) != 0 )
+                                &m_hint,
+                                maxGap ) != 0 )
                 return m_invalidValue;
             snprintf( str, sizeof( str ), m_spec.format.c_str(), val );
             return std::string( str );
@@ -561,7 +575,8 @@ logMeta::valueNumber( logMap<verboseT> &lm, const flatlogs::timespecX &stime, co
                                 stime,
                                 atime,
                                 reinterpret_cast<long long ( * )( void * )>( m_detail.accessor ),
-                                &m_hint ) != 0 )
+                                &m_hint,
+                                maxGap ) != 0 )
                 return m_invalidValue;
             snprintf( str, sizeof( str ), m_spec.format.c_str(), val );
             return std::string( str );
@@ -576,7 +591,8 @@ logMeta::valueNumber( logMap<verboseT> &lm, const flatlogs::timespecX &stime, co
                                 stime,
                                 atime,
                                 reinterpret_cast<unsigned long long ( * )( void * )>( m_detail.accessor ),
-                                &m_hint ) != 0 )
+                                &m_hint,
+                                maxGap ) != 0 )
                 return m_invalidValue;
             snprintf( str, sizeof( str ), m_spec.format.c_str(), val );
             return std::string( str );
@@ -591,7 +607,8 @@ logMeta::valueNumber( logMap<verboseT> &lm, const flatlogs::timespecX &stime, co
                                 stime,
                                 atime,
                                 reinterpret_cast<float ( * )( void * )>( m_detail.accessor ),
-                                &m_hint ) != 0 )
+                                &m_hint,
+                                maxGap ) != 0 )
                 return m_invalidValue;
             snprintf( str, sizeof( str ), m_spec.format.c_str(), val );
             return std::string( str );
@@ -606,7 +623,8 @@ logMeta::valueNumber( logMap<verboseT> &lm, const flatlogs::timespecX &stime, co
                                 stime,
                                 atime,
                                 reinterpret_cast<double ( * )( void * )>( m_detail.accessor ),
-                                &m_hint ) != 0 )
+                                &m_hint,
+                                maxGap ) != 0 )
                 return m_invalidValue;
             snprintf( str, sizeof( str ), m_spec.format.c_str(), val );
             return std::string( str );
@@ -621,7 +639,8 @@ logMeta::valueNumber( logMap<verboseT> &lm, const flatlogs::timespecX &stime, co
                                 stime,
                                 atime,
                                 reinterpret_cast<std::vector<bool> ( * )( void * )>( m_detail.accessor ),
-                                &m_hint ) != 0 )
+                                &m_hint,
+                                maxGap ) != 0 )
                 return m_invalidValue;
 
             if( val.size() == 0 )
@@ -651,7 +670,8 @@ logMeta::valueNumber( logMap<verboseT> &lm, const flatlogs::timespecX &stime, co
                                 stime,
                                 atime,
                                 reinterpret_cast<std::vector<float> ( * )( void * )>( m_detail.accessor ),
-                                &m_hint ) != 0 )
+                                &m_hint,
+                                maxGap ) != 0 )
                 return m_invalidValue;
 
             if( val.size() == 0 )
@@ -689,7 +709,8 @@ logMeta::valueNumber( logMap<verboseT> &lm, const flatlogs::timespecX &stime, co
                                stime,
                                atime,
                                reinterpret_cast<bool ( * )( void * )>( m_detail.accessor ),
-                               &m_hint ) != 0 )
+                               &m_hint,
+                               maxGap ) != 0 )
                 return m_invalidValue;
             snprintf( str, sizeof( str ), m_spec.format.c_str(), val );
             return std::string( str );
@@ -704,7 +725,8 @@ logMeta::valueNumber( logMap<verboseT> &lm, const flatlogs::timespecX &stime, co
                                stime,
                                atime,
                                reinterpret_cast<char ( * )( void * )>( m_detail.accessor ),
-                               &m_hint ) != 0 )
+                               &m_hint,
+                               maxGap ) != 0 )
                 return m_invalidValue;
             snprintf( str, sizeof( str ), m_spec.format.c_str(), val );
             return std::string( str );
@@ -719,7 +741,8 @@ logMeta::valueNumber( logMap<verboseT> &lm, const flatlogs::timespecX &stime, co
                                stime,
                                atime,
                                reinterpret_cast<unsigned char ( * )( void * )>( m_detail.accessor ),
-                               &m_hint ) != 0 )
+                               &m_hint,
+                               maxGap ) != 0 )
                 return m_invalidValue;
             snprintf( str, sizeof( str ), m_spec.format.c_str(), val );
             return std::string( str );
@@ -734,7 +757,8 @@ logMeta::valueNumber( logMap<verboseT> &lm, const flatlogs::timespecX &stime, co
                                stime,
                                atime,
                                reinterpret_cast<short ( * )( void * )>( m_detail.accessor ),
-                               &m_hint ) != 0 )
+                               &m_hint,
+                               maxGap ) != 0 )
                 return m_invalidValue;
             snprintf( str, sizeof( str ), m_spec.format.c_str(), val );
             return std::string( str );
@@ -749,7 +773,8 @@ logMeta::valueNumber( logMap<verboseT> &lm, const flatlogs::timespecX &stime, co
                                stime,
                                atime,
                                reinterpret_cast<unsigned short ( * )( void * )>( m_detail.accessor ),
-                               &m_hint ) != 0 )
+                               &m_hint,
+                               maxGap ) != 0 )
                 return m_invalidValue;
             snprintf( str, sizeof( str ), m_spec.format.c_str(), val );
             return std::string( str );
@@ -764,7 +789,8 @@ logMeta::valueNumber( logMap<verboseT> &lm, const flatlogs::timespecX &stime, co
                                stime,
                                atime,
                                reinterpret_cast<int ( * )( void * )>( m_detail.accessor ),
-                               &m_hint ) != 0 )
+                               &m_hint,
+                               maxGap ) != 0 )
                 return m_invalidValue;
             snprintf( str, sizeof( str ), m_spec.format.c_str(), val );
             return std::string( str );
@@ -779,7 +805,8 @@ logMeta::valueNumber( logMap<verboseT> &lm, const flatlogs::timespecX &stime, co
                                stime,
                                atime,
                                reinterpret_cast<unsigned int ( * )( void * )>( m_detail.accessor ),
-                               &m_hint ) != 0 )
+                               &m_hint,
+                               maxGap ) != 0 )
                 return m_invalidValue;
             snprintf( str, sizeof( str ), m_spec.format.c_str(), val );
             return std::string( str );
@@ -794,7 +821,8 @@ logMeta::valueNumber( logMap<verboseT> &lm, const flatlogs::timespecX &stime, co
                                stime,
                                atime,
                                reinterpret_cast<long ( * )( void * )>( m_detail.accessor ),
-                               &m_hint ) != 0 )
+                               &m_hint,
+                               maxGap ) != 0 )
                 return m_invalidValue;
             snprintf( str, sizeof( str ), m_spec.format.c_str(), val );
             return std::string( str );
@@ -809,7 +837,8 @@ logMeta::valueNumber( logMap<verboseT> &lm, const flatlogs::timespecX &stime, co
                                stime,
                                atime,
                                reinterpret_cast<unsigned long ( * )( void * )>( m_detail.accessor ),
-                               &m_hint ) != 0 )
+                               &m_hint,
+                               maxGap ) != 0 )
                 return m_invalidValue;
             snprintf( str, sizeof( str ), m_spec.format.c_str(), val );
             return std::string( str );
@@ -824,7 +853,8 @@ logMeta::valueNumber( logMap<verboseT> &lm, const flatlogs::timespecX &stime, co
                                stime,
                                atime,
                                reinterpret_cast<long long ( * )( void * )>( m_detail.accessor ),
-                               &m_hint ) != 0 )
+                               &m_hint,
+                               maxGap ) != 0 )
                 return m_invalidValue;
             snprintf( str, sizeof( str ), m_spec.format.c_str(), val );
             return std::string( str );
@@ -839,7 +869,8 @@ logMeta::valueNumber( logMap<verboseT> &lm, const flatlogs::timespecX &stime, co
                                stime,
                                atime,
                                reinterpret_cast<unsigned long long ( * )( void * )>( m_detail.accessor ),
-                               &m_hint ) != 0 )
+                               &m_hint,
+                               maxGap ) != 0 )
                 return m_invalidValue;
             snprintf( str, sizeof( str ), m_spec.format.c_str(), val );
             return std::string( str );
@@ -854,7 +885,8 @@ logMeta::valueNumber( logMap<verboseT> &lm, const flatlogs::timespecX &stime, co
                                stime,
                                atime,
                                reinterpret_cast<float ( * )( void * )>( m_detail.accessor ),
-                               &m_hint ) != 0 )
+                               &m_hint,
+                               maxGap ) != 0 )
                 return m_invalidValue;
             snprintf( str, sizeof( str ), m_spec.format.c_str(), val );
             return std::string( str );
@@ -869,7 +901,8 @@ logMeta::valueNumber( logMap<verboseT> &lm, const flatlogs::timespecX &stime, co
                                stime,
                                atime,
                                reinterpret_cast<double ( * )( void * )>( m_detail.accessor ),
-                               &m_hint ) != 0 )
+                               &m_hint,
+                               maxGap ) != 0 )
                 return m_invalidValue;
             snprintf( str, sizeof( str ), m_spec.format.c_str(), val );
             return std::string( str );
@@ -882,8 +915,10 @@ logMeta::valueNumber( logMap<verboseT> &lm, const flatlogs::timespecX &stime, co
     return m_invalidValue;
 }
 
-std::string
-logMeta::valueString( logMap<verboseT> &lm, const flatlogs::timespecX &stime, const flatlogs::timespecX &atime )
+std::string logMeta::valueString( logMap<verboseT>          &lm,
+                                  const flatlogs::timespecX &stime,
+                                  const flatlogs::timespecX &atime,
+                                  double                     maxGap )
 {
     std::string val;
     if( m_detail.metaType == metaTypes::State )
@@ -895,7 +930,8 @@ logMeta::valueString( logMap<verboseT> &lm, const flatlogs::timespecX &stime, co
                             stime,
                             atime,
                             reinterpret_cast<std::string ( * )( void * )>( m_detail.accessor ),
-                            &m_hint ) != 0 )
+                            &m_hint,
+                            maxGap ) != 0 )
         {
 #ifdef HARD_EXIT
             std::cerr << __FILE__ << " " << __LINE__ << "\n";
@@ -918,13 +954,13 @@ mx::fits::fitsHeaderCard<logMeta::verboseT> logMeta::unavailableCard() const
 }
 
 mx::fits::fitsHeaderCard<logMeta::verboseT>
-logMeta::card( logMap<verboseT> &lm, const flatlogs::timespecX &stime, const flatlogs::timespecX &atime )
+logMeta::card( logMap<verboseT> &lm, const flatlogs::timespecX &stime, const flatlogs::timespecX &atime, double maxGap )
 {
 #ifdef DEBUG
     std::cerr << __FILE__ << " " << __LINE__ << "\n";
 #endif
 
-    std::string vstr = value( lm, stime, atime );
+    std::string vstr = value( lm, stime, atime, maxGap );
 
 #ifdef DEBUG
     std::cerr << __FILE__ << " " << __LINE__ << "\n";

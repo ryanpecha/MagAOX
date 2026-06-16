@@ -136,6 +136,8 @@ class xrif2fits : public mx::app::application
 
     bool m_strict{ false };
 
+    double m_maxMetadataGap{ 25.0 };
+
     bool m_strictAbort{ false };
 
     size_t m_recoverableErrors{ 0 };
@@ -445,6 +447,17 @@ inline void xrif2fits::setupConfig()
                 "bool",
                 "If true, recoverable metadata/log errors stop processing before FITS files are written.  Default is "
                 "false." );
+
+    config.add( "maxMetadataGap",
+                "",
+                "maxMetadataGap",
+                argType::Required,
+                "",
+                "maxMetadataGap",
+                false,
+                "double",
+                "Maximum permitted time gap in seconds for metadata telemetry coverage.  Set negative to disable.  "
+                "Default is 25 seconds." );
 }
 
 inline void xrif2fits::loadConfig()
@@ -471,6 +484,7 @@ inline void xrif2fits::loadConfig()
     config( m_noMeta, "noMeta" );
     config( m_cubeMode, "cubeMode" );
     config( m_strict, "strict" );
+    config( m_maxMetadataGap, "maxMetadataGap" );
 
     if( m_configPathCLBase.size() > 0 )
     {
@@ -756,7 +770,16 @@ inline bool xrif2fits::exposureTime( timespec &stime, double &exptime, const std
     }
 
     exptime = telem_stdcam::exptime( logHeader::messageBuffer( prior ) );
-    stime   = atime - exptime;
+    if( !logMetaGapValid( logHeader::timespec( prior ), atime, m_maxMetadataGap ) )
+    {
+        recoverableError( "exptime:" + app + ":prior-gap",
+                          "Prior exposure-time telemetry for " + app +
+                              " is outside the maximum metadata gap; exposure-dependent metadata will be marked " +
+                              logMeta::unavailableValue() + "." );
+        return false;
+    }
+
+    stime = atime - exptime;
 
     XRIF2FITS_DEBUG_CRUMB( "exposureTime app=" + app + " atime=" + std::to_string( atime.tv_sec ) + "." +
                            std::to_string( atime.tv_nsec ) + " exptime=" + std::to_string( exptime ) +
@@ -765,6 +788,15 @@ inline bool xrif2fits::exposureTime( timespec &stime, double &exptime, const std
     char *priorprior = nullptr;
     if( m_tels.getPriorLog( priorprior, app, eventCodes::TELEM_STDCAM, stime ) == 0 && priorprior != nullptr )
     {
+        if( !logMetaGapValid( logHeader::timespec( priorprior ), stime, m_maxMetadataGap ) )
+        {
+            recoverableError( "exptime:" + app + ":start-prior-gap",
+                              "Exposure-start telemetry for " + app +
+                                  " is outside the maximum metadata gap; exposure-dependent metadata will be marked " +
+                                  logMeta::unavailableValue() + "." );
+            return false;
+        }
+
         /// \todo this needs to check for any log entries between end and start
         if( telem_stdcam::exptime( logHeader::messageBuffer( priorprior ) ) != exptime )
         {
@@ -793,7 +825,7 @@ inline bool xrif2fits::appendMetadata( mx::fits::fitsHeader<verboseT> &fh,
     if( canLookup && hasTelemetry( meta.device() ) )
     {
         XRIF2FITS_DEBUG_CRUMB( "metadata build card: " + meta.device() + " " + meta.keyword() );
-        std::string value = meta.value( m_tels, stime, atime );
+        std::string value = meta.value( m_tels, stime, atime, m_maxMetadataGap );
         if( value == logMeta::unavailableValue() )
         {
             recoverableError( "metadata:" + meta.device() + ":" + meta.keyword() + ":unavailable",
@@ -809,7 +841,7 @@ inline bool xrif2fits::appendMetadata( mx::fits::fitsHeader<verboseT> &fh,
             return strictOkay( "FITS header metadata: " + meta.device() + " " + meta.keyword() );
         }
 
-        mx::fits::fitsHeaderCard<verboseT> fc = meta.card( m_tels, stime, atime );
+        mx::fits::fitsHeaderCard<verboseT> fc = meta.card( m_tels, stime, atime, m_maxMetadataGap );
         XRIF2FITS_DEBUG_CRUMB( "metadata append card: " + meta.device() + " " + meta.keyword() );
         fh.append( fc );
         if( writeMeta )
@@ -1611,7 +1643,7 @@ int xrif2fits::writeImages( int n, stdFileNameT &lfn )
                 {
                     if( haveExposureTime )
                     {
-                        metaOut << exptimeMeta.value( m_tels, stime, atime );
+                        metaOut << exptimeMeta.value( m_tels, stime, atime, m_maxMetadataGap );
                     }
                     else
                     {

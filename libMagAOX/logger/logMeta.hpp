@@ -11,6 +11,7 @@
 #ifndef logger_logMeta_hpp
 #define logger_logMeta_hpp
 
+#include <cmath>
 #include <limits>
 
 #include <mx/ioutils/fits/fitsHeaderCard.hpp>
@@ -143,6 +144,17 @@ struct logMetaDetail
 bool verifyLogEntry( flatlogs::eventCodeT ev, /**< [in] expected event code for the raw log entry */
                      char                *log /**< [in] raw log entry buffer to verify */
 );
+
+/// Check whether two metadata timestamps are separated by no more than the configured gap.
+inline bool logMetaGapValid( const flatlogs::timespecX &t0,    /**< [in] first timestamp */
+                             const flatlogs::timespecX &t1,    /**< [in] second timestamp */
+                             double                     maxGap /**< [in] maximum permitted gap in seconds */
+)
+{
+    flatlogs::timespecX tt0 = t0;
+    flatlogs::timespecX tt1 = t1;
+    return maxGap < 0 || std::fabs( tt1.asDouble() - tt0.asDouble() ) <= maxGap;
+}
 
 /// Report a skipped unverifiable log entry without aborting metadata processing.
 inline void
@@ -406,7 +418,8 @@ int getLogStateVal( valT                      &val,
                     const flatlogs::timespecX &stime,
                     const flatlogs::timespecX &atime,
                     valT ( *getter )( void * ),
-                    char **hint = 0 )
+                    char **hint   = 0,
+                    double maxGap = -1 )
 {
     char *atprior = nullptr;
     char *stprior = nullptr;
@@ -442,6 +455,11 @@ int getLogStateVal( valT                      &val,
         }
     }
 
+    if( !logMetaGapValid( flatlogs::logHeader::timespec( stprior ), stime, maxGap ) )
+    {
+        return -1;
+    }
+
     valT stprV = getter( flatlogs::logHeader::messageBuffer( stprior ) );
 
     valT atprV;
@@ -456,6 +474,14 @@ int getLogStateVal( valT                      &val,
     }
     if( atprior == nullptr )
     {
+        if( logMetaGapValid( flatlogs::logHeader::timespec( stprior ), atime, maxGap ) )
+        {
+            val = stprV;
+            if( hint )
+                *hint = stprior;
+            return 0;
+        }
+
         return -1;
     }
     if( !verifyLogEntry( ev, atprior ) )
@@ -475,6 +501,12 @@ int getLogStateVal( valT                      &val,
 
     while( flatlogs::logHeader::timespec( atprior ) < atime )
     {
+        if( !logMetaGapValid(
+                flatlogs::logHeader::timespec( stprior ), flatlogs::logHeader::timespec( atprior ), maxGap ) )
+        {
+            return -1;
+        }
+
         atprV = getter( flatlogs::logHeader::messageBuffer( atprior ) );
         if( atprV != stprV )
         {
@@ -490,6 +522,14 @@ int getLogStateVal( valT                      &val,
         }
         if( atprior == nullptr )
         {
+            if( logMetaGapValid( flatlogs::logHeader::timespec( stprior ), atime, maxGap ) )
+            {
+                val = stprV;
+                if( hint )
+                    *hint = stprior;
+                return 0;
+            }
+
             return -1;
         }
         if( !verifyLogEntry( ev, atprior ) )
@@ -502,6 +542,11 @@ int getLogStateVal( valT                      &val,
                 return -1;
             }
         }
+    }
+
+    if( !logMetaGapValid( flatlogs::logHeader::timespec( stprior ), atime, maxGap ) )
+    {
+        return -1;
     }
 
     val = stprV;
@@ -519,7 +564,8 @@ int getLogContVal( valT                      &val,
                    const flatlogs::timespecX &stime,
                    const flatlogs::timespecX &atime,
                    valT ( *getter )( void * ),
-                   char **hint = 0 )
+                   char **hint   = 0,
+                   double maxGap = -1 )
 {
     char *atafter;
     char *stprior;
@@ -553,6 +599,11 @@ int getLogContVal( valT                      &val,
         }
     }
 
+    if( !logMetaGapValid( flatlogs::logHeader::timespec( stprior ), midexp, maxGap ) )
+    {
+        return 1;
+    }
+
     valT stprV = getter( flatlogs::logHeader::messageBuffer( stprior ) );
 
     // Get log entry after.
@@ -577,6 +628,13 @@ int getLogContVal( valT                      &val,
             return 1;
         }
     }
+
+    if( !logMetaGapValid( midexp, flatlogs::logHeader::timespec( atafter ), maxGap ) ||
+        !logMetaGapValid( flatlogs::logHeader::timespec( stprior ), flatlogs::logHeader::timespec( atafter ), maxGap ) )
+    {
+        return 1;
+    }
+
     valT atprV = getter( flatlogs::logHeader::messageBuffer( atafter ) );
 
     double st = flatlogs::logHeader::timespec( stprior ).asDouble();
@@ -678,30 +736,35 @@ struct logMeta
     int setLog( const logMetaSpec &lms /**< [in] the specification to resolve */ );
 
     /// Get the metadata value for an exposure interval.
-    std::string value( logMap<verboseT>          &lm,    /**< [in,out] loaded logs to search */
-                       const flatlogs::timespecX &stime, /**< [in] exposure start time */
-                       const flatlogs::timespecX &atime  /**< [in] exposure acquisition/end time */
+    std::string value( logMap<verboseT>          &lm,         /**< [in,out] loaded logs to search */
+                       const flatlogs::timespecX &stime,      /**< [in] exposure start time */
+                       const flatlogs::timespecX &atime,      /**< [in] exposure acquisition/end time */
+                       double                     maxGap = -1 /**< [in] maximum allowed metadata gap in seconds */
     );
 
     /// Get a numeric metadata value for an exposure interval.
-    std::string valueNumber( logMap<verboseT>          &lm,    /**< [in,out] loaded logs to search */
-                             const flatlogs::timespecX &stime, /**< [in] exposure start time */
-                             const flatlogs::timespecX &atime  /**< [in] exposure acquisition/end time */
+    std::string valueNumber( logMap<verboseT>          &lm,         /**< [in,out] loaded logs to search */
+                             const flatlogs::timespecX &stime,      /**< [in] exposure start time */
+                             const flatlogs::timespecX &atime,      /**< [in] exposure acquisition/end time */
+                             double                     maxGap = -1 /**< [in] maximum allowed metadata gap in seconds */
     );
 
     /// Get a string metadata value for an exposure interval.
-    std::string valueString( logMap<verboseT>          &lm,    /**< [in,out] loaded logs to search */
-                             const flatlogs::timespecX &stime, /**< [in] exposure start time */
-                             const flatlogs::timespecX &atime  /**< [in] exposure acquisition/end time */
+    std::string valueString( logMap<verboseT>          &lm,         /**< [in,out] loaded logs to search */
+                             const flatlogs::timespecX &stime,      /**< [in] exposure start time */
+                             const flatlogs::timespecX &atime,      /**< [in] exposure acquisition/end time */
+                             double                     maxGap = -1 /**< [in] maximum allowed metadata gap in seconds */
     );
 
     /// Build a FITS header card for an unavailable metadata value.
     mx::fits::fitsHeaderCard<verboseT> unavailableCard() const;
 
     /// Build a FITS header card for this metadata item over an exposure interval.
-    mx::fits::fitsHeaderCard<verboseT> card( logMap<verboseT>          &lm,    /**< [in,out] loaded logs to search */
-                                             const flatlogs::timespecX &stime, /**< [in] exposure start time */
-                                             const flatlogs::timespecX &atime /**< [in] exposure acquisition/end time */
+    mx::fits::fitsHeaderCard<verboseT>
+    card( logMap<verboseT>          &lm,         /**< [in,out] loaded logs to search */
+          const flatlogs::timespecX &stime,      /**< [in] exposure start time */
+          const flatlogs::timespecX &atime,      /**< [in] exposure acquisition/end time */
+          double                     maxGap = -1 /**< [in] maximum allowed metadata gap in seconds */
     );
 };
 
