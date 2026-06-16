@@ -15,8 +15,6 @@
 #include <filesystem>
 #include <limits>
 
-#include <mx/mxException.hpp>
-
 #include "../common/exceptions.hpp"
 
 using namespace flatlogs;
@@ -74,6 +72,7 @@ int logInMemory::loadFile( file::stdFileName<verboseT> const &lfn )
             char *resynced = logMapResync( buffer, bufferEnd, minTsPtr );
             std::cerr << "Invalid log entry skipped while loading log file: source=" << lfn.fullName()
                       << " sourceByte=" << buffer - bufferStart;
+            m_recoverableErrors++;
             if( resynced != nullptr )
             {
                 std::cerr << " resyncByte=" << resynced - bufferStart << " (" << resynced - buffer

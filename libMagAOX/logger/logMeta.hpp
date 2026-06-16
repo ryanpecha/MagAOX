@@ -349,6 +349,7 @@ char *getNextVerifiedLog( logMap<verboseT>  &lm,                 /**< [in] loade
             {
                 for( const rejectedLog &badLog : rejected )
                 {
+                    lm.recordRecoverableError( appName );
                     reportUnverifiableLogEntry( appName,
                                                 ev,
                                                 badLog.m_before,
@@ -379,6 +380,7 @@ char *getNextVerifiedLog( logMap<verboseT>  &lm,                 /**< [in] loade
     {
         for( const rejectedLog &badLog : rejected )
         {
+            lm.recordRecoverableError( appName );
             reportUnverifiableLogEntry( appName,
                                         ev,
                                         badLog.m_before,

@@ -177,6 +177,8 @@ struct logInMemory
 
     std::vector<loadedFile> m_loadedFiles; ///< Source-file provenance ranges for the loaded buffer.
 
+    size_t m_recoverableErrors{ 0 }; ///< Count of recoverable log parsing errors encountered while loading.
+
     /// Load one flatlog file into memory.
     int loadFile( file::stdFileName<verboseT> const &lfn /**< [in] standard file name to load */ );
 
@@ -206,6 +208,12 @@ struct logMap
     appToFileMapT m_appToFileMap; ///< Available log files grouped by app/device name.
 
     appToBufferMapT m_appToBufferMap; ///< Loaded log buffers grouped by app/device name.
+
+    /// Record one recoverable log-processing error.
+    void recordRecoverableError( const std::string &appName /**< [in] app/device associated with the error */ );
+
+    /// Get the number of recoverable errors encountered in loaded logs.
+    size_t recoverableErrors() const;
 
     /// Add a list of files to the file map
     /** This is a worker function for loadAppToFileMap
@@ -262,6 +270,24 @@ struct logMap
                    const flatlogs::timespecX &startTime /**< [in] timestamp that must be covered by loaded logs */
     );
 };
+
+template <class verboseT>
+void logMap<verboseT>::recordRecoverableError( const std::string &appName )
+{
+    m_appToBufferMap[appName].m_recoverableErrors++;
+}
+
+template <class verboseT>
+size_t logMap<verboseT>::recoverableErrors() const
+{
+    size_t nErrors = 0;
+    for( const auto &appBuffer : m_appToBufferMap )
+    {
+        nErrors += appBuffer.second.m_recoverableErrors;
+    }
+
+    return nErrors;
+}
 
 template <class verboseT>
 mx::error_t logMap<verboseT>::addFileListToFileMap( const std::string              &dev,

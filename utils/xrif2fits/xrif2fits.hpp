@@ -134,6 +134,10 @@ class xrif2fits : public mx::app::application
 
     bool m_cubeMode{ false };
 
+    bool m_strict{ false };
+
+    size_t m_recoverableErrors{ 0 };
+
     logMap<verboseT> m_logs;
 
     logMap<verboseT> m_tels;
@@ -202,6 +206,17 @@ class xrif2fits : public mx::app::application
     /// Check whether telemetry files are available for an app.
     bool hasTelemetry( const std::string &app /**< [in] app/device name */ ) const;
 
+    /// Count and report a recoverable metadata error.
+    void recoverableError( const std::string &key, /**< [in] stable error key */
+                           const std::string &msg  /**< [in] user-facing error message */
+    );
+
+    /// Count recoverable metadata and log errors seen so far.
+    size_t recoverableErrorCount() const;
+
+    /// Fail in strict mode if any recoverable errors have been seen.
+    bool strictOkay( const std::string &context /**< [in] operation about to proceed */ ) const;
+
     /// Compute an exposure interval from camera telemetry.
     bool exposureTime( timespec          &stime,   /**< [out] exposure start time */
                        double            &exptime, /**< [out] exposure duration in seconds */
@@ -209,13 +224,8 @@ class xrif2fits : public mx::app::application
                        const timespec    &atime    /**< [in] acquisition/end time */
     );
 
-    /// Print a warning once for a stable key.
-    void warnMetadataOnce( const std::string &key, /**< [in] stable warning key */
-                           const std::string &msg  /**< [in] warning message */
-    );
-
     /// Write FITS header and text metadata for one configured metadata item.
-    void appendMetadata( mx::fits::fitsHeader<verboseT> &fh,        /**< [in,out] FITS header being built */
+    bool appendMetadata( mx::fits::fitsHeader<verboseT> &fh,        /**< [in,out] FITS header being built */
                          std::ofstream                  &metaOut,   /**< [in,out] metadata text stream */
                          logMeta                        &meta,      /**< [in,out] metadata item with lookup hints */
                          bool                            writeMeta, /**< [in] true to write metadata text */
@@ -419,6 +429,17 @@ inline void xrif2fits::setupConfig()
                 false,
                 "bool",
                 "If true, the archive is written as a FITS cube with minimal header.  Default is false." );
+
+    config.add( "strict",
+                "",
+                "strict",
+                argType::True,
+                "",
+                "strict",
+                false,
+                "bool",
+                "If true, recoverable metadata/log errors stop processing before FITS files are written.  Default is "
+                "false." );
 }
 
 inline void xrif2fits::loadConfig()
@@ -444,6 +465,7 @@ inline void xrif2fits::loadConfig()
     config( m_timesOnly, "time" );
     config( m_noMeta, "noMeta" );
     config( m_cubeMode, "cubeMode" );
+    config( m_strict, "strict" );
 
     if( m_configPathCLBase.size() > 0 )
     {
@@ -584,7 +606,7 @@ inline mx::error_t xrif2fits::loadMetaFileMaps( logMap<verboseT>               &
 {
     if( dirs.size() == 0 )
     {
-        warnMetadataOnce( source + ":" + app + ":not-configured",
+        recoverableError( source + ":" + app + ":not-configured",
                           "No " + source + " directories configured for " + app +
                               "; metadata from this source will be marked " + logMeta::unavailableValue() + "." );
         return mx::error_t::noerror;
@@ -653,7 +675,7 @@ inline mx::error_t xrif2fits::loadMetaFileMaps( logMap<verboseT>               &
 
     if( logMap.m_appToFileMap[app].size() == 0 )
     {
-        warnMetadataOnce( source + ":" + app + ":no-files",
+        recoverableError( source + ":" + app + ":no-files",
                           "No " + source + " files found in the requested time range for " + app +
                               "; metadata from this source will be marked " + logMeta::unavailableValue() + "." );
     }
@@ -668,11 +690,43 @@ inline bool xrif2fits::hasTelemetry( const std::string &app ) const
     return it != m_tels.m_appToFileMap.end() && it->second.size() > 0;
 }
 
+inline void xrif2fits::recoverableError( const std::string &key, const std::string &msg )
+{
+    if( m_warnedMetadata.insert( key ).second )
+    {
+        ++m_recoverableErrors;
+        std::cerr << " (" << invokedName << "): " << msg << "\n";
+    }
+}
+
+inline size_t xrif2fits::recoverableErrorCount() const
+{
+    return m_recoverableErrors + m_logs.recoverableErrors() + m_tels.recoverableErrors();
+}
+
+inline bool xrif2fits::strictOkay( const std::string &context ) const
+{
+    if( !m_strict )
+    {
+        return true;
+    }
+
+    size_t nErrors = recoverableErrorCount();
+    if( nErrors == 0 )
+    {
+        return true;
+    }
+
+    std::cerr << " (" << invokedName << "): strict mode aborting before " << context << " after " << nErrors
+              << " recoverable error(s).\n";
+    return false;
+}
+
 inline bool xrif2fits::exposureTime( timespec &stime, double &exptime, const std::string &app, const timespec &atime )
 {
     if( !hasTelemetry( app ) )
     {
-        warnMetadataOnce( "exptime:" + app + ":no-telemetry",
+        recoverableError( "exptime:" + app + ":no-telemetry",
                           "No telemetry files are available for " + app +
                               "; exposure-dependent metadata will be marked " + logMeta::unavailableValue() + "." );
         return false;
@@ -681,7 +735,7 @@ inline bool xrif2fits::exposureTime( timespec &stime, double &exptime, const std
     char *prior = nullptr;
     if( m_tels.getPriorLog( prior, app, eventCodes::TELEM_STDCAM, atime ) != 0 || prior == nullptr )
     {
-        warnMetadataOnce( "exptime:" + app + ":no-prior",
+        recoverableError( "exptime:" + app + ":no-prior",
                           "No prior exposure-time telemetry is available for " + app +
                               "; exposure-dependent metadata will be marked " + logMeta::unavailableValue() + "." );
         return false;
@@ -705,22 +759,14 @@ inline bool xrif2fits::exposureTime( timespec &stime, double &exptime, const std
     }
     else
     {
-        warnMetadataOnce( "exptime:" + app + ":no-start-prior",
+        recoverableError( "exptime:" + app + ":no-start-prior",
                           "No exposure-time telemetry was found before the exposure start for " + app + "." );
     }
 
     return true;
 }
 
-inline void xrif2fits::warnMetadataOnce( const std::string &key, const std::string &msg )
-{
-    if( m_warnedMetadata.insert( key ).second )
-    {
-        std::cerr << " (" << invokedName << "): " << msg << "\n";
-    }
-}
-
-inline void xrif2fits::appendMetadata( mx::fits::fitsHeader<verboseT> &fh,
+inline bool xrif2fits::appendMetadata( mx::fits::fitsHeader<verboseT> &fh,
                                        std::ofstream                  &metaOut,
                                        logMeta                        &meta,
                                        bool                            writeMeta,
@@ -733,26 +779,49 @@ inline void xrif2fits::appendMetadata( mx::fits::fitsHeader<verboseT> &fh,
     if( canLookup && hasTelemetry( meta.device() ) )
     {
         XRIF2FITS_DEBUG_CRUMB( "metadata build card: " + meta.device() + " " + meta.keyword() );
+        std::string value = meta.value( m_tels, stime, atime );
+        if( value == logMeta::unavailableValue() )
+        {
+            recoverableError( "metadata:" + meta.device() + ":" + meta.keyword() + ":unavailable",
+                              "Metadata " + meta.device() + " " + meta.keyword() + " is " +
+                                  logMeta::unavailableValue() + "." );
+            fh.append( meta.unavailableCard() );
+            if( writeMeta )
+            {
+                metaOut << " " << logMeta::unavailableValue();
+            }
+
+            XRIF2FITS_DEBUG_CRUMB( "metadata end: " + meta.device() + " " + meta.keyword() );
+            return !m_strict;
+        }
+
         mx::fits::fitsHeaderCard<verboseT> fc = meta.card( m_tels, stime, atime );
         XRIF2FITS_DEBUG_CRUMB( "metadata append card: " + meta.device() + " " + meta.keyword() );
         fh.append( fc );
         if( writeMeta )
         {
             XRIF2FITS_DEBUG_CRUMB( "metadata write text: " + meta.device() + " " + meta.keyword() );
-            metaOut << " " << meta.value( m_tels, stime, atime );
+            metaOut << " " << value;
         }
     }
     else
     {
         XRIF2FITS_DEBUG_CRUMB( "metadata unavailable: " + meta.device() + " " + meta.keyword() );
+        recoverableError( "metadata:" + meta.device() + ":" + meta.keyword() + ":no-lookup",
+                          "Metadata " + meta.device() + " " + meta.keyword() + " is " + logMeta::unavailableValue() +
+                              "." );
         fh.append( meta.unavailableCard() );
         if( writeMeta )
         {
             metaOut << " " << logMeta::unavailableValue();
         }
+
+        XRIF2FITS_DEBUG_CRUMB( "metadata end: " + meta.device() + " " + meta.keyword() );
+        return !m_strict;
     }
 
     XRIF2FITS_DEBUG_CRUMB( "metadata end: " + meta.device() + " " + meta.keyword() );
+    return true;
 }
 
 inline int xrif2fits::execute()
@@ -862,6 +931,10 @@ inline int xrif2fits::execute()
             }
         }
         XRIF2FITS_DEBUG_CRUMB( "metadata map load end" );
+        if( !strictOkay( "archive decoding" ) )
+        {
+            return -1;
+        }
     }
 
     // Now de-compress and load the frames
@@ -880,6 +953,10 @@ inline int xrif2fits::execute()
                                        " archiveTs=" + std::to_string( m_fileNames[n].timestamp().time_s ) + "." +
                                        std::to_string( m_fileNames[n].timestamp().time_ns ) + " file=" + m_files[n] );
                 m_tels.loadFiles( m_fileNames[n].appName(), m_fileNames[n].timestamp() );
+                if( !strictOkay( "archive decoding" ) )
+                {
+                    return -1;
+                }
             }
         }
         if( !m_timesOnly )
@@ -1388,6 +1465,44 @@ int xrif2fits::writeImages( int n, stdFileNameT &lfn )
     // Special handling for meta output
     logMeta exptimeMeta( logMetaSpec( lfn.appName(), telem_stdcam::eventCode, "exptime" ) );
 
+    if( m_strict && !m_cubeMode && !m_noHeader )
+    {
+        mx::fits::fitsHeader<verboseT> preflightHeader;
+        std::ofstream                  preflightMetaOut;
+        for( int q = 0; q < tmpc.planes(); ++q )
+        {
+            timespec atime;
+            timespec stime = { 0, 0 };
+
+            uint64_t *curr_timing = (uint64_t *)m_xrif_timing->raw_buffer + 5 * q;
+            atime.tv_sec          = curr_timing[1];
+            atime.tv_nsec         = curr_timing[2];
+
+            double exptime          = -1;
+            bool   haveExposureTime = exposureTime( stime, exptime, lfn.appName(), atime );
+            if( !haveExposureTime )
+            {
+                recoverableError( "metadata:" + lfn.appName() + ":EXPTIME:unavailable",
+                                  "Metadata " + lfn.appName() + " EXPTIME is " + logMeta::unavailableValue() + "." );
+                return -1;
+            }
+
+            preflightHeader.clear();
+            for( size_t u = 0; u < m_logMetas.size(); ++u )
+            {
+                if( !appendMetadata( preflightHeader, preflightMetaOut, m_logMetas[u], false, true, stime, atime ) )
+                {
+                    return -1;
+                }
+            }
+
+            if( !strictOkay( "FITS write preflight" ) )
+            {
+                return -1;
+            }
+        }
+    }
+
     std::ofstream metaOut;
 
     // Print the meta-file header
@@ -1405,6 +1520,11 @@ int xrif2fits::writeImages( int n, stdFileNameT &lfn )
     if( m_cubeMode )
     {
         std::string outfname = m_outDir + mx::ioutils::pathStem( m_files[n] ) + ".fits";
+        if( !strictOkay( "FITS write: " + outfname ) )
+        {
+            return -1;
+        }
+
         ff.write( outfname, tmpc );
     }
     else
@@ -1473,7 +1593,14 @@ int xrif2fits::writeImages( int n, stdFileNameT &lfn )
                     }
                     else
                     {
+                        recoverableError( "metadata:" + lfn.appName() + ":EXPTIME:unavailable",
+                                          "Metadata " + lfn.appName() + " EXPTIME is " + logMeta::unavailableValue() +
+                                              "." );
                         metaOut << logMeta::unavailableValue();
+                        if( m_strict )
+                        {
+                            return -1;
+                        }
                     }
                 }
 
@@ -1482,7 +1609,10 @@ int xrif2fits::writeImages( int n, stdFileNameT &lfn )
                 {
                     XRIF2FITS_DEBUG_CRUMB( "metadata index: " + std::to_string( u ) + " of " +
                                            std::to_string( m_logMetas.size() ) );
-                    appendMetadata( fh, metaOut, m_logMetas[u], !m_noMeta, haveExposureTime, stime, atime );
+                    if( !appendMetadata( fh, metaOut, m_logMetas[u], !m_noMeta, haveExposureTime, stime, atime ) )
+                    {
+                        return -1;
+                    }
                 }
             }
 
@@ -1499,6 +1629,11 @@ int xrif2fits::writeImages( int n, stdFileNameT &lfn )
             }
             if( !m_metaOnly )
             {
+                if( !strictOkay( "FITS write: " + outfname ) )
+                {
+                    return -1;
+                }
+
                 XRIF2FITS_DEBUG_CRUMB( "fits write begin: " + outfname );
                 mx::improc::eigenImage<dataT> im = tmpc.image( q );
                 ff.write( outfname, tmpc.image( q ), fh );
