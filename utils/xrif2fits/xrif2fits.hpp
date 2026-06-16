@@ -136,6 +136,8 @@ class xrif2fits : public mx::app::application
 
     bool m_strict{ false };
 
+    bool m_strictAbort{ false };
+
     size_t m_recoverableErrors{ 0 };
 
     logMap<verboseT> m_logs;
@@ -215,7 +217,10 @@ class xrif2fits : public mx::app::application
     size_t recoverableErrorCount() const;
 
     /// Fail in strict mode if any recoverable errors have been seen.
-    bool strictOkay( const std::string &context /**< [in] operation about to proceed */ ) const;
+    bool strictOkay( const std::string &context /**< [in] operation about to proceed */ );
+
+    /// Report a writeImages failure unless strict mode already reported the real cause.
+    void reportWriteImagesFailure( const std::string &inputFile /**< [in] xrif archive being processed */ ) const;
 
     /// Compute an exposure interval from camera telemetry.
     bool exposureTime( timespec          &stime,   /**< [out] exposure start time */
@@ -704,7 +709,7 @@ inline size_t xrif2fits::recoverableErrorCount() const
     return m_recoverableErrors + m_logs.recoverableErrors() + m_tels.recoverableErrors();
 }
 
-inline bool xrif2fits::strictOkay( const std::string &context ) const
+inline bool xrif2fits::strictOkay( const std::string &context )
 {
     if( !m_strict )
     {
@@ -717,9 +722,18 @@ inline bool xrif2fits::strictOkay( const std::string &context ) const
         return true;
     }
 
+    m_strictAbort = true;
     std::cerr << " (" << invokedName << "): strict mode aborting before " << context << " after " << nErrors
               << " recoverable error(s).\n";
     return false;
+}
+
+inline void xrif2fits::reportWriteImagesFailure( const std::string &inputFile ) const
+{
+    if( !m_strictAbort )
+    {
+        ERR_INVOKED_NAME( "error writing to file: " + inputFile );
+    }
 }
 
 inline bool xrif2fits::exposureTime( timespec &stime, double &exptime, const std::string &app, const timespec &atime )
@@ -792,7 +806,7 @@ inline bool xrif2fits::appendMetadata( mx::fits::fitsHeader<verboseT> &fh,
             }
 
             XRIF2FITS_DEBUG_CRUMB( "metadata end: " + meta.device() + " " + meta.keyword() );
-            return !m_strict;
+            return strictOkay( "FITS header metadata: " + meta.device() + " " + meta.keyword() );
         }
 
         mx::fits::fitsHeaderCard<verboseT> fc = meta.card( m_tels, stime, atime );
@@ -817,7 +831,7 @@ inline bool xrif2fits::appendMetadata( mx::fits::fitsHeader<verboseT> &fh,
         }
 
         XRIF2FITS_DEBUG_CRUMB( "metadata end: " + meta.device() + " " + meta.keyword() );
-        return !m_strict;
+        return strictOkay( "FITS header metadata: " + meta.device() + " " + meta.keyword() );
     }
 
     XRIF2FITS_DEBUG_CRUMB( "metadata end: " + meta.device() + " " + meta.keyword() );
@@ -1189,7 +1203,7 @@ inline int xrif2fits::execute()
                 XRIF2FITS_DEBUG_CRUMB( "writeImages<uint8_t> begin: " + m_files[n] );
                 if( writeImages<uint8_t>( n, m_fileNames[n] ) < 0 )
                 {
-                    ERR_INVOKED_NAME( "error writing to file: " + m_files[n] );
+                    reportWriteImagesFailure( m_files[n] );
                     return -1;
                 }
                 XRIF2FITS_DEBUG_CRUMB( "writeImages<uint8_t> end: " + m_files[n] );
@@ -1199,7 +1213,7 @@ inline int xrif2fits::execute()
                 XRIF2FITS_DEBUG_CRUMB( "writeImages<int8_t> begin: " + m_files[n] );
                 if( writeImages<int8_t>( n, m_fileNames[n] ) < 0 )
                 {
-                    ERR_INVOKED_NAME( "error writing to file: " + m_files[n] );
+                    reportWriteImagesFailure( m_files[n] );
                     return -1;
                 }
                 XRIF2FITS_DEBUG_CRUMB( "writeImages<int8_t> end: " + m_files[n] );
@@ -1209,7 +1223,7 @@ inline int xrif2fits::execute()
                 XRIF2FITS_DEBUG_CRUMB( "writeImages<uint16_t> begin: " + m_files[n] );
                 if( writeImages<uint16_t>( n, m_fileNames[n] ) < 0 )
                 {
-                    ERR_INVOKED_NAME( "error writing to file: " + m_files[n] );
+                    reportWriteImagesFailure( m_files[n] );
                     return -1;
                 }
                 XRIF2FITS_DEBUG_CRUMB( "writeImages<uint16_t> end: " + m_files[n] );
@@ -1219,7 +1233,7 @@ inline int xrif2fits::execute()
                 XRIF2FITS_DEBUG_CRUMB( "writeImages<int16_t> begin: " + m_files[n] );
                 if( writeImages<int16_t>( n, m_fileNames[n] ) < 0 )
                 {
-                    ERR_INVOKED_NAME( "error writing to file: " + m_files[n] );
+                    reportWriteImagesFailure( m_files[n] );
                     return -1;
                 }
                 XRIF2FITS_DEBUG_CRUMB( "writeImages<int16_t> end: " + m_files[n] );
@@ -1229,7 +1243,7 @@ inline int xrif2fits::execute()
                 XRIF2FITS_DEBUG_CRUMB( "writeImages<uint32_t> begin: " + m_files[n] );
                 if( writeImages<uint32_t>( n, m_fileNames[n] ) < 0 )
                 {
-                    ERR_INVOKED_NAME( "error writing to file: " + m_files[n] );
+                    reportWriteImagesFailure( m_files[n] );
                     return -1;
                 }
                 XRIF2FITS_DEBUG_CRUMB( "writeImages<uint32_t> end: " + m_files[n] );
@@ -1239,7 +1253,7 @@ inline int xrif2fits::execute()
                 XRIF2FITS_DEBUG_CRUMB( "writeImages<int32_t> begin: " + m_files[n] );
                 if( writeImages<int32_t>( n, m_fileNames[n] ) < 0 )
                 {
-                    ERR_INVOKED_NAME( "error writing to file: " + m_files[n] );
+                    reportWriteImagesFailure( m_files[n] );
                     return -1;
                 }
                 XRIF2FITS_DEBUG_CRUMB( "writeImages<int32_t> end: " + m_files[n] );
@@ -1249,7 +1263,7 @@ inline int xrif2fits::execute()
                 XRIF2FITS_DEBUG_CRUMB( "writeImages<uint64_t-as-uint32_t> begin: " + m_files[n] );
                 if( writeImages<uint32_t>( n, m_fileNames[n] ) < 0 )
                 {
-                    ERR_INVOKED_NAME( "error writing to file: " + m_files[n] );
+                    reportWriteImagesFailure( m_files[n] );
                     return -1;
                 }
                 XRIF2FITS_DEBUG_CRUMB( "writeImages<uint64_t-as-uint32_t> end: " + m_files[n] );
@@ -1259,7 +1273,7 @@ inline int xrif2fits::execute()
                 XRIF2FITS_DEBUG_CRUMB( "writeImages<int64_t-as-int32_t> begin: " + m_files[n] );
                 if( writeImages<int32_t>( n, m_fileNames[n] ) < 0 )
                 {
-                    ERR_INVOKED_NAME( "error writing to file: " + m_files[n] );
+                    reportWriteImagesFailure( m_files[n] );
                     return -1;
                 }
                 XRIF2FITS_DEBUG_CRUMB( "writeImages<int64_t-as-int32_t> end: " + m_files[n] );
@@ -1269,7 +1283,7 @@ inline int xrif2fits::execute()
                 XRIF2FITS_DEBUG_CRUMB( "writeImages<float> begin: " + m_files[n] );
                 if( writeImages<float>( n, m_fileNames[n] ) < 0 )
                 {
-                    ERR_INVOKED_NAME( "error writing to file: " + m_files[n] );
+                    reportWriteImagesFailure( m_files[n] );
                     return -1;
                 }
                 XRIF2FITS_DEBUG_CRUMB( "writeImages<float> end: " + m_files[n] );
@@ -1279,7 +1293,7 @@ inline int xrif2fits::execute()
                 XRIF2FITS_DEBUG_CRUMB( "writeImages<double-as-float> begin: " + m_files[n] );
                 if( writeImages<float>( n, m_fileNames[n] ) < 0 )
                 {
-                    ERR_INVOKED_NAME( "error writing to file: " + m_files[n] );
+                    reportWriteImagesFailure( m_files[n] );
                     return -1;
                 }
                 XRIF2FITS_DEBUG_CRUMB( "writeImages<double-as-float> end: " + m_files[n] );
@@ -1292,8 +1306,15 @@ inline int xrif2fits::execute()
         }
     }
 
-    std::cerr << " (" << invokedName << "): exited normally.\n";
+    size_t nRecoverableErrors = recoverableErrorCount();
+    if( nRecoverableErrors > 0 )
+    {
+        std::cerr << " (" << invokedName << "): exited after completing with " << nRecoverableErrors
+                  << " recoverable error(s).\n";
+        return 1;
+    }
 
+    std::cerr << " (" << invokedName << "): exited normally.\n";
     return 0;
 }
 
@@ -1484,6 +1505,7 @@ int xrif2fits::writeImages( int n, stdFileNameT &lfn )
             {
                 recoverableError( "metadata:" + lfn.appName() + ":EXPTIME:unavailable",
                                   "Metadata " + lfn.appName() + " EXPTIME is " + logMeta::unavailableValue() + "." );
+                strictOkay( "FITS header metadata: " + lfn.appName() + " EXPTIME" );
                 return -1;
             }
 
@@ -1597,7 +1619,7 @@ int xrif2fits::writeImages( int n, stdFileNameT &lfn )
                                           "Metadata " + lfn.appName() + " EXPTIME is " + logMeta::unavailableValue() +
                                               "." );
                         metaOut << logMeta::unavailableValue();
-                        if( m_strict )
+                        if( !strictOkay( "FITS header metadata: " + lfn.appName() + " EXPTIME" ) )
                         {
                             return -1;
                         }
