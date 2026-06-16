@@ -179,6 +179,59 @@ inline int logMetaFail( std::string       *reason, /**< [out] optional reason st
     return rv;
 }
 
+/// Normalize an angle into [0, 360) degrees.
+inline double logMetaNormalizeAngle360( double angle /**< [in] angle in degrees */ )
+{
+    double wrapped = std::fmod( angle, 360.0 );
+    if( wrapped < 0 )
+    {
+        wrapped += 360.0;
+    }
+    if( wrapped == 360.0 )
+    {
+        wrapped = 0.0;
+    }
+    return wrapped;
+}
+
+/// Normalize an angle into [-180, 180) degrees.
+inline double logMetaNormalizeAngle180( double angle /**< [in] angle in degrees */ )
+{
+    return logMetaNormalizeAngle360( angle + 180.0 ) - 180.0;
+}
+
+/// Return the shortest signed angular delta between two angles in degrees.
+inline double logMetaAngleDelta( double from, /**< [in] starting angle in degrees */
+                                 double to    /**< [in] ending angle in degrees */
+)
+{
+    double delta = std::fmod( to - from, 360.0 );
+    if( delta > 180.0 )
+    {
+        delta -= 360.0;
+    }
+    else if( delta < -180.0 )
+    {
+        delta += 360.0;
+    }
+
+    return delta;
+}
+
+/// Normalize an interpolated angle using the input samples' apparent convention.
+inline double logMetaNormalizeInterpolatedAngle( double angle, /**< [in] interpolated angle in degrees */
+                                                 double a0,    /**< [in] first endpoint angle in degrees */
+                                                 double a1     /**< [in] second endpoint angle in degrees */
+)
+{
+    if( a0 >= -180.0 && a0 <= 180.0 && a1 >= -180.0 && a1 <= 180.0 )
+    {
+        return logMetaNormalizeAngle180( angle );
+    }
+
+    return logMetaNormalizeAngle360( angle );
+}
+
 /// Report a skipped unverifiable log entry without aborting metadata processing.
 inline void
 reportUnverifiableLogEntry( const std::string   &appName, /**< [in] app/device name being searched */
@@ -600,7 +653,8 @@ int getLogContVal( valT                      &val,
                    valT ( *getter )( void * ),
                    char       **hint          = 0,
                    double       maxGap        = -1,
-                   std::string *failureReason = 0 )
+                   std::string *failureReason = 0,
+                   bool         isAngle       = false )
 {
     char *atafter;
     char *stprior;
@@ -676,7 +730,19 @@ int getLogContVal( valT                      &val,
     double it = midexp.asDouble();
     double et = flatlogs::logHeader::timespec( atafter ).asDouble();
 
-    val = stprV + ( atprV - stprV ) / ( et - st ) * ( it - st );
+    double delta = atprV - stprV;
+    if( isAngle )
+    {
+        delta = logMetaAngleDelta( stprV, atprV );
+    }
+
+    double interp = stprV + delta / ( et - st ) * ( it - st );
+    if( isAngle )
+    {
+        interp = logMetaNormalizeInterpolatedAngle( interp, stprV, atprV );
+    }
+
+    val = static_cast<valT>( interp );
 
     if( hint )
         *hint = stprior;
@@ -730,7 +796,8 @@ struct logMeta
     enum metaTypes
     {
         State,
-        Continuous
+        Continuous,
+        Continuous_Angle
     };
 
     /// The string written when metadata is expected but unavailable.

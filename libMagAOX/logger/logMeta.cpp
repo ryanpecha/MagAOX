@@ -720,7 +720,7 @@ std::string logMeta::valueNumber( logMap<verboseT>          &lm,
             return m_invalidValue;
         }
     }
-    else if( m_detail.metaType == metaTypes::Continuous )
+    else if( m_detail.metaType == metaTypes::Continuous || m_detail.metaType == metaTypes::Continuous_Angle )
     {
         switch( m_detail.valType )
         {
@@ -923,7 +923,8 @@ std::string logMeta::valueNumber( logMap<verboseT>          &lm,
                                reinterpret_cast<float ( * )( void * )>( m_detail.accessor ),
                                &m_hint,
                                maxGap,
-                               &m_unavailableReason ) != 0 )
+                               &m_unavailableReason,
+                               m_detail.metaType == metaTypes::Continuous_Angle ) != 0 )
                 return m_invalidValue;
             snprintf( str, sizeof( str ), m_spec.format.c_str(), val );
             return std::string( str );
@@ -940,7 +941,8 @@ std::string logMeta::valueNumber( logMap<verboseT>          &lm,
                                reinterpret_cast<double ( * )( void * )>( m_detail.accessor ),
                                &m_hint,
                                maxGap,
-                               &m_unavailableReason ) != 0 )
+                               &m_unavailableReason,
+                               m_detail.metaType == metaTypes::Continuous_Angle ) != 0 )
                 return m_invalidValue;
             snprintf( str, sizeof( str ), m_spec.format.c_str(), val );
             return std::string( str );
