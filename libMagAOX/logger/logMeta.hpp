@@ -253,16 +253,17 @@ char *getPriorVerifiedLog( logMap<verboseT>          &lm,      /**< [in] loaded 
                          std::to_string( totalSize ) + " memoryBytes=" + std::to_string( lim.m_memory.size() ) + " " );
 
             char *resynced = logMapResync( buffer, bufferEnd, minTsPtr );
-            std::cerr << "Invalid log entry skipped while searching prior verified metadata log: app=" << appName
-                      << " ev=" << ev << " offset=" << buffer - lim.m_memory.data();
             if( resynced != nullptr )
             {
-                std::cerr << " resyncOffset=" << resynced - lim.m_memory.data() << "\n";
+                DEBUG_CRUMB( "getPriorVerifiedLog resync app=" + appName + " ev=" + std::to_string( ev ) +
+                             " offset=" + std::to_string( buffer - lim.m_memory.data() ) +
+                             " resyncOffset=" + std::to_string( resynced - lim.m_memory.data() ) );
                 buffer = resynced;
                 continue;
             }
 
-            std::cerr << " resyncOffset=<none>\n";
+            DEBUG_CRUMB( "getPriorVerifiedLog resync failed app=" + appName + " ev=" + std::to_string( ev ) +
+                         " offset=" + std::to_string( buffer - lim.m_memory.data() ) );
             return prior;
         }
 

@@ -120,8 +120,30 @@ inline char *logMapResync( char                *buffer,    /**< [in] failed flat
 
     for( char *candidate = buffer + 1; candidate < bufferEnd; ++candidate )
     {
-        size_t totalSize = 0;
-        if( logMapEntrySane( totalSize, candidate, bufferEnd, minTs ) )
+        char                *chain      = candidate;
+        size_t               chainLinks = 0;
+        flatlogs::timespecX  chainMinTs;
+        flatlogs::timespecX *chainMinTsPtr = minTs;
+        while( chain < bufferEnd )
+        {
+            size_t totalSize = 0;
+            if( !logMapEntrySane( totalSize, chain, bufferEnd, chainMinTsPtr ) )
+            {
+                break;
+            }
+
+            ++chainLinks;
+            if( chainLinks >= 3 )
+            {
+                return candidate;
+            }
+
+            chainMinTs    = flatlogs::logHeader::timespec( chain );
+            chainMinTsPtr = &chainMinTs;
+            chain += totalSize;
+        }
+
+        if( chain == bufferEnd && chainLinks > 0 )
         {
             return candidate;
         }
@@ -748,16 +770,17 @@ int logMap<verboseT>::getPriorLog( char                      *&logBefore,
         if( !logMapEntrySane( totalSize, buffer, bufferEnd, minTsPtr ) )
         {
             char *resynced = logMapResync( buffer, bufferEnd, minTsPtr );
-            std::cerr << "Invalid log entry skipped while searching prior metadata log: app=" << appName << " ev=" << ev
-                      << " offset=" << buffer - lim.m_memory.data();
             if( resynced != nullptr )
             {
-                std::cerr << " resyncOffset=" << resynced - lim.m_memory.data() << "\n";
+                DEBUG_CRUMB( "getPriorLog resync app=" + appName + " ev=" + std::to_string( ev ) +
+                             " offset=" + std::to_string( buffer - lim.m_memory.data() ) +
+                             " resyncOffset=" + std::to_string( resynced - lim.m_memory.data() ) );
                 buffer = resynced;
                 continue;
             }
 
-            std::cerr << " resyncOffset=<none>\n";
+            DEBUG_CRUMB( "getPriorLog resync failed app=" + appName + " ev=" + std::to_string( ev ) +
+                         " offset=" + std::to_string( buffer - lim.m_memory.data() ) );
             break;
         }
 
@@ -831,16 +854,17 @@ int logMap<verboseT>::getNextLog( char *&logAfter, char *logCurrent, const std::
         if( !logMapEntrySane( totalSize, buffer, bufferEnd, &currentTs ) )
         {
             char *resynced = logMapResync( buffer, bufferEnd, &currentTs );
-            std::cerr << "Invalid log entry skipped while searching next metadata log: app=" << appName << " ev=" << ev
-                      << " offset=" << buffer - lim.m_memory.data();
             if( resynced != nullptr )
             {
-                std::cerr << " resyncOffset=" << resynced - lim.m_memory.data() << "\n";
+                DEBUG_CRUMB( "getNextLog resync app=" + appName + " ev=" + std::to_string( ev ) +
+                             " offset=" + std::to_string( buffer - lim.m_memory.data() ) +
+                             " resyncOffset=" + std::to_string( resynced - lim.m_memory.data() ) );
                 buffer = resynced;
                 continue;
             }
 
-            std::cerr << " resyncOffset=<none>\n";
+            DEBUG_CRUMB( "getNextLog resync failed app=" + appName + " ev=" + std::to_string( ev ) +
+                         " offset=" + std::to_string( buffer - lim.m_memory.data() ) );
             break;
         }
 
