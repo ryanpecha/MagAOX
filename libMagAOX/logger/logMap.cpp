@@ -76,12 +76,13 @@ int logInMemory::loadFile( file::stdFileName<verboseT> const &lfn )
             if( resynced != nullptr )
             {
                 std::cerr << " resyncByte=" << resynced - bufferStart << " (" << resynced - buffer
-                          << " bytes skipped)\n";
+                          << " byte resync span; corrupt section may begin earlier)\n";
                 buffer = resynced;
                 continue;
             }
 
-            std::cerr << " resyncByte=<none> (" << bufferEnd - buffer << " bytes skipped)\n";
+            std::cerr << " resyncByte=<none> (" << bufferEnd - buffer
+                      << " byte resync span to end-of-file; corrupt section may begin earlier)\n";
             break;
         }
 
