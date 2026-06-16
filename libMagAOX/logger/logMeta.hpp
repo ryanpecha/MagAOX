@@ -13,6 +13,7 @@
 
 #include <cmath>
 #include <limits>
+#include <sstream>
 
 #include <mx/ioutils/fits/fitsHeaderCard.hpp>
 // #define HARD_EXIT
@@ -154,6 +155,28 @@ inline bool logMetaGapValid( const flatlogs::timespecX &t0,    /**< [in] first t
     flatlogs::timespecX tt0 = t0;
     flatlogs::timespecX tt1 = t1;
     return maxGap < 0 || std::fabs( tt1.asDouble() - tt0.asDouble() ) <= maxGap;
+}
+
+/// Build a user-facing reason for a metadata telemetry gap failure.
+inline std::string logMetaGapReason( double maxGap /**< [in] maximum permitted gap in seconds */ )
+{
+    std::ostringstream oss;
+    oss << "due to gap in telemetry exceeding " << maxGap << " sec";
+    return oss.str();
+}
+
+/// Return a metadata lookup failure while optionally recording its reason.
+inline int logMetaFail( std::string       *reason, /**< [out] optional reason string */
+                        const std::string &msg,    /**< [in] reason to record */
+                        int                rv = -1 /**< [in] return value */
+)
+{
+    if( reason != nullptr )
+    {
+        *reason = msg;
+    }
+
+    return rv;
 }
 
 /// Report a skipped unverifiable log entry without aborting metadata processing.
@@ -418,8 +441,9 @@ int getLogStateVal( valT                      &val,
                     const flatlogs::timespecX &stime,
                     const flatlogs::timespecX &atime,
                     valT ( *getter )( void * ),
-                    char **hint   = 0,
-                    double maxGap = -1 )
+                    char       **hint          = 0,
+                    double       maxGap        = -1,
+                    std::string *failureReason = 0 )
 {
     char *atprior = nullptr;
     char *stprior = nullptr;
@@ -437,12 +461,12 @@ int getLogStateVal( valT                      &val,
 
     if( lm.getPriorLog( stprior, appName, ev, stime, _hint ) != 0 )
     {
-        return -1;
+        return logMetaFail( failureReason, "due to missing prior telemetry" );
     }
 
     if( stprior == nullptr || flatlogs::logHeader::eventCode( stprior ) != ev )
     {
-        return -1;
+        return logMetaFail( failureReason, "due to missing prior telemetry" );
     }
     if( !verifyLogEntry( ev, stprior ) )
     {
@@ -451,13 +475,13 @@ int getLogStateVal( valT                      &val,
         stprior = getPriorVerifiedLog( lm, appName, ev, stime );
         if( stprior == nullptr )
         {
-            return -1;
+            return logMetaFail( failureReason, "due to unverifiable prior telemetry" );
         }
     }
 
     if( !logMetaGapValid( flatlogs::logHeader::timespec( stprior ), stime, maxGap ) )
     {
-        return -1;
+        return logMetaFail( failureReason, logMetaGapReason( maxGap ) );
     }
 
     valT stprV = getter( flatlogs::logHeader::messageBuffer( stprior ) );
@@ -470,7 +494,12 @@ int getLogStateVal( valT                      &val,
 
     if( lm.getNextLog( atprior, stprior, appName ) != 0 )
     {
-        return -1;
+        if( !logMetaGapValid( flatlogs::logHeader::timespec( stprior ), atime, maxGap ) )
+        {
+            return logMetaFail( failureReason, logMetaGapReason( maxGap ) );
+        }
+
+        return logMetaFail( failureReason, "due to missing following telemetry" );
     }
     if( atprior == nullptr )
     {
@@ -482,7 +511,7 @@ int getLogStateVal( valT                      &val,
             return 0;
         }
 
-        return -1;
+        return logMetaFail( failureReason, logMetaGapReason( maxGap ) );
     }
     if( !verifyLogEntry( ev, atprior ) )
     {
@@ -491,7 +520,7 @@ int getLogStateVal( valT                      &val,
         atprior = getNextVerifiedLog( lm, atprior, appName, stprior );
         if( atprior == nullptr )
         {
-            return -1;
+            return logMetaFail( failureReason, "due to unverifiable following telemetry" );
         }
     }
 
@@ -504,7 +533,7 @@ int getLogStateVal( valT                      &val,
         if( !logMetaGapValid(
                 flatlogs::logHeader::timespec( stprior ), flatlogs::logHeader::timespec( atprior ), maxGap ) )
         {
-            return -1;
+            return logMetaFail( failureReason, logMetaGapReason( maxGap ) );
         }
 
         atprV = getter( flatlogs::logHeader::messageBuffer( atprior ) );
@@ -518,7 +547,12 @@ int getLogStateVal( valT                      &val,
         stprior = atprior;
         if( lm.getNextLog( atprior, stprior, appName ) != 0 )
         {
-            return -1;
+            if( !logMetaGapValid( flatlogs::logHeader::timespec( stprior ), atime, maxGap ) )
+            {
+                return logMetaFail( failureReason, logMetaGapReason( maxGap ) );
+            }
+
+            return logMetaFail( failureReason, "due to missing following telemetry" );
         }
         if( atprior == nullptr )
         {
@@ -530,7 +564,7 @@ int getLogStateVal( valT                      &val,
                 return 0;
             }
 
-            return -1;
+            return logMetaFail( failureReason, logMetaGapReason( maxGap ) );
         }
         if( !verifyLogEntry( ev, atprior ) )
         {
@@ -539,14 +573,14 @@ int getLogStateVal( valT                      &val,
             atprior = getNextVerifiedLog( lm, atprior, appName, stprior );
             if( atprior == nullptr )
             {
-                return -1;
+                return logMetaFail( failureReason, "due to unverifiable following telemetry" );
             }
         }
     }
 
     if( !logMetaGapValid( flatlogs::logHeader::timespec( stprior ), atime, maxGap ) )
     {
-        return -1;
+        return logMetaFail( failureReason, logMetaGapReason( maxGap ) );
     }
 
     val = stprV;
@@ -564,8 +598,9 @@ int getLogContVal( valT                      &val,
                    const flatlogs::timespecX &stime,
                    const flatlogs::timespecX &atime,
                    valT ( *getter )( void * ),
-                   char **hint   = 0,
-                   double maxGap = -1 )
+                   char       **hint          = 0,
+                   double       maxGap        = -1,
+                   std::string *failureReason = 0 )
 {
     char *atafter;
     char *stprior;
@@ -581,12 +616,12 @@ int getLogContVal( valT                      &val,
     // Get log entry before midexp
     if( lm.getPriorLog( stprior, appName, ev, midexp, _hint ) != 0 )
     {
-        return 1;
+        return logMetaFail( failureReason, "due to missing prior telemetry", 1 );
     }
 
     if( stprior == nullptr || flatlogs::logHeader::eventCode( stprior ) != ev )
     {
-        return 1;
+        return logMetaFail( failureReason, "due to missing prior telemetry", 1 );
     }
     if( !verifyLogEntry( ev, stprior ) )
     {
@@ -595,13 +630,13 @@ int getLogContVal( valT                      &val,
         stprior = getPriorVerifiedLog( lm, appName, ev, midexp );
         if( stprior == nullptr )
         {
-            return 1;
+            return logMetaFail( failureReason, "due to unverifiable prior telemetry", 1 );
         }
     }
 
     if( !logMetaGapValid( flatlogs::logHeader::timespec( stprior ), midexp, maxGap ) )
     {
-        return 1;
+        return logMetaFail( failureReason, logMetaGapReason( maxGap ), 1 );
     }
 
     valT stprV = getter( flatlogs::logHeader::messageBuffer( stprior ) );
@@ -612,11 +647,11 @@ int getLogContVal( valT                      &val,
 #ifdef HARD_EXIT
         exit( -1 );
 #endif
-        return 1;
+        return logMetaFail( failureReason, "due to missing following telemetry", 1 );
     }
     if( atafter == nullptr )
     {
-        return 1;
+        return logMetaFail( failureReason, "due to missing following telemetry", 1 );
     }
     if( !verifyLogEntry( ev, atafter ) )
     {
@@ -625,14 +660,14 @@ int getLogContVal( valT                      &val,
         atafter = getNextVerifiedLog( lm, atafter, appName, stprior );
         if( atafter == nullptr )
         {
-            return 1;
+            return logMetaFail( failureReason, "due to unverifiable following telemetry", 1 );
         }
     }
 
     if( !logMetaGapValid( midexp, flatlogs::logHeader::timespec( atafter ), maxGap ) ||
         !logMetaGapValid( flatlogs::logHeader::timespec( stprior ), flatlogs::logHeader::timespec( atafter ), maxGap ) )
     {
-        return 1;
+        return logMetaFail( failureReason, logMetaGapReason( maxGap ), 1 );
     }
 
     valT atprV = getter( flatlogs::logHeader::messageBuffer( atafter ) );
@@ -713,6 +748,8 @@ struct logMeta
 
     char *m_hint{ nullptr }; ///< Cached log-search hint for repeated lookups of the same metadata item.
 
+    std::string m_unavailableReason; ///< Reason the last metadata lookup returned unavailable, if known.
+
     /// Build the FITS keyword for this metadata item.
     /**
      * \returns the keyword, including the device prefix when HIERARCH-style output is enabled.
@@ -731,6 +768,9 @@ struct logMeta
 
     /// Get the FITS comment for this metadata item.
     const std::string &comment();
+
+    /// Get the reason the last lookup returned the unavailable sentinel.
+    const std::string &unavailableReason() const;
 
     /// Resolve the log accessor and metadata details for a specification.
     int setLog( const logMetaSpec &lms /**< [in] the specification to resolve */ );

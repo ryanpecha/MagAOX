@@ -828,9 +828,15 @@ inline bool xrif2fits::appendMetadata( mx::fits::fitsHeader<verboseT> &fh,
         std::string value = meta.value( m_tels, stime, atime, m_maxMetadataGap );
         if( value == logMeta::unavailableValue() )
         {
+            std::string reason = meta.unavailableReason();
+            if( reason.size() > 0 )
+            {
+                reason = " " + reason;
+            }
+
             recoverableError( "metadata:" + meta.device() + ":" + meta.keyword() + ":unavailable",
                               "Metadata " + meta.device() + " " + meta.keyword() + " is " +
-                                  logMeta::unavailableValue() + "." );
+                                  logMeta::unavailableValue() + reason + "." );
             fh.append( meta.unavailableCard() );
             if( writeMeta )
             {
