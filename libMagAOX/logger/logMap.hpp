@@ -21,6 +21,7 @@ using namespace mx::sys::tscomp;
 
 #include <flatlogs/flatlogs.hpp>
 #include "../file/stdFileName.hpp"
+#include "generated/logCodes.hpp"
 
 #ifndef DEBUG_CRUMB
     #ifdef DEBUG
@@ -44,6 +45,89 @@ inline std::string logMapDebugTime( flatlogs::timespecX ts /**< [in] timestamp t
     std::string tstamp;
     ts.timeStamp( tstamp );
     return tstamp + " (" + std::to_string( ts.time_s ) + "." + std::to_string( ts.time_ns ) + ")";
+}
+
+/// Check whether a flatlog priority value is one of the defined on-disk priorities.
+inline bool logMapPriorityValid( flatlogs::logPrioT prio /**< [in] priority value to check */ )
+{
+    return ( prio >= flatlogs::logPrio::LOG_EMERGENCY && prio <= flatlogs::logPrio::LOG_DEBUG2 ) ||
+           prio == flatlogs::logPrio::LOG_TELEM;
+}
+
+/// Check whether a flatlog entry's header and claimed size fit in the loaded buffer.
+inline bool logMapEntryExtentValid( size_t &totalSize, /**< [out] total entry size claimed by the header */
+                                    char   *buffer,    /**< [in] candidate flatlog entry */
+                                    char   *bufferEnd  /**< [in] one past the loaded buffer */
+)
+{
+    totalSize = 0;
+    if( buffer == nullptr || bufferEnd == nullptr || buffer >= bufferEnd )
+    {
+        return false;
+    }
+
+    size_t remaining = bufferEnd - buffer;
+    if( remaining < static_cast<size_t>( flatlogs::logHeader::minHeadSize ) )
+    {
+        return false;
+    }
+
+    size_t headerSize = flatlogs::logHeader::headerSize( buffer );
+    if( headerSize == 0 || headerSize > remaining )
+    {
+        return false;
+    }
+
+    totalSize = flatlogs::logHeader::totalSize( buffer );
+    return totalSize > 0 && totalSize <= remaining;
+}
+
+/// Check whether a flatlog entry has a sane envelope for length-chain traversal.
+inline bool logMapEntrySane( size_t              &totalSize, /**< [out] total entry size claimed by the header */
+                             char                *buffer,    /**< [in] candidate flatlog entry */
+                             char                *bufferEnd, /**< [in] one past the loaded buffer */
+                             flatlogs::timespecX *minTs = 0  /**< [in] optional minimum plausible timestamp */
+)
+{
+    if( !logMapEntryExtentValid( totalSize, buffer, bufferEnd ) )
+    {
+        return false;
+    }
+
+    if( !logMapPriorityValid( flatlogs::logHeader::logLevel( buffer ) ) )
+    {
+        return false;
+    }
+
+    if( eventCodeName( flatlogs::logHeader::eventCode( buffer ) ) == "unknown event code" )
+    {
+        return false;
+    }
+
+    return minTs == 0 || !( flatlogs::logHeader::timespec( buffer ) < *minTs );
+}
+
+/// Byte-scan forward to the next sane flatlog envelope.
+inline char *logMapResync( char                *buffer,    /**< [in] failed flatlog entry */
+                           char                *bufferEnd, /**< [in] one past the loaded buffer */
+                           flatlogs::timespecX *minTs = 0  /**< [in] optional minimum plausible timestamp */
+)
+{
+    if( buffer == nullptr || bufferEnd == nullptr )
+    {
+        return nullptr;
+    }
+
+    for( char *candidate = buffer + 1; candidate < bufferEnd; ++candidate )
+    {
+        size_t totalSize = 0;
+        if( logMapEntrySane( totalSize, candidate, bufferEnd, minTs ) )
+        {
+            return candidate;
+        }
+    }
+
+    return nullptr;
 }
 
 #ifdef XWCTEST_NAMESPACE
@@ -652,11 +736,29 @@ int logMap<verboseT>::getPriorLog( char                      *&logBefore,
 
     while( buffer < bufferEnd )
     {
-        size_t totalSize = flatlogs::logHeader::totalSize( buffer );
-        if( totalSize == 0 || buffer + totalSize > bufferEnd )
+        size_t               totalSize = 0;
+        flatlogs::timespecX  minTs;
+        flatlogs::timespecX *minTsPtr = nullptr;
+        if( priorBuffer != nullptr )
         {
-            std::cerr << "attempt to read invalid log entry, possible log corruption.\n";
-            return -1;
+            minTs    = flatlogs::logHeader::timespec( priorBuffer );
+            minTsPtr = &minTs;
+        }
+
+        if( !logMapEntrySane( totalSize, buffer, bufferEnd, minTsPtr ) )
+        {
+            char *resynced = logMapResync( buffer, bufferEnd, minTsPtr );
+            std::cerr << "Invalid log entry skipped while searching prior metadata log: app=" << appName << " ev=" << ev
+                      << " offset=" << buffer - lim.m_memory.data();
+            if( resynced != nullptr )
+            {
+                std::cerr << " resyncOffset=" << resynced - lim.m_memory.data() << "\n";
+                buffer = resynced;
+                continue;
+            }
+
+            std::cerr << " resyncOffset=<none>\n";
+            break;
         }
 
         if( ts < flatlogs::logHeader::timespec( buffer ) )
@@ -724,11 +826,22 @@ int logMap<verboseT>::getNextLog( char *&logAfter, char *logCurrent, const std::
 
     while( buffer < bufferEnd )
     {
-        size_t totalSize = flatlogs::logHeader::totalSize( buffer );
-        if( totalSize == 0 || buffer + totalSize > bufferEnd )
+        size_t              totalSize = 0;
+        flatlogs::timespecX currentTs = flatlogs::logHeader::timespec( logCurrent );
+        if( !logMapEntrySane( totalSize, buffer, bufferEnd, &currentTs ) )
         {
-            std::cerr << "attempt to read invalid log entry, possible log corruption.\n";
-            return -1;
+            char *resynced = logMapResync( buffer, bufferEnd, &currentTs );
+            std::cerr << "Invalid log entry skipped while searching next metadata log: app=" << appName << " ev=" << ev
+                      << " offset=" << buffer - lim.m_memory.data();
+            if( resynced != nullptr )
+            {
+                std::cerr << " resyncOffset=" << resynced - lim.m_memory.data() << "\n";
+                buffer = resynced;
+                continue;
+            }
+
+            std::cerr << " resyncOffset=<none>\n";
+            break;
         }
 
         if( flatlogs::logHeader::eventCode( buffer ) == ev )

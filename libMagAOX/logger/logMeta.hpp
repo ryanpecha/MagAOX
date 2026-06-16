@@ -237,12 +237,32 @@ char *getPriorVerifiedLog( logMap<verboseT>          &lm,      /**< [in] loaded 
 
     while( buffer < bufferEnd )
     {
-        size_t totalSize = flatlogs::logHeader::totalSize( buffer );
-        if( totalSize == 0 || buffer + totalSize > bufferEnd )
+        size_t               totalSize = 0;
+        flatlogs::timespecX  minTs;
+        flatlogs::timespecX *minTsPtr = nullptr;
+        if( prior != nullptr )
+        {
+            minTs    = flatlogs::logHeader::timespec( prior );
+            minTsPtr = &minTs;
+        }
+
+        if( !logMapEntrySane( totalSize, buffer, bufferEnd, minTsPtr ) )
         {
             DEBUG_CRUMB( "getPriorVerifiedLog invalid entry app=" + appName + " ev=" + std::to_string( ev ) +
                          " offset=" + std::to_string( buffer - lim.m_memory.data() ) + " totalSize=" +
                          std::to_string( totalSize ) + " memoryBytes=" + std::to_string( lim.m_memory.size() ) + " " );
+
+            char *resynced = logMapResync( buffer, bufferEnd, minTsPtr );
+            std::cerr << "Invalid log entry skipped while searching prior verified metadata log: app=" << appName
+                      << " ev=" << ev << " offset=" << buffer - lim.m_memory.data();
+            if( resynced != nullptr )
+            {
+                std::cerr << " resyncOffset=" << resynced - lim.m_memory.data() << "\n";
+                buffer = resynced;
+                continue;
+            }
+
+            std::cerr << " resyncOffset=<none>\n";
             return prior;
         }
 

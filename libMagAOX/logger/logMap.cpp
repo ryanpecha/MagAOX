@@ -52,27 +52,55 @@ int logInMemory::loadFile( file::stdFileName<verboseT> const &lfn )
         return -1;
     }
 
-    flatlogs::timespecX startTime = logHeader::timespec( memory.data() );
+    char *bufferStart = memory.data();
+    char *bufferEnd   = memory.data() + memory.size();
+    char *firstGood   = nullptr;
+    char *lastGood    = nullptr;
+    char *buffer      = bufferStart;
 
-    size_t st = 0;
-    size_t ed = logHeader::totalSize( memory.data() );
-    st        = ed;
-
-    while( st < memory.size() )
+    while( buffer < bufferEnd )
     {
-        ed = logHeader::totalSize( memory.data() + st );
-        st = st + ed;
+        size_t               totalSize = 0;
+        flatlogs::timespecX  minTs;
+        flatlogs::timespecX *minTsPtr = nullptr;
+        if( lastGood != nullptr )
+        {
+            minTs    = logHeader::timespec( lastGood );
+            minTsPtr = &minTs;
+        }
+
+        if( !logMapEntrySane( totalSize, buffer, bufferEnd, minTsPtr ) )
+        {
+            char *resynced = logMapResync( buffer, bufferEnd, minTsPtr );
+            std::cerr << "Invalid log entry skipped while loading log file: source=" << lfn.fullName()
+                      << " sourceByte=" << buffer - bufferStart;
+            if( resynced != nullptr )
+            {
+                std::cerr << " resyncByte=" << resynced - bufferStart << "\n";
+                buffer = resynced;
+                continue;
+            }
+
+            std::cerr << " resyncByte=<none>\n";
+            break;
+        }
+
+        if( firstGood == nullptr )
+        {
+            firstGood = buffer;
+        }
+        lastGood = buffer;
+        buffer += totalSize;
     }
 
-    if( st != memory.size() )
+    if( firstGood == nullptr || lastGood == nullptr )
     {
         std::cerr << "Possibly corrupt logfile.\n";
         return -1;
     }
 
-    st -= ed;
-
-    flatlogs::timespecX endTime = logHeader::timespec( memory.data() + st );
+    flatlogs::timespecX startTime = logHeader::timespec( firstGood );
+    flatlogs::timespecX endTime   = logHeader::timespec( lastGood );
 
     DEBUG_CRUMB( "logInMemory loadFile read file=" + lfn.fullName() + " bytes=" + std::to_string( memory.size() ) +
                  " start=" + logMapDebugTime( startTime ) + " end=" + logMapDebugTime( endTime ) );
