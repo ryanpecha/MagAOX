@@ -53,6 +53,8 @@ before FITS files are written.
 | | `--noMeta` | `noMeta` | bool | Do not write `meta_data.txt`.  FITS headers are still written unless `-N` is also used. |
 | `-C` | `--cubeMode` | `cubeMode` | bool | Write each archive as one FITS cube with a minimal header. |
 | | `--strict` | `strict` | bool | Treat recoverable metadata/log errors as fatal before writing FITS files. |
+| | `--show-details` | `show-details` | bool | Print xrif image and timing compression details while processing. |
+| | `--quiet` | `quiet` | bool | Suppress non-error status output. |
 | | `--maxMetadataGap` | `maxMetadataGap` | double | Maximum allowed telemetry gap in seconds for metadata coverage.  Default is `25`.  Set negative to disable gap checks. |
 
 # INPUT AND OUTPUT
@@ -175,7 +177,7 @@ When a metadata value fails because of the gap tolerance, the warning names that
 reason, for example:
 
 ```
-(xrif2fits): Metadata fwsci1 POS is NOT AVAILABLE due to gap in telemetry exceeding 25 sec.
+xrif2fits: Metadata fwsci1 POS is NOT AVAILABLE due to gap in telemetry exceeding 25 sec.
 ```
 
 # LOG CORRUPTION HANDLING
@@ -189,7 +191,7 @@ The resync warning reports the byte span from the failed traversal point to the
 resync point:
 
 ```
-(xrif2fits): Invalid log entry skipped while loading log file: source=/path/file.bintel sourceByte=8155228 resyncByte=8155292 (64 byte resync span; corrupt section may begin earlier)
+xrif2fits: Invalid log entry skipped while loading log file: source=/path/file.bintel sourceByte=8155228 resyncByte=8155292 (64 byte resync span; corrupt section may begin earlier)
 ```
 
 That span is not necessarily the same as the total corrupt section that
@@ -268,6 +270,18 @@ Allow a larger telemetry gap for older data:
 
 ```
 xrif2fits -O -f camsci1_20260511035851088464615.xrif -D ./fits --maxMetadataGap=7200
+```
+
+Print compression details while processing:
+
+```
+xrif2fits -O -f camsci1_20260511035851088464615.xrif -D ./fits --show-details
+```
+
+Suppress non-error status output:
+
+```
+xrif2fits -O -f camsci1_20260511035851088464615.xrif -D ./fits --quiet
 ```
 
 Disable header metadata completely:

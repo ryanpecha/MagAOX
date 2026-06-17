@@ -136,6 +136,10 @@ class xrif2fits : public mx::app::application
 
     bool m_strict{ false };
 
+    bool m_showDetails{ false };
+
+    bool m_quiet{ false };
+
     double m_maxMetadataGap{ 25.0 };
 
     bool m_strictAbort{ false };
@@ -253,8 +257,8 @@ class xrif2fits : public mx::app::application
 
 inline xrif2fits::xrif2fits()
 {
-    m_logs.m_reportPrefix = "(xrif2fits): ";
-    m_tels.m_reportPrefix = "(xrif2fits): ";
+    m_logs.m_reportPrefix = "xrif2fits: ";
+    m_tels.m_reportPrefix = "xrif2fits: ";
 
     // setup the default config path
     MagAOXPath = mx::sys::getEnv( MAGAOX_env_path );
@@ -451,6 +455,26 @@ inline void xrif2fits::setupConfig()
                 "If true, recoverable metadata/log errors stop processing before FITS files are written.  Default is "
                 "false." );
 
+    config.add( "show-details",
+                "",
+                "show-details",
+                argType::True,
+                "",
+                "show-details",
+                false,
+                "bool",
+                "If true, print xrif compression details while processing.  Default is false." );
+
+    config.add( "quiet",
+                "",
+                "quiet",
+                argType::True,
+                "",
+                "quiet",
+                false,
+                "bool",
+                "If true, suppress non-error status output.  Default is false." );
+
     config.add( "maxMetadataGap",
                 "",
                 "maxMetadataGap",
@@ -487,6 +511,8 @@ inline void xrif2fits::loadConfig()
     config( m_noMeta, "noMeta" );
     config( m_cubeMode, "cubeMode" );
     config( m_strict, "strict" );
+    config( m_showDetails, "show-details" );
+    config( m_quiet, "quiet" );
     config( m_maxMetadataGap, "maxMetadataGap" );
 
     if( m_configPathCLBase.size() > 0 )
@@ -717,7 +743,7 @@ inline void xrif2fits::recoverableError( const std::string &key, const std::stri
     if( m_warnedMetadata.insert( key ).second )
     {
         ++m_recoverableErrors;
-        std::cerr << " (" << invokedName << "): " << msg << "\n";
+        std::cerr << invokedName << ": " << msg << "\n";
     }
 }
 
@@ -740,7 +766,7 @@ inline bool xrif2fits::strictOkay( const std::string &context )
     }
 
     m_strictAbort = true;
-    std::cerr << " (" << invokedName << "): strict mode aborting before " << context << " after " << nErrors
+    std::cerr << invokedName << ": strict mode aborting before " << context << " after " << nErrors
               << " recoverable error(s).\n";
     return false;
 }
@@ -803,7 +829,7 @@ inline bool xrif2fits::exposureTime( timespec &stime, double &exptime, const std
         /// \todo this needs to check for any log entries between end and start
         if( telem_stdcam::exptime( logHeader::messageBuffer( priorprior ) ) != exptime )
         {
-            std::cerr << "Change in exposure time mid-exposure\n";
+            std::cerr << invokedName << ": Change in exposure time mid-exposure\n";
         }
     }
     else
@@ -895,21 +921,21 @@ inline int xrif2fits::execute()
     errno = 0;
     if( sigaction( SIGTERM, &act, 0 ) < 0 )
     {
-        std::cerr << " (" << invokedName << "): error setting SIGTERM handler: " << strerror( errno ) << "\n";
+        std::cerr << invokedName << ": error setting SIGTERM handler: " << strerror( errno ) << "\n";
         return -1;
     }
 
     errno = 0;
     if( sigaction( SIGQUIT, &act, 0 ) < 0 )
     {
-        std::cerr << " (" << invokedName << "): error setting SIGQUIT handler: " << strerror( errno ) << "\n";
+        std::cerr << invokedName << ": error setting SIGQUIT handler: " << strerror( errno ) << "\n";
         return -1;
     }
 
     errno = 0;
     if( sigaction( SIGINT, &act, 0 ) < 0 )
     {
-        std::cerr << " (" << invokedName << "): error setting SIGINT handler: " << strerror( errno ) << "\n";
+        std::cerr << invokedName << ": error setting SIGINT handler: " << strerror( errno ) << "\n";
         return -1;
     }
 
@@ -939,7 +965,7 @@ inline int xrif2fits::execute()
 
     if( rv < 0 )
     {
-        std::cerr << " (" << invokedName << "): Error allocating xrif.\n";
+        std::cerr << invokedName << ": Error allocating xrif.\n";
         return -1;
     }
     XRIF2FITS_DEBUG_CRUMB( "xrif_new image end" );
@@ -949,7 +975,7 @@ inline int xrif2fits::execute()
 
     if( rv < 0 )
     {
-        std::cerr << " (" << invokedName << "): Error allocating xrif_timing.\n";
+        std::cerr << invokedName << ": Error allocating xrif_timing.\n";
         return -1;
     }
     XRIF2FITS_DEBUG_CRUMB( "xrif_new timing end" );
@@ -1014,12 +1040,9 @@ inline int xrif2fits::execute()
                 }
             }
         }
-        if( !m_timesOnly )
+        if( !m_timesOnly && !m_quiet )
         {
-
-            std::cout << "******************************************************\n";
-            std::cout << "* xrif2fits: decoding for " << m_fileNames[n].appName() << " (" + m_files[n] << ")\n";
-            std::cout << "******************************************************\n";
+            std::cout << "xrif2fits: decoding for " << m_fileNames[n].appName() << " (" + m_files[n] << ")\n";
         }
 
         XRIF2FITS_DEBUG_CRUMB( "archive begin: " + m_files[n] );
@@ -1027,8 +1050,8 @@ inline int xrif2fits::execute()
         FILE *fp_xrif = fopen( m_files[n].c_str(), "rb" );
         if( fp_xrif == nullptr )
         {
-            std::cerr << " (" << invokedName << "): Error opening " << m_files[n] << "\n";
-            std::cerr << " (" << invokedName << "): " << strerror( errno ) << "\n";
+            std::cerr << invokedName << ": Error opening " << m_files[n] << "\n";
+            std::cerr << invokedName << ": " << strerror( errno ) << "\n";
             return -1;
         }
 
@@ -1037,14 +1060,14 @@ inline int xrif2fits::execute()
         size_t nr = fread( header, 1, XRIF_HEADER_SIZE, fp_xrif );
         if( nr != XRIF_HEADER_SIZE )
         {
-            std::cerr << " (" << invokedName << "): Error reading header of " << m_files[n] << "\n";
+            std::cerr << invokedName << ": Error reading header of " << m_files[n] << "\n";
             fclose( fp_xrif );
             return -1;
         }
 
         uint32_t header_size;
         xrif_read_header( m_xrif, &header_size, header );
-        if( !m_timesOnly )
+        if( m_showDetails && !m_quiet && !m_timesOnly )
         {
             std::cout << "xrif compression details:\n";
             std::cout << "  difference method:  " << xrif_difference_method_string( m_xrif->difference_method ) << '\n';
@@ -1068,7 +1091,7 @@ inline int xrif2fits::execute()
         rv = xrif_allocate_raw( m_xrif );
         if( rv != XRIF_NOERROR )
         {
-            std::cerr << " (" << invokedName << "): Error allocating raw buffer for " << m_files[n] << "\n";
+            std::cerr << invokedName << ": Error allocating raw buffer for " << m_files[n] << "\n";
             std::cerr << "\t code: " << rv << "\n";
             return -1;
         }
@@ -1076,7 +1099,7 @@ inline int xrif2fits::execute()
         rv = xrif_allocate_reordered( m_xrif );
         if( rv != XRIF_NOERROR )
         {
-            std::cerr << " (" << invokedName << "): Error allocating reordered buffer for " << m_files[n] << "\n";
+            std::cerr << invokedName << ": Error allocating reordered buffer for " << m_files[n] << "\n";
             std::cerr << "\t code: " << rv << "\n";
             return -1;
         }
@@ -1085,7 +1108,7 @@ inline int xrif2fits::execute()
 
         if( nr != m_xrif->compressed_size )
         {
-            std::cerr << " (" << invokedName << "): Error reading data from " << m_files[n] << "\n";
+            std::cerr << invokedName << ": Error reading data from " << m_files[n] << "\n";
             return -1;
         }
 
@@ -1093,14 +1116,14 @@ inline int xrif2fits::execute()
         nr = fread( header, 1, XRIF_HEADER_SIZE, fp_xrif );
         if( nr != XRIF_HEADER_SIZE )
         {
-            std::cerr << " (" << invokedName << "): Error reading timing header of " << m_files[n] << "\n";
+            std::cerr << invokedName << ": Error reading timing header of " << m_files[n] << "\n";
             fclose( fp_xrif );
             return -1;
         }
 
         xrif_read_header( m_xrif_timing, &header_size, header );
 
-        if( !m_timesOnly )
+        if( m_showDetails && !m_quiet && !m_timesOnly )
         {
             std::cout << "xrif timing data compression details:\n";
             std::cout << "  difference method:  " << xrif_difference_method_string( m_xrif_timing->difference_method )
@@ -1129,8 +1152,7 @@ inline int xrif2fits::execute()
         rv = xrif_allocate_raw( m_xrif_timing );
         if( rv != XRIF_NOERROR )
         {
-            std::cerr << " (" << invokedName << "): Error allocating raw buffer for timing data from " << m_files[n]
-                      << "\n";
+            std::cerr << invokedName << ": Error allocating raw buffer for timing data from " << m_files[n] << "\n";
             std::cerr << "\t code: " << rv << "\n";
             return -1;
         }
@@ -1138,8 +1160,8 @@ inline int xrif2fits::execute()
         rv = xrif_allocate_reordered( m_xrif_timing );
         if( rv != XRIF_NOERROR )
         {
-            std::cerr << " (" << invokedName << "): Error allocating reordered buffer for  timing data from "
-                      << m_files[n] << "\n";
+            std::cerr << invokedName << ": Error allocating reordered buffer for  timing data from " << m_files[n]
+                      << "\n";
             std::cerr << "\t code: " << rv << "\n";
             return -1;
         }
@@ -1148,7 +1170,7 @@ inline int xrif2fits::execute()
 
         if( nr != m_xrif_timing->compressed_size )
         {
-            std::cerr << " (" << invokedName << "): Error reading timing data from " << m_files[n] << "\n";
+            std::cerr << invokedName << ": Error reading timing data from " << m_files[n] << "\n";
             return -1;
         }
 
@@ -1163,7 +1185,7 @@ inline int xrif2fits::execute()
             rv = xrif_decode( m_xrif );
             if( rv != XRIF_NOERROR )
             {
-                std::cerr << " (" << invokedName << "): Error decoding image data from " << m_files[n] << "\n";
+                std::cerr << invokedName << ": Error decoding image data from " << m_files[n] << "\n";
                 std::cerr << "\t code: " << rv << "\n";
                 return -1;
             }
@@ -1174,7 +1196,7 @@ inline int xrif2fits::execute()
         rv = xrif_decode( m_xrif_timing );
         if( rv != XRIF_NOERROR )
         {
-            std::cerr << " (" << invokedName << "): Error decoding timing data from " << m_files[n] << "\n";
+            std::cerr << invokedName << ": Error decoding timing data from " << m_files[n] << "\n";
             std::cerr << "\t code: " << rv << "\n";
             return -1;
         }
@@ -1350,12 +1372,15 @@ inline int xrif2fits::execute()
     size_t nRecoverableErrors = recoverableErrorCount();
     if( nRecoverableErrors > 0 )
     {
-        std::cerr << " (" << invokedName << "): exited after completing with " << nRecoverableErrors
+        std::cerr << invokedName << ": exited after completing with " << nRecoverableErrors
                   << " recoverable error(s).\n";
         return 1;
     }
 
-    std::cerr << " (" << invokedName << "): exited normally.\n";
+    if( !m_quiet )
+    {
+        std::cerr << invokedName << ": exited normally.\n";
+    }
     return 0;
 }
 
@@ -1492,13 +1517,11 @@ inline mx::error_t xrif2fits::prepareFiles()
     if( m_camera == "" )
     {
         m_camera = m_fileNames[0].appName();
-        std::cerr << "Set camera to: " << m_camera << '\n';
     }
 
     if( m_cameraHeader == "" )
     {
         m_cameraHeader = m_camera + "_header.conf";
-        std::cerr << "Set camera header to: " << m_cameraHeader << '\n';
     }
 
     if( !m_noHeader )
