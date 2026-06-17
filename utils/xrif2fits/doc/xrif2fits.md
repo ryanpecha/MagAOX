@@ -53,7 +53,7 @@ before FITS files are written.
 | | `--noMeta` | `noMeta` | bool | Do not write `meta_data.txt`.  FITS headers are still written unless `-N` is also used. |
 | `-C` | `--cubeMode` | `cubeMode` | bool | Write each archive as one FITS cube with a minimal header. |
 | | `--strict` | `strict` | bool | Treat recoverable metadata/log errors as fatal before writing FITS files. |
-| | `--show-details` | `show-details` | bool | Print xrif image and timing compression details while processing. |
+| | `--show-details` | `showDetails` | bool | Print xrif image and timing compression details while processing. |
 | | `--quiet` | `quiet` | bool | Suppress non-error status output. |
 | | `--maxMetadataGap` | `maxMetadataGap` | double | Maximum allowed telemetry gap in seconds for metadata coverage.  Default is `25`.  Set negative to disable gap checks. |
 

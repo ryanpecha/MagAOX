@@ -455,12 +455,12 @@ inline void xrif2fits::setupConfig()
                 "If true, recoverable metadata/log errors stop processing before FITS files are written.  Default is "
                 "false." );
 
-    config.add( "show-details",
+    config.add( "showDetails",
                 "",
                 "show-details",
                 argType::True,
                 "",
-                "show-details",
+                "showDetails",
                 false,
                 "bool",
                 "If true, print xrif compression details while processing.  Default is false." );
@@ -511,7 +511,7 @@ inline void xrif2fits::loadConfig()
     config( m_noMeta, "noMeta" );
     config( m_cubeMode, "cubeMode" );
     config( m_strict, "strict" );
-    config( m_showDetails, "show-details" );
+    config( m_showDetails, "showDetails" );
     config( m_quiet, "quiet" );
     config( m_maxMetadataGap, "maxMetadataGap" );
 
