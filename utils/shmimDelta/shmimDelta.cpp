@@ -191,9 +191,9 @@ int shmimDelta::execute()
     return rv;
 }
 
-double shmimDelta::elapsedSeconds( const timespec &t0, const timespec &t1 )
+double shmimDelta::elapsedUsec( const timespec &t0, const timespec &t1 )
 {
-    return static_cast<double>( t1.tv_sec - t0.tv_sec ) + 1e-9 * static_cast<double>( t1.tv_nsec - t0.tv_nsec );
+    return 1e6 * static_cast<double>( t1.tv_sec - t0.tv_sec ) + 1e-3 * static_cast<double>( t1.tv_nsec - t0.tv_nsec );
 }
 
 double shmimDelta::mean( const std::vector<double> &values )
@@ -379,28 +379,76 @@ int shmimDelta::measureDeltas()
         return -1;
     }
 
-    const size_t pairedFrames = std::min( m_stream1.m_arrivalTimes.size(), m_stream2.m_arrivalTimes.size() );
+    const char *pairingMethod = "cnt0";
+
+    size_t pairedFrames = pairByCounter();
+    if( pairedFrames < 2 )
+    {
+        pairedFrames  = pairByOrder();
+        pairingMethod = "order";
+        std::cerr << "No common cnt0 pairing found; paired samples by arrival order.\n";
+    }
+
     if( pairedFrames < 2 )
     {
         std::cerr << "Need at least 2 paired arrivals to calculate delta rms.\n";
         return -1;
     }
 
-    m_deltaSeconds.resize( pairedFrames );
-    for( size_t n = 0; n < pairedFrames; ++n )
-    {
-        m_deltaSeconds[n] = elapsedSeconds( m_stream1.m_arrivalTimes[n], m_stream2.m_arrivalTimes[n] );
-    }
+    const double deltaMean = mean( m_deltaUsec );
+    const double deltaRms  = rms( m_deltaUsec, deltaMean );
 
-    const double deltaMean = mean( m_deltaSeconds );
-    const double deltaRms  = rms( m_deltaSeconds, deltaMean );
-
-    std::cout << std::fixed << std::setprecision( 9 );
+    std::cout << std::fixed << std::setprecision( 3 );
     std::cout << "timed_pairs: " << pairedFrames << "\n";
-    std::cout << "delta_mean_sec: " << deltaMean << "\n";
-    std::cout << "delta_rms_sec: " << deltaRms << "\n";
+    std::cout << "pairing: " << pairingMethod << "\n";
+    std::cout << "delta_mean_usec: " << deltaMean << "\n";
+    std::cout << "delta_rms_usec: " << deltaRms << "\n";
 
     return 0;
+}
+
+size_t shmimDelta::pairByCounter()
+{
+    m_deltaUsec.clear();
+
+    size_t n1 = 0;
+    size_t n2 = 0;
+
+    while( n1 < m_stream1.m_samples.size() && n2 < m_stream2.m_samples.size() )
+    {
+        const auto &sample1 = m_stream1.m_samples[n1];
+        const auto &sample2 = m_stream2.m_samples[n2];
+
+        if( sample1.m_cnt0 == sample2.m_cnt0 )
+        {
+            m_deltaUsec.push_back( elapsedUsec( sample1.m_eventTime, sample2.m_eventTime ) );
+            ++n1;
+            ++n2;
+        }
+        else if( sample1.m_cnt0 < sample2.m_cnt0 )
+        {
+            ++n1;
+        }
+        else
+        {
+            ++n2;
+        }
+    }
+
+    return m_deltaUsec.size();
+}
+
+size_t shmimDelta::pairByOrder()
+{
+    const size_t pairedFrames = std::min( m_stream1.m_samples.size(), m_stream2.m_samples.size() );
+
+    m_deltaUsec.resize( pairedFrames );
+    for( size_t n = 0; n < pairedFrames; ++n )
+    {
+        m_deltaUsec[n] = elapsedUsec( m_stream1.m_samples[n].m_eventTime, m_stream2.m_samples[n].m_eventTime );
+    }
+
+    return m_deltaUsec.size();
 }
 
 void shmimDelta::waitThreadStart( shmimDelta *app, streamState *stream )
@@ -410,13 +458,13 @@ void shmimDelta::waitThreadStart( shmimDelta *app, streamState *stream )
 
 int shmimDelta::waitFrames( streamState &stream )
 {
-    stream.m_arrivalTimes.clear();
-    stream.m_arrivalTimes.reserve( m_nFrames );
+    stream.m_samples.clear();
+    stream.m_samples.reserve( m_nFrames );
     stream.m_errorMessage.clear();
 
-    for( size_t n = 0; n < m_nFrames && !g_timeToDie; ++n )
+    while( stream.m_samples.size() < m_nFrames && !g_timeToDie )
     {
-        if( waitForFrame( stream, n + 1 ) < 0 )
+        if( waitForFrame( stream, stream.m_samples.size() + 1 ) < 0 )
         {
             return -1;
         }
@@ -464,16 +512,82 @@ int shmimDelta::waitForFrame( streamState &stream, size_t frameNumber )
         return -1;
     }
 
-    timespec arrivalTime;
-    if( clock_gettime( CLOCK_MONOTONIC, &arrivalTime ) < 0 )
+    while( sem_trywait( stream.m_semaphore ) == 0 )
+    {
+    }
+
+    if( errno != EAGAIN && errno != EINTR )
+    {
+        stream.m_errorMessage = "error from sem_trywait for " + stream.m_name + ": " + strerror( errno );
+        return -1;
+    }
+
+    return recordLatestSample( stream );
+}
+
+int shmimDelta::recordLatestSample( streamState &stream )
+{
+    streamState::frameSample sample = latestSample( stream );
+
+    if( clock_gettime( CLOCK_MONOTONIC, &sample.m_arrivalTime ) < 0 )
     {
         stream.m_errorMessage = "error from clock_gettime after semaphore wake for " + stream.m_name;
         return -1;
     }
 
-    stream.m_arrivalTimes.push_back( arrivalTime );
+    if( !validTime( sample.m_eventTime ) )
+    {
+        sample.m_eventTime = sample.m_arrivalTime;
+    }
+
+    if( !stream.m_samples.empty() && sample.m_cnt0 == stream.m_samples.back().m_cnt0 )
+    {
+        return 0;
+    }
+
+    stream.m_samples.push_back( sample );
 
     return 0;
+}
+
+shmimDelta::streamState::frameSample shmimDelta::latestSample( const streamState &stream ) const
+{
+    streamState::frameSample sample;
+
+    const IMAGE &image = stream.m_imageStream;
+
+    uint64_t currImage = ImageStreamIO_readLastWroteIndex( &image );
+    if( currImage >= ImageStreamIO_nbSlices( &image ) )
+    {
+        currImage = 0;
+    }
+
+    if( image.cntarray != nullptr )
+    {
+        sample.m_cnt0 = image.cntarray[currImage];
+    }
+    else
+    {
+        sample.m_cnt0 = image.md[0].cnt0;
+    }
+
+    if( image.writetimearray != nullptr && validTime( image.writetimearray[currImage] ) )
+    {
+        sample.m_eventTime        = image.writetimearray[currImage];
+        sample.m_usedMetadataTime = true;
+    }
+    else if( validTime( image.md[0].writetime ) )
+    {
+        sample.m_eventTime        = image.md[0].writetime;
+        sample.m_usedMetadataTime = true;
+    }
+
+    return sample;
+}
+
+bool shmimDelta::validTime( const timespec &ts )
+{
+    return ts.tv_sec != 0 || ts.tv_nsec != 0;
 }
 
 bool shmimDelta::streamChanged( const streamState &stream ) const

@@ -44,6 +44,18 @@ class shmimDelta : public mx::app::application
     /// Runtime state for one monitored shmim.
     struct streamState
     {
+        /// One measured frame arrival.
+        struct frameSample
+        {
+            uint64_t m_cnt0{ 0 }; ///< Frame counter sampled after the semaphore wake.
+
+            timespec m_eventTime{}; ///< Frame timestamp used for delta calculation.
+
+            timespec m_arrivalTime{}; ///< Local timestamp recorded after the semaphore wake.
+
+            bool m_usedMetadataTime{ false }; ///< True when `m_eventTime` came from stream metadata.
+        };
+
         std::string m_name; ///< Name of the shmim to monitor.
 
         IMAGE m_imageStream{}; ///< Attached ImageStreamIO handle for this shmim.
@@ -62,7 +74,7 @@ class shmimDelta : public mx::app::application
 
         uint32_t m_depth{ 1 }; ///< Stream size along the third axis, or 1 when absent.
 
-        std::vector<timespec> m_arrivalTimes; ///< Local timestamps recorded after semaphore wakes.
+        std::vector<frameSample> m_samples; ///< Unique frame samples recorded after semaphore wakes.
 
         std::string m_errorMessage; ///< Error text recorded by the waiter thread on failure.
 
@@ -97,7 +109,7 @@ class shmimDelta : public mx::app::application
      * @{
      */
 
-    std::vector<double> m_deltaSeconds; ///< Paired semaphore-arrival deltas in seconds.
+    std::vector<double> m_deltaUsec; ///< Paired frame-arrival deltas in microseconds.
 
     ///@}
 
@@ -117,9 +129,9 @@ class shmimDelta : public mx::app::application
     /// Connect to both shmims, collect semaphore arrivals, and report delta statistics.
     int execute() override;
 
-    /// Convert a pair of timespec timestamps to elapsed seconds.
-    static double elapsedSeconds( const timespec &t0 /**< [in] starting timestamp. */,
-                                  const timespec &t1 /**< [in] ending timestamp. */ );
+    /// Convert a pair of timespec timestamps to elapsed microseconds.
+    static double elapsedUsec( const timespec &t0 /**< [in] starting timestamp. */,
+                               const timespec &t1 /**< [in] ending timestamp. */ );
 
     /// Calculate the arithmetic mean of a vector.
     static double mean( const std::vector<double> &values /**< [in] values to average. */ );
@@ -144,6 +156,12 @@ class shmimDelta : public mx::app::application
     /// Collect semaphore-arrival timestamps from both streams and report statistics.
     int measureDeltas();
 
+    /// Build delta samples by pairing matching frame counters.
+    size_t pairByCounter();
+
+    /// Build delta samples by pairing samples in arrival order.
+    size_t pairByOrder();
+
     /// Thread entry point for collecting arrival timestamps from one stream.
     static void waitThreadStart( shmimDelta  *app /**< [in] owning application instance. */,
                                  streamState *stream /**< [in,out] stream state to monitor. */ );
@@ -154,6 +172,15 @@ class shmimDelta : public mx::app::application
     /// Wait for one frame arrival and record its timestamp.
     int waitForFrame( streamState &stream /**< [in,out] stream state to monitor. */,
                       size_t       frameNumber /**< [in] one-based frame number used for error reporting. */ );
+
+    /// Record the latest frame metadata after a semaphore wake.
+    int recordLatestSample( streamState &stream /**< [in,out] stream state to sample. */ );
+
+    /// Get the latest frame counter and timestamp from a stream.
+    streamState::frameSample latestSample( const streamState &stream /**< [in] stream state to sample. */ ) const;
+
+    /// Check whether a timespec is non-zero.
+    static bool validTime( const timespec &ts /**< [in] timestamp to inspect. */ );
 
     /// Check whether a stream disappeared or was replaced after a wait error.
     bool streamChanged( const streamState &stream /**< [in] stream state to check. */ ) const;
