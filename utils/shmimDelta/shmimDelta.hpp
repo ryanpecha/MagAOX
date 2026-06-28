@@ -26,6 +26,8 @@
 /** \defgroup shmimDelta shmimDelta: measure semaphore-arrival deltas between two shmims
  * \brief Attaches to two shmims and reports the mean and rms delta between their semaphore arrivals.
  *
+ * <a href="../handbook/utils/shmimDelta.html">Utility Documentation</a>
+ *
  * \ingroup utils
  *
  */
