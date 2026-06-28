@@ -81,10 +81,19 @@ reference2_cnt0: 810421
 reference_delta_usec: 123.000
 delta_mean_usec: 123.456
 delta_rms_usec: 7.890
+stream1_delta_mean_usec: 999.998
+stream1_delta_rms_usec: 3.210
+stream2_delta_mean_usec: 999.999
+stream2_delta_rms_usec: 3.456
 ```
 
 The timing values are in microseconds.  `delta_rms_usec` is the rms scatter of
 the paired deltas about `delta_mean_usec`.
+
+The `stream1_delta_*` and `stream2_delta_*` fields are frame-to-frame timing
+statistics for each stream independently.  They are calculated from consecutive
+recorded samples in that stream, beginning with the synchronized reference
+sample.
 
 The `pairing` field should report `reference_cnt0`.  This means samples were
 paired by matching:

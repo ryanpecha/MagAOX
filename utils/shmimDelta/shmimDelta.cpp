@@ -396,6 +396,17 @@ int shmimDelta::measureDeltas()
     const double deltaMean = mean( m_deltaUsec );
     const double deltaRms  = rms( m_deltaUsec, deltaMean );
 
+    std::vector<double> stream1FrameDeltaUsec;
+    std::vector<double> stream2FrameDeltaUsec;
+
+    calculateFrameDeltas( m_stream1, stream1FrameDeltaUsec );
+    calculateFrameDeltas( m_stream2, stream2FrameDeltaUsec );
+
+    const double stream1DeltaMean = mean( stream1FrameDeltaUsec );
+    const double stream1DeltaRms  = rms( stream1FrameDeltaUsec, stream1DeltaMean );
+    const double stream2DeltaMean = mean( stream2FrameDeltaUsec );
+    const double stream2DeltaRms  = rms( stream2FrameDeltaUsec, stream2DeltaMean );
+
     std::cout << std::fixed << std::setprecision( 3 );
     std::cout << "timed_pairs: " << pairedFrames << "\n";
     std::cout << "pairing: reference_cnt0\n";
@@ -406,6 +417,10 @@ int shmimDelta::measureDeltas()
               << "\n";
     std::cout << "delta_mean_usec: " << deltaMean << "\n";
     std::cout << "delta_rms_usec: " << deltaRms << "\n";
+    std::cout << "stream1_delta_mean_usec: " << stream1DeltaMean << "\n";
+    std::cout << "stream1_delta_rms_usec: " << stream1DeltaRms << "\n";
+    std::cout << "stream2_delta_mean_usec: " << stream2DeltaMean << "\n";
+    std::cout << "stream2_delta_rms_usec: " << stream2DeltaRms << "\n";
 
     return 0;
 }
@@ -526,6 +541,25 @@ size_t shmimDelta::pairByReferenceCounter()
     }
 
     return m_deltaUsec.size();
+}
+
+size_t shmimDelta::calculateFrameDeltas( const streamState &stream, std::vector<double> &frameDeltas ) const
+{
+    frameDeltas.clear();
+
+    if( stream.m_samples.size() < 2 )
+    {
+        return 0;
+    }
+
+    frameDeltas.reserve( stream.m_samples.size() - 1 );
+
+    for( size_t n = 1; n < stream.m_samples.size(); ++n )
+    {
+        frameDeltas.push_back( elapsedUsec( stream.m_samples[n - 1].m_eventTime, stream.m_samples[n].m_eventTime ) );
+    }
+
+    return frameDeltas.size();
 }
 
 bool shmimDelta::counterAdvance( uint64_t                       &advance,

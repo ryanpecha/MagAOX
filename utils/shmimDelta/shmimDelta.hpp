@@ -168,6 +168,11 @@ class shmimDelta : public mx::app::application
     /// Build delta samples by pairing matching counter advances from the synchronized references.
     size_t pairByReferenceCounter();
 
+    /// Build frame-to-frame delta samples for one stream.
+    size_t calculateFrameDeltas( const streamState   &stream,     /**< [in] stream state to inspect. */
+                                 std::vector<double> &frameDeltas /**< [out] frame-to-frame deltas in microseconds. */
+    ) const;
+
     /// Calculate a sample's frame-counter advance from its synchronized reference.
     bool counterAdvance( uint64_t                       &advance,  /**< [out] frame-counter advance. */
                          const streamState::frameSample &sample,   /**< [in] sample to compare. */
