@@ -339,6 +339,11 @@ int shmimDelta::measureDeltas()
         return -1;
     }
 
+    if( synchronizeStreams() < 0 )
+    {
+        return -1;
+    }
+
     std::thread thread1;
     std::thread thread2;
 
@@ -379,19 +384,12 @@ int shmimDelta::measureDeltas()
         return -1;
     }
 
-    const char *pairingMethod = "cnt0";
-
-    size_t pairedFrames = pairByCounter();
-    if( pairedFrames < 2 )
-    {
-        pairedFrames  = pairByOrder();
-        pairingMethod = "order";
-        std::cerr << "No common cnt0 pairing found; paired samples by arrival order.\n";
-    }
+    const size_t pairedFrames = pairByReferenceCounter();
 
     if( pairedFrames < 2 )
     {
-        std::cerr << "Need at least 2 paired arrivals to calculate delta rms.\n";
+        std::cerr << "Need at least 2 paired arrivals with matching synchronized counter advances to calculate delta "
+                     "rms.\n";
         return -1;
     }
 
@@ -400,16 +398,93 @@ int shmimDelta::measureDeltas()
 
     std::cout << std::fixed << std::setprecision( 3 );
     std::cout << "timed_pairs: " << pairedFrames << "\n";
-    std::cout << "pairing: " << pairingMethod << "\n";
+    std::cout << "pairing: reference_cnt0\n";
+    std::cout << "reference1_cnt0: " << m_stream1.m_referenceSample.m_cnt0 << "\n";
+    std::cout << "reference2_cnt0: " << m_stream2.m_referenceSample.m_cnt0 << "\n";
+    std::cout << "reference_delta_usec: "
+              << elapsedUsec( m_stream1.m_referenceSample.m_eventTime, m_stream2.m_referenceSample.m_eventTime )
+              << "\n";
     std::cout << "delta_mean_usec: " << deltaMean << "\n";
     std::cout << "delta_rms_usec: " << deltaRms << "\n";
 
     return 0;
 }
 
-size_t shmimDelta::pairByCounter()
+int shmimDelta::synchronizeStreams()
+{
+    m_stream1.m_haveReference = false;
+    m_stream2.m_haveReference = false;
+
+    m_stream1.m_samples.clear();
+    m_stream2.m_samples.clear();
+
+    ImageStreamIO_semflush( &m_stream1.m_imageStream, m_stream1.m_semaphoreNumber );
+    ImageStreamIO_semflush( &m_stream2.m_imageStream, m_stream2.m_semaphoreNumber );
+
+    if( waitForFrame( m_stream1, 1 ) < 0 )
+    {
+        std::cerr << "Error synchronizing reference from " << m_stream1.m_name << ": " << m_stream1.m_errorMessage
+                  << "\n";
+        return -1;
+    }
+
+    if( m_stream1.m_samples.empty() )
+    {
+        std::cerr << "No reference frame recorded from " << m_stream1.m_name << ".\n";
+        return -1;
+    }
+
+    m_stream1.m_referenceSample = m_stream1.m_samples.back();
+    m_stream1.m_haveReference   = true;
+
+    size_t stream2Attempts = 0;
+
+    // Do not flush stream 2 here; a low-latency post after the stream-1 reference may already be queued.
+    while( !g_timeToDie )
+    {
+        ++stream2Attempts;
+
+        if( waitForFrame( m_stream2, stream2Attempts ) < 0 )
+        {
+            std::cerr << "Error synchronizing reference from " << m_stream2.m_name << ": " << m_stream2.m_errorMessage
+                      << "\n";
+            return -1;
+        }
+
+        if( m_stream2.m_samples.empty() )
+        {
+            continue;
+        }
+
+        const auto &candidate = m_stream2.m_samples.back();
+        if( timeAtOrAfter( candidate.m_eventTime, m_stream1.m_referenceSample.m_eventTime ) )
+        {
+            m_stream2.m_referenceSample = candidate;
+            m_stream2.m_haveReference   = true;
+            break;
+        }
+    }
+
+    if( !m_stream2.m_haveReference )
+    {
+        std::cerr << "No reference frame recorded from " << m_stream2.m_name << " after " << m_stream1.m_name << ".\n";
+        return -1;
+    }
+
+    m_stream2.m_samples.clear();
+    m_stream2.m_samples.push_back( m_stream2.m_referenceSample );
+
+    return 0;
+}
+
+size_t shmimDelta::pairByReferenceCounter()
 {
     m_deltaUsec.clear();
+
+    if( !m_stream1.m_haveReference || !m_stream2.m_haveReference )
+    {
+        return 0;
+    }
 
     size_t n1 = 0;
     size_t n2 = 0;
@@ -419,13 +494,28 @@ size_t shmimDelta::pairByCounter()
         const auto &sample1 = m_stream1.m_samples[n1];
         const auto &sample2 = m_stream2.m_samples[n2];
 
-        if( sample1.m_cnt0 == sample2.m_cnt0 )
+        uint64_t advance1 = 0;
+        uint64_t advance2 = 0;
+
+        if( !counterAdvance( advance1, sample1, m_stream1.m_referenceSample ) )
+        {
+            ++n1;
+            continue;
+        }
+
+        if( !counterAdvance( advance2, sample2, m_stream2.m_referenceSample ) )
+        {
+            ++n2;
+            continue;
+        }
+
+        if( advance1 == advance2 )
         {
             m_deltaUsec.push_back( elapsedUsec( sample1.m_eventTime, sample2.m_eventTime ) );
             ++n1;
             ++n2;
         }
-        else if( sample1.m_cnt0 < sample2.m_cnt0 )
+        else if( advance1 < advance2 )
         {
             ++n1;
         }
@@ -438,17 +528,18 @@ size_t shmimDelta::pairByCounter()
     return m_deltaUsec.size();
 }
 
-size_t shmimDelta::pairByOrder()
+bool shmimDelta::counterAdvance( uint64_t                       &advance,
+                                 const streamState::frameSample &sample,
+                                 const streamState::frameSample &reference ) const
 {
-    const size_t pairedFrames = std::min( m_stream1.m_samples.size(), m_stream2.m_samples.size() );
-
-    m_deltaUsec.resize( pairedFrames );
-    for( size_t n = 0; n < pairedFrames; ++n )
+    if( sample.m_cnt0 < reference.m_cnt0 )
     {
-        m_deltaUsec[n] = elapsedUsec( m_stream1.m_samples[n].m_eventTime, m_stream2.m_samples[n].m_eventTime );
+        return false;
     }
 
-    return m_deltaUsec.size();
+    advance = sample.m_cnt0 - reference.m_cnt0;
+
+    return true;
 }
 
 void shmimDelta::waitThreadStart( shmimDelta *app, streamState *stream )
@@ -458,7 +549,6 @@ void shmimDelta::waitThreadStart( shmimDelta *app, streamState *stream )
 
 int shmimDelta::waitFrames( streamState &stream )
 {
-    stream.m_samples.clear();
     stream.m_samples.reserve( m_nFrames );
     stream.m_errorMessage.clear();
 
@@ -588,6 +678,16 @@ shmimDelta::streamState::frameSample shmimDelta::latestSample( const streamState
 bool shmimDelta::validTime( const timespec &ts )
 {
     return ts.tv_sec != 0 || ts.tv_nsec != 0;
+}
+
+bool shmimDelta::timeAtOrAfter( const timespec &ts, const timespec &reference )
+{
+    if( ts.tv_sec != reference.tv_sec )
+    {
+        return ts.tv_sec > reference.tv_sec;
+    }
+
+    return ts.tv_nsec >= reference.tv_nsec;
 }
 
 bool shmimDelta::streamChanged( const streamState &stream ) const

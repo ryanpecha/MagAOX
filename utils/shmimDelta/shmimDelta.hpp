@@ -78,6 +78,10 @@ class shmimDelta : public mx::app::application
 
         std::vector<frameSample> m_samples; ///< Unique frame samples recorded after semaphore wakes.
 
+        frameSample m_referenceSample; ///< Synchronized frame sample used as the counter reference.
+
+        bool m_haveReference{ false }; ///< True once `m_referenceSample` is valid.
+
         std::string m_errorMessage; ///< Error text recorded by the waiter thread on failure.
 
         int m_status{ 0 }; ///< Waiter-thread completion status, 0 on success and -1 on error.
@@ -158,11 +162,17 @@ class shmimDelta : public mx::app::application
     /// Collect semaphore-arrival timestamps from both streams and report statistics.
     int measureDeltas();
 
-    /// Build delta samples by pairing matching frame counters.
-    size_t pairByCounter();
+    /// Synchronize the stream counter references before collecting the full measurement.
+    int synchronizeStreams();
 
-    /// Build delta samples by pairing samples in arrival order.
-    size_t pairByOrder();
+    /// Build delta samples by pairing matching counter advances from the synchronized references.
+    size_t pairByReferenceCounter();
+
+    /// Calculate a sample's frame-counter advance from its synchronized reference.
+    bool counterAdvance( uint64_t                       &advance,  /**< [out] frame-counter advance. */
+                         const streamState::frameSample &sample,   /**< [in] sample to compare. */
+                         const streamState::frameSample &reference /**< [in] synchronized reference sample. */
+    ) const;
 
     /// Thread entry point for collecting arrival timestamps from one stream.
     static void waitThreadStart( shmimDelta  *app /**< [in] owning application instance. */,
@@ -183,6 +193,10 @@ class shmimDelta : public mx::app::application
 
     /// Check whether a timespec is non-zero.
     static bool validTime( const timespec &ts /**< [in] timestamp to inspect. */ );
+
+    /// Check whether one timestamp is at or after another timestamp.
+    static bool timeAtOrAfter( const timespec &ts, /**< [in] timestamp to inspect. */
+                               const timespec &reference /**< [in] reference timestamp. */ );
 
     /// Check whether a stream disappeared or was replaced after a wait error.
     bool streamChanged( const streamState &stream /**< [in] stream state to check. */ ) const;

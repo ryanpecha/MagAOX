@@ -29,19 +29,27 @@ The reported delta is:
 shmimName2 time - shmimName1 time
 ```
 
-At startup, `shmimDelta` opens both streams, selects a wait semaphore for each
-stream, and flushes both semaphores before collecting samples.  During
-collection, each stream is watched by its own waiter thread so that waiting on
-one stream does not serialize waiting on the other.
+At startup, `shmimDelta` opens both streams and selects a wait semaphore for
+each stream.  It then performs a synchronization pass:
+
+1. flush both semaphores;
+2. wait for a frame from `shmimName1`;
+3. inspect `shmimName2` semaphore arrivals until it records the first
+   `shmimName2` frame whose sampled time is at or after the stream-1 reference.
+
+Those two frames establish the reference `cnt0` values for the measurement.
+During collection, each stream is watched by its own waiter thread so that
+waiting on one stream does not serialize waiting on the other.
 
 After each semaphore wake, `shmimDelta` drains any queued semaphore posts and
 records only the latest observed frame.  This avoids slowly accumulating stale
 semaphore posts when the reader falls behind.  Duplicate frame counters are
 ignored.
 
-When possible, samples are paired by matching ImageStreamIO frame counter
-(`cnt0`).  If no usable common `cnt0` values are found, samples are paired by
-arrival order and the output reports `pairing: order`.
+Samples are paired by matching counter advance from the synchronized references,
+not by requiring equal raw ImageStreamIO frame counter (`cnt0`) values.  This is
+important for derived streams whose counters are offset or independently
+initialized.
 
 # OPTIONS
 
@@ -67,7 +75,10 @@ It then prints the timing statistics:
 
 ```
 timed_pairs: 1000
-pairing: cnt0
+pairing: reference_cnt0
+reference1_cnt0: 215037
+reference2_cnt0: 810421
+reference_delta_usec: 123.000
 delta_mean_usec: 123.456
 delta_rms_usec: 7.890
 ```
@@ -75,11 +86,12 @@ delta_rms_usec: 7.890
 The timing values are in microseconds.  `delta_rms_usec` is the rms scatter of
 the paired deltas about `delta_mean_usec`.
 
-The `pairing` field reports how frames were paired:
+The `pairing` field should report `reference_cnt0`.  This means samples were
+paired by matching:
 
-- `cnt0`: samples were paired by matching ImageStreamIO frame counter values;
-- `order`: no usable common counters were found, so samples were paired by
-  collection order.
+```
+sample1.cnt0 - reference1_cnt0 == sample2.cnt0 - reference2_cnt0
+```
 
 # TIMING SOURCE
 
@@ -139,19 +151,27 @@ because the launcher process may not yet be allowed to run on the cpuset CPU.
 ## Negative Deltas
 
 A negative delta means the sampled time for `shmimName2` was earlier than the
-sampled time for `shmimName1`.  This can be real if the selected streams do not
-represent a causal source-to-output relationship, or if they are paired by
-arrival order and the physical delay crosses a frame boundary.
+sampled time for the paired `shmimName1` frame.  Since `shmimDelta` synchronizes
+on the first stream-2 frame after a stream-1 frame and then pairs by relative
+counter advance, persistent negative values usually indicate that the stream
+metadata timestamps are not measuring the event you intend, or that the selected
+streams are not in the expected causal order.
 
-Prefer runs with:
+Check the reference line first:
 
 ```
-pairing: cnt0
+reference_delta_usec: ...
 ```
 
-If the output reports `pairing: order`, the two streams did not expose matching
-frame counters during the run.  In that case, long runs are more sensitive to
-frame drops, startup phase, and scheduler effects.
+If the reference delta is already negative, inspect the stream metadata
+timestamps and the stream ordering.  If the run exits with:
+
+```
+Need at least 2 paired arrivals with matching synchronized counter advances
+```
+
+then one stream did not provide enough frames whose `cnt0` advanced by the same
+amount from the synchronized references.
 
 ## Timeouts
 
