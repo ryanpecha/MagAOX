@@ -318,7 +318,9 @@ mx::error_t stdFileName<verboseT>::fullName( const std::string &fn )
     {
         mx_error_check( parseFilePath( m_appName, YYYY, MM, DD, hh, mm, ss, nn, m_baseName ) );
     }
-    catch( const xwcException &e ) // a bad_alloc
+    // parseFilePath throws mx::exception<verboseT> (a bad_alloc wrapped by fileTimes.hpp), not
+    // xwcException. This previously caught the wrong type and so never triggered.
+    catch( const mx::exception<verboseT> &e ) // a bad_alloc
     {
         std::throw_with_nested( xwcException( "parsing filename" ) );
     }

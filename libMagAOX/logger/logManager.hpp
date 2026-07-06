@@ -35,6 +35,11 @@ namespace MagAOX
 namespace logger
 {
 
+#ifdef XWCTEST_NAMESPACE
+namespace XWCTEST_NAMESPACE
+{
+#endif
+
 /// The standard MagAOX log manager, used for both process logs and telemetry streams.
 /** Manages the formatting and queueing of the log entries.
   *
@@ -425,7 +430,19 @@ int logManager<parentT, logFileT>::logThreadStart()
 {
    try
    {
-      m_logThread = std::thread( _logThreadStart, this);
+      // clang-format off
+      #ifdef XWCTEST_LOGMANAGER_LOGTHREADSTART_STD_EXCEPTION
+          throw std::runtime_error( "XWCTEST" ); // LCOV_EXCL_LINE
+      #endif
+
+      #ifdef XWCTEST_LOGMANAGER_LOGTHREADSTART_UNKNOWN_EXCEPTION
+          throw 42; // LCOV_EXCL_LINE
+      #endif
+
+      #ifndef XWCTEST_LOGMANAGER_LOGTHREADSTART_NOT_JOINABLE
+          m_logThread = std::thread( _logThreadStart, this);
+      #endif
+      // clang-format on
    }
    catch( const std::exception & e )
    {
@@ -613,6 +630,10 @@ void logManager<parentT, logFileT>::log( timespecX & ts,
 //class logFileRaw;
 
 //extern template struct logManager<logFileRaw>;
+
+#ifdef XWCTEST_NAMESPACE
+} // namespace XWCTEST_NAMESPACE
+#endif
 
 } //namespace logger
 } //namespace MagAOX

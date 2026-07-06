@@ -7,6 +7,90 @@
 
 #include "../logFileRaw.hpp"
 
+#undef logger_logFileRaw_hpp
+#define XWCTEST_NAMESPACE XWCTEST_LOGFILERAW_LOGPATH_BAD_ALLOC_ns
+#define XWCTEST_LOGFILERAW_LOGPATH_BAD_ALLOC
+#include "../logFileRaw.hpp"
+#undef XWCTEST_NAMESPACE
+#undef XWCTEST_LOGFILERAW_LOGPATH_BAD_ALLOC
+
+#undef logger_logFileRaw_hpp
+#define XWCTEST_NAMESPACE XWCTEST_LOGFILERAW_LOGPATH_EXCEPTION_ns
+#define XWCTEST_LOGFILERAW_LOGPATH_EXCEPTION
+#include "../logFileRaw.hpp"
+#undef XWCTEST_NAMESPACE
+#undef XWCTEST_LOGFILERAW_LOGPATH_EXCEPTION
+
+#undef logger_logFileRaw_hpp
+#define XWCTEST_NAMESPACE XWCTEST_LOGFILERAW_LOGNAME_BAD_ALLOC_ns
+#define XWCTEST_LOGFILERAW_LOGNAME_BAD_ALLOC
+#include "../logFileRaw.hpp"
+#undef XWCTEST_NAMESPACE
+#undef XWCTEST_LOGFILERAW_LOGNAME_BAD_ALLOC
+
+#undef logger_logFileRaw_hpp
+#define XWCTEST_NAMESPACE XWCTEST_LOGFILERAW_LOGNAME_EXCEPTION_ns
+#define XWCTEST_LOGFILERAW_LOGNAME_EXCEPTION
+#include "../logFileRaw.hpp"
+#undef XWCTEST_NAMESPACE
+#undef XWCTEST_LOGFILERAW_LOGNAME_EXCEPTION
+
+#undef logger_logFileRaw_hpp
+#define XWCTEST_NAMESPACE XWCTEST_LOGFILERAW_LOGEXT_BAD_ALLOC_ns
+#define XWCTEST_LOGFILERAW_LOGEXT_BAD_ALLOC
+#include "../logFileRaw.hpp"
+#undef XWCTEST_NAMESPACE
+#undef XWCTEST_LOGFILERAW_LOGEXT_BAD_ALLOC
+
+#undef logger_logFileRaw_hpp
+#define XWCTEST_NAMESPACE XWCTEST_LOGFILERAW_LOGEXT_EXCEPTION_ns
+#define XWCTEST_LOGFILERAW_LOGEXT_EXCEPTION
+#include "../logFileRaw.hpp"
+#undef XWCTEST_NAMESPACE
+#undef XWCTEST_LOGFILERAW_LOGEXT_EXCEPTION
+
+#undef logger_logFileRaw_hpp
+#define XWCTEST_NAMESPACE XWCTEST_LOGFILERAW_WRITELOG_FWRITE_FAIL_ns
+#define XWCTEST_LOGFILERAW_WRITELOG_FWRITE_FAIL
+#include "../logFileRaw.hpp"
+#undef XWCTEST_NAMESPACE
+#undef XWCTEST_LOGFILERAW_WRITELOG_FWRITE_FAIL
+
+#undef logger_logFileRaw_hpp
+#define XWCTEST_NAMESPACE XWCTEST_LOGFILERAW_FLUSH_FFLUSH_FAIL_ns
+#define XWCTEST_LOGFILERAW_FLUSH_FFLUSH_FAIL
+#include "../logFileRaw.hpp"
+#undef XWCTEST_NAMESPACE
+#undef XWCTEST_LOGFILERAW_FLUSH_FFLUSH_FAIL
+
+#undef logger_logFileRaw_hpp
+#define XWCTEST_NAMESPACE XWCTEST_LOGFILERAW_CLOSE_FCLOSE_FAIL_ns
+#define XWCTEST_LOGFILERAW_CLOSE_FCLOSE_FAIL
+#include "../logFileRaw.hpp"
+#undef XWCTEST_NAMESPACE
+#undef XWCTEST_LOGFILERAW_CLOSE_FCLOSE_FAIL
+
+#undef logger_logFileRaw_hpp
+#define XWCTEST_NAMESPACE XWCTEST_LOGFILERAW_CREATEFILE_EXCEPTION_ns
+#define XWCTEST_LOGFILERAW_CREATEFILE_EXCEPTION
+#include "../logFileRaw.hpp"
+#undef XWCTEST_NAMESPACE
+#undef XWCTEST_LOGFILERAW_CREATEFILE_EXCEPTION
+
+#undef logger_logFileRaw_hpp
+#define XWCTEST_NAMESPACE XWCTEST_LOGFILERAW_CREATEFILE_EXISTS_ERRC_ns
+#define XWCTEST_LOGFILERAW_CREATEFILE_EXISTS_ERRC
+#include "../logFileRaw.hpp"
+#undef XWCTEST_NAMESPACE
+#undef XWCTEST_LOGFILERAW_CREATEFILE_EXISTS_ERRC
+
+#undef logger_logFileRaw_hpp
+#define XWCTEST_NAMESPACE XWCTEST_LOGFILERAW_CREATEFILE_FOPEN_FAIL_ns
+#define XWCTEST_LOGFILERAW_CREATEFILE_FOPEN_FAIL
+#include "../logFileRaw.hpp"
+#undef XWCTEST_NAMESPACE
+#undef XWCTEST_LOGFILERAW_CREATEFILE_FOPEN_FAIL
+
 namespace libXWCTest
 {
 
@@ -157,7 +241,6 @@ TEST_CASE( "Creating a log file", "[libMagAOX::logger::logFileRaw]" )
         flatlogs::timespecX ts1( 1732170780, 1 );
 
         mx::error_t errc = lfr.test_createFile( ts1 );
-
 
         REQUIRE( errc != mx::error_t::noerror );
     }
@@ -440,6 +523,298 @@ TEST_CASE( "Writing to a log file", "[libMagAOX::logger::logFileRaw]" )
         fsz = std::filesystem::file_size( fullPath2 );
 
         REQUIRE( fsz == 1 * ( 256 + 14 ) );
+    }
+}
+
+/// Exception paths in the string-valued setters
+/**
+ * \ingroup logFileRaw_unit_test
+ */
+TEST_CASE( "logFileRaw setter exception paths", "[libMagAOX::logger::logFileRaw]" )
+{
+    SECTION( "logPath nests a bad_alloc in an xwcException" )
+    {
+        MagAOX::logger::XWCTEST_LOGFILERAW_LOGPATH_BAD_ALLOC_ns::logFileRaw<XWC_DEFAULT_VERBOSITY> lfr;
+
+        bool caught = false;
+
+        try
+        {
+            lfr.logPath( "/tmp" );
+        }
+        catch( const MagAOX::xwcException &e )
+        {
+            caught = true;
+        }
+
+        REQUIRE( caught == true );
+    }
+
+    SECTION( "logPath reports a std::exception as an error" )
+    {
+        MagAOX::logger::XWCTEST_LOGFILERAW_LOGPATH_EXCEPTION_ns::logFileRaw<XWC_DEFAULT_VERBOSITY> lfr;
+
+        mx::error_t rv = lfr.logPath( "/tmp" );
+
+        REQUIRE( rv == mx::error_t::std_exception );
+    }
+
+    SECTION( "logName nests a bad_alloc in an xwcException" )
+    {
+        MagAOX::logger::XWCTEST_LOGFILERAW_LOGNAME_BAD_ALLOC_ns::logFileRaw<XWC_DEFAULT_VERBOSITY> lfr;
+
+        bool caught = false;
+
+        try
+        {
+            lfr.logName( "newdev" );
+        }
+        catch( const MagAOX::xwcException &e )
+        {
+            caught = true;
+        }
+
+        REQUIRE( caught == true );
+    }
+
+    SECTION( "logName reports a std::exception as an error" )
+    {
+        MagAOX::logger::XWCTEST_LOGFILERAW_LOGNAME_EXCEPTION_ns::logFileRaw<XWC_DEFAULT_VERBOSITY> lfr;
+
+        mx::error_t rv = lfr.logName( "newdev" );
+
+        REQUIRE( rv == mx::error_t::std_exception );
+    }
+
+    SECTION( "logExt nests a bad_alloc in an xwcException" )
+    {
+        MagAOX::logger::XWCTEST_LOGFILERAW_LOGEXT_BAD_ALLOC_ns::logFileRaw<XWC_DEFAULT_VERBOSITY> lfr;
+
+        bool caught = false;
+
+        try
+        {
+            lfr.logExt( "bintel" );
+        }
+        catch( const MagAOX::xwcException &e )
+        {
+            caught = true;
+        }
+
+        REQUIRE( caught == true );
+    }
+
+    SECTION( "logExt reports a std::exception as an error" )
+    {
+        MagAOX::logger::XWCTEST_LOGFILERAW_LOGEXT_EXCEPTION_ns::logFileRaw<XWC_DEFAULT_VERBOSITY> lfr;
+
+        mx::error_t rv = lfr.logExt( "bintel" );
+
+        REQUIRE( rv == mx::error_t::std_exception );
+    }
+}
+
+/// I/O error paths in writeLog, flush, close, and createFile
+/**
+ * \ingroup logFileRaw_unit_test
+ */
+TEST_CASE( "logFileRaw internal I/O error paths", "[libMagAOX::logger::logFileRaw]" )
+{
+    SECTION( "writeLog reports an fwrite error" )
+    {
+        MagAOX::logger::XWCTEST_LOGFILERAW_WRITELOG_FWRITE_FAIL_ns::logFileRaw<XWC_DEFAULT_VERBOSITY> lfr;
+        lfr.logPath( "/tmp" );
+
+        std::string testPath = lfr.logPath() + '/' + lfr.logName();
+        std::filesystem::remove_all( testPath );
+
+        flatlogs::bufferPtrT logbuff;
+        flatlogs::timespecX  ts( 1732170780, 1 );
+        std::string          msg( 256, 't' );
+
+        flatlogs::logHeader::createLog<dummyLog>( logbuff, ts, msg, flatlogs::logPrio::LOG_NOTICE );
+
+        mx::error_t rv = lfr.writeLog( logbuff );
+
+        REQUIRE( rv != mx::error_t::noerror );
+    }
+
+    SECTION( "flush reports an fflush error" )
+    {
+        MagAOX::logger::XWCTEST_LOGFILERAW_FLUSH_FFLUSH_FAIL_ns::logFileRaw<XWC_DEFAULT_VERBOSITY> lfr;
+        lfr.logPath( "/tmp" );
+
+        std::string testPath = lfr.logPath() + '/' + lfr.logName();
+        std::filesystem::remove_all( testPath );
+
+        flatlogs::bufferPtrT logbuff;
+        flatlogs::timespecX  ts( 1732170780, 1 );
+        std::string          msg( 256, 't' );
+
+        flatlogs::logHeader::createLog<dummyLog>( logbuff, ts, msg, flatlogs::logPrio::LOG_NOTICE );
+
+        REQUIRE( lfr.writeLog( logbuff ) == mx::error_t::noerror );
+
+        mx::error_t rv = lfr.flush();
+
+        REQUIRE( rv != mx::error_t::noerror );
+    }
+
+    SECTION( "close reports an fclose error" )
+    {
+        MagAOX::logger::XWCTEST_LOGFILERAW_CLOSE_FCLOSE_FAIL_ns::logFileRaw<XWC_DEFAULT_VERBOSITY> lfr;
+        lfr.logPath( "/tmp" );
+
+        std::string testPath = lfr.logPath() + '/' + lfr.logName();
+        std::filesystem::remove_all( testPath );
+
+        flatlogs::bufferPtrT logbuff;
+        flatlogs::timespecX  ts( 1732170780, 1 );
+        std::string          msg( 256, 't' );
+
+        flatlogs::logHeader::createLog<dummyLog>( logbuff, ts, msg, flatlogs::logPrio::LOG_NOTICE );
+
+        REQUIRE( lfr.writeLog( logbuff ) == mx::error_t::noerror );
+
+        mx::error_t rv = lfr.close();
+
+        REQUIRE( rv != mx::error_t::noerror );
+    }
+
+    SECTION( "createFile rethrows an unexpected exception from fileTimeRelPath" )
+    {
+        MagAOX::logger::XWCTEST_LOGFILERAW_CREATEFILE_EXCEPTION_ns::logFileRaw<XWC_DEFAULT_VERBOSITY> lfr;
+        lfr.logPath( "/tmp" );
+
+        std::string testPath = lfr.logPath() + '/' + lfr.logName();
+        std::filesystem::remove_all( testPath );
+
+        flatlogs::bufferPtrT logbuff;
+        flatlogs::timespecX  ts( 1732170780, 1 );
+        std::string          msg( 256, 't' );
+
+        flatlogs::logHeader::createLog<dummyLog>( logbuff, ts, msg, flatlogs::logPrio::LOG_NOTICE );
+
+        bool caught = false;
+
+        try
+        {
+            lfr.writeLog( logbuff );
+        }
+        catch( const mx::exception<XWC_DEFAULT_VERBOSITY> &e )
+        {
+            caught = true;
+        }
+
+        REQUIRE( caught == true );
+    }
+
+    SECTION( "createFile reports an error from checking existence" )
+    {
+        MagAOX::logger::XWCTEST_LOGFILERAW_CREATEFILE_EXISTS_ERRC_ns::logFileRaw<XWC_DEFAULT_VERBOSITY> lfr;
+        lfr.logPath( "/tmp" );
+
+        std::string testPath = lfr.logPath() + '/' + lfr.logName();
+        std::filesystem::remove_all( testPath );
+
+        flatlogs::bufferPtrT logbuff;
+        flatlogs::timespecX  ts( 1732170780, 1 );
+        std::string          msg( 256, 't' );
+
+        flatlogs::logHeader::createLog<dummyLog>( logbuff, ts, msg, flatlogs::logPrio::LOG_NOTICE );
+
+        mx::error_t rv = lfr.writeLog( logbuff );
+
+        REQUIRE( rv == mx::error_t::eacces );
+    }
+
+    SECTION( "createFile reports an fopen error" )
+    {
+        MagAOX::logger::XWCTEST_LOGFILERAW_CREATEFILE_FOPEN_FAIL_ns::logFileRaw<XWC_DEFAULT_VERBOSITY> lfr;
+        lfr.logPath( "/tmp" );
+
+        std::string testPath = lfr.logPath() + '/' + lfr.logName();
+        std::filesystem::remove_all( testPath );
+
+        flatlogs::bufferPtrT logbuff;
+        flatlogs::timespecX  ts( 1732170780, 1 );
+        std::string          msg( 256, 't' );
+
+        flatlogs::logHeader::createLog<dummyLog>( logbuff, ts, msg, flatlogs::logPrio::LOG_NOTICE );
+
+        mx::error_t rv = lfr.writeLog( logbuff );
+
+        REQUIRE( rv == mx::error_t::eacces );
+    }
+
+    SECTION( "flush succeeds on an open file" )
+    {
+        MagAOX::logger::logFileRaw<XWC_DEFAULT_VERBOSITY> lfr;
+        lfr.logPath( "/tmp" );
+
+        std::string testPath = lfr.logPath() + '/' + lfr.logName();
+        std::filesystem::remove_all( testPath );
+
+        flatlogs::bufferPtrT logbuff;
+        flatlogs::timespecX  ts( 1732170780, 1 );
+        std::string          msg( 256, 't' );
+
+        flatlogs::logHeader::createLog<dummyLog>( logbuff, ts, msg, flatlogs::logPrio::LOG_NOTICE );
+
+        REQUIRE( lfr.writeLog( logbuff ) == mx::error_t::noerror );
+
+        REQUIRE( lfr.flush() == mx::error_t::noerror );
+
+        lfr.close();
+    }
+
+    SECTION( "writeLog reports an invalid all-zero timestamp from createFile" )
+    {
+        MagAOX::logger::logFileRaw<XWC_DEFAULT_VERBOSITY> lfr;
+        lfr.logPath( "/tmp" );
+
+        std::string testPath = lfr.logPath() + '/' + lfr.logName();
+        std::filesystem::remove_all( testPath );
+
+        flatlogs::bufferPtrT logbuff;
+        flatlogs::timespecX  ts( 0, 0 );
+        std::string          msg( 256, 't' );
+
+        flatlogs::logHeader::createLog<dummyLog>( logbuff, ts, msg, flatlogs::logPrio::LOG_NOTICE );
+
+        mx::error_t rv = lfr.writeLog( logbuff );
+
+        REQUIRE( rv == mx::error_t::invalidarg );
+    }
+
+    SECTION( "createFile continues after a close error while switching files" )
+    {
+        MagAOX::logger::XWCTEST_LOGFILERAW_CLOSE_FCLOSE_FAIL_ns::logFileRaw<XWC_DEFAULT_VERBOSITY> lfr;
+        lfr.logPath( "/tmp" );
+        lfr.maxLogSize( 256 );
+
+        std::string testPath = lfr.logPath() + '/' + lfr.logName();
+        std::filesystem::remove_all( testPath );
+
+        flatlogs::bufferPtrT logbuff;
+        flatlogs::timespecX  ts1( 1732170780, 2 );
+        std::string          msg( 256, 't' );
+
+        flatlogs::logHeader::createLog<dummyLog>( logbuff, ts1, msg, flatlogs::logPrio::LOG_NOTICE );
+
+        // Opens the first file. m_fout starts null, so the internal close() call is a no-op.
+        REQUIRE( lfr.writeLog( logbuff ) == mx::error_t::noerror );
+
+        flatlogs::timespecX  ts2( 1732170780, 50 );
+        flatlogs::bufferPtrT logbuff2;
+        flatlogs::logHeader::createLog<dummyLog>( logbuff2, ts2, msg, flatlogs::logPrio::LOG_NOTICE );
+
+        // Exceeds maxLogSize, so createFile() runs again. This time m_fout is open, so its internal
+        // close() call actually fires -- and fails, since we're in the FCLOSE_FAIL namespace. createFile()
+        // should report that and continue on to open the new file rather than aborting.
+        mx::error_t rv = lfr.writeLog( logbuff2 );
+
+        REQUIRE( rv == mx::error_t::noerror );
     }
 }
 

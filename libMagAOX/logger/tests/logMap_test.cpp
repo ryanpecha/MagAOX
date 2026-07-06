@@ -10,8 +10,93 @@
 
 #include "../../file/fileTimes.hpp"
 
+#include "../logFileRaw.hpp"
 #include "../logMap.hpp"
 #include "../logMap.cpp"
+
+#undef logger_logMap_hpp
+#define XWCTEST_NAMESPACE XWCTEST_LOGMAP_AFLTFM_XWCE_ns
+#define XWCTEST_LOGMAP_AFLTFM_XWCE
+#include "../logMap.hpp"
+#undef XWCTEST_NAMESPACE
+#undef XWCTEST_LOGMAP_AFLTFM_XWCE
+
+#undef logger_logMap_hpp
+#define XWCTEST_NAMESPACE XWCTEST_LOGMAP_AFLTFM_BADALL_ns
+#define XWCTEST_LOGMAP_AFLTFM_BADALL
+#include "../logMap.hpp"
+#undef XWCTEST_NAMESPACE
+#undef XWCTEST_LOGMAP_AFLTFM_BADALL
+
+#undef logger_logMap_hpp
+#define XWCTEST_NAMESPACE XWCTEST_LOGMAP_AFLTFM_EXCEPTION_ns
+#define XWCTEST_LOGMAP_AFLTFM_EXCEPTION
+#include "../logMap.hpp"
+#undef XWCTEST_NAMESPACE
+#undef XWCTEST_LOGMAP_AFLTFM_EXCEPTION
+
+#undef logger_logMap_hpp
+#define XWCTEST_NAMESPACE XWCTEST_LOGMAP_LATFM_BADALL1_ns
+#define XWCTEST_LOGMAP_LATFM_BADALL1
+#include "../logMap.hpp"
+#undef XWCTEST_NAMESPACE
+#undef XWCTEST_LOGMAP_LATFM_BADALL1
+
+#undef logger_logMap_hpp
+#define XWCTEST_NAMESPACE XWCTEST_LOGMAP_LATFM_BADALL2_ns
+#define XWCTEST_LOGMAP_LATFM_BADALL2
+#include "../logMap.hpp"
+#undef XWCTEST_NAMESPACE
+#undef XWCTEST_LOGMAP_LATFM_BADALL2
+
+#undef logger_logMap_hpp
+#define XWCTEST_NAMESPACE XWCTEST_LOGMAP_LATFM_BADALL3_ns
+#define XWCTEST_LOGMAP_LATFM_BADALL3
+#include "../logMap.hpp"
+#undef XWCTEST_NAMESPACE
+#undef XWCTEST_LOGMAP_LATFM_BADALL3
+
+#undef logger_logMap_hpp
+#define XWCTEST_NAMESPACE XWCTEST_LOGMAP_LATFM_XWCE4_ns
+#define XWCTEST_LOGMAP_LATFM_XWCE4
+#include "../logMap.hpp"
+#undef XWCTEST_NAMESPACE
+#undef XWCTEST_LOGMAP_LATFM_XWCE4
+
+#undef logger_logMap_hpp
+#define XWCTEST_NAMESPACE XWCTEST_LOGMAP_LATFM_XWCE5_ns
+#define XWCTEST_LOGMAP_LATFM_XWCE5
+#include "../logMap.hpp"
+#undef XWCTEST_NAMESPACE
+#undef XWCTEST_LOGMAP_LATFM_XWCE5
+
+#undef logger_logMap_hpp
+#define XWCTEST_NAMESPACE XWCTEST_LOGMAP_LATFM_XWCE6_ns
+#define XWCTEST_LOGMAP_LATFM_XWCE6
+#include "../logMap.hpp"
+#undef XWCTEST_NAMESPACE
+#undef XWCTEST_LOGMAP_LATFM_XWCE6
+
+#undef logger_logMap_hpp
+#define XWCTEST_NAMESPACE XWCTEST_LOGMAP_LATFM_DIREXISTS_ERRC_ns
+#define XWCTEST_LOGMAP_LATFM_DIREXISTS_ERRC
+#include "../logMap.hpp"
+#undef XWCTEST_NAMESPACE
+#undef XWCTEST_LOGMAP_LATFM_DIREXISTS_ERRC
+
+#undef logger_logMap_hpp
+#define XWCTEST_NAMESPACE XWCTEST_LOGMAP_LATFM_SIZEERR1_ns
+#define XWCTEST_LOGMAP_LATFM_SIZEERR1
+#include "../logMap.hpp"
+#undef XWCTEST_NAMESPACE
+#undef XWCTEST_LOGMAP_LATFM_SIZEERR1
+
+#undef logger_logMap_hpp
+#define XWCTEST_NAMESPACE XWCTEST_LOGMAP_LATFM_SIZEERR2_ns
+#define XWCTEST_LOGMAP_LATFM_SIZEERR2
+#include "../logMap.hpp"
+#undef XWCTEST_NAMESPACE
+#undef XWCTEST_LOGMAP_LATFM_SIZEERR2
 
 namespace libXWCTest
 {
@@ -102,6 +187,61 @@ void createTestPaths( const std::string &basedir )
         }
     }
 }
+
+// Two simple log types with distinct event codes, used to build real on-disk log files
+// (via logFileRaw) for testing getPriorLog/getNextLog/loadFiles, which need genuine
+// flatlog-formatted binary content to scan.
+struct dummyLogA
+{
+    static const flatlogs::eventCodeT eventCode   = 1;
+    static const flatlogs::logPrioT   defaultLevel = flatlogs::logPrio::LOG_NOTICE;
+
+    typedef std::string messageT;
+
+    static const char *msg()
+    {
+        return "A";
+    }
+
+    static flatlogs::msgLenT length( const messageT &msg )
+    {
+        return msg.size();
+    }
+
+    static int format( void *msgBuffer, const messageT &msg )
+    {
+        memcpy( msgBuffer, msg.data(), msg.size() );
+        return 0;
+    }
+};
+
+struct dummyLogB
+{
+    static const flatlogs::eventCodeT eventCode   = 2;
+    static const flatlogs::logPrioT   defaultLevel = flatlogs::logPrio::LOG_NOTICE;
+
+    typedef std::string messageT;
+
+    static const char *msg()
+    {
+        return "B";
+    }
+
+    static flatlogs::msgLenT length( const messageT &msg )
+    {
+        return msg.size();
+    }
+
+    static int format( void *msgBuffer, const messageT &msg )
+    {
+        memcpy( msgBuffer, msg.data(), msg.size() );
+        return 0;
+    }
+};
+
+// Out-of-line definitions, needed because getPriorLog takes eventCode by const reference.
+const flatlogs::eventCodeT dummyLogA::eventCode;
+const flatlogs::eventCodeT dummyLogB::eventCode;
 
 /// Building the app-to-file map
 /**
@@ -329,6 +469,616 @@ TEST_CASE( "Building the app-to-file map with errors", "[libMagAOX::logger::logM
         lm.loadAppToFileMap( "/tmp/logMap_test", "dev1", ".xlog", firstFile, lastFile );
 
         REQUIRE( lm.m_appToFileMap.size() == 0 );
+    }
+}
+
+/// addFileListToFileMap's own exception handling
+/**
+ * \ingroup logMap_unit_test
+ */
+TEST_CASE( "addFileListToFileMap nests or reports exceptions", "[libMagAOX::logger::logMap]" )
+{
+    std::vector<std::string> flist{ "/tmp/logMap_test/dev1/2024_11_19/dev1_20241119000000000000000.xlog" };
+
+    SECTION( "nests an xwcException" )
+    {
+        MagAOX::logger::XWCTEST_LOGMAP_AFLTFM_XWCE_ns::logMap<XWC_DEFAULT_VERBOSITY> lm;
+
+        bool caught = false;
+        try
+        {
+            lm.addFileListToFileMap( "dev1", flist, 0, flist.size() );
+        }
+        catch( const MagAOX::xwcException &e )
+        {
+            caught = true;
+        }
+        REQUIRE( caught == true );
+    }
+
+    SECTION( "nests a std::bad_alloc" )
+    {
+        MagAOX::logger::XWCTEST_LOGMAP_AFLTFM_BADALL_ns::logMap<XWC_DEFAULT_VERBOSITY> lm;
+
+        bool caught = false;
+        try
+        {
+            lm.addFileListToFileMap( "dev1", flist, 0, flist.size() );
+        }
+        catch( const MagAOX::xwcException &e )
+        {
+            caught = true;
+        }
+        REQUIRE( caught == true );
+    }
+
+    SECTION( "reports a std::exception as an error" )
+    {
+        MagAOX::logger::XWCTEST_LOGMAP_AFLTFM_EXCEPTION_ns::logMap<XWC_DEFAULT_VERBOSITY> lm;
+
+        mx::error_t rv = lm.addFileListToFileMap( "dev1", flist, 0, flist.size() );
+
+        REQUIRE( rv == mx::error_t::std_exception );
+    }
+
+    SECTION( "skips a valid filename belonging to a different app" )
+    {
+        // "dev10" is a valid stdFileName with a different appName() than "dev1", so it
+        // should be skipped rather than added to dev1's file map.
+        std::vector<std::string> otherAppFlist{ "/tmp/logMap_test/dev1/2024_11_19/dev10_20241119000000000000000.xlog" };
+
+        MagAOX::logger::logMap lm;
+
+        mx::error_t rv = lm.addFileListToFileMap( "dev1", otherAppFlist, 0, otherAppFlist.size() );
+
+        REQUIRE( rv == mx::error_t::noerror );
+        REQUIRE( lm.m_appToFileMap["dev1"].size() == 0 );
+    }
+}
+
+/// loadAppToFileMap re-throwing exceptions raised while parsing filenames or building file lists
+/**
+ * \ingroup logMap_unit_test
+ */
+TEST_CASE( "loadAppToFileMap nests exceptions raised while searching for files", "[libMagAOX::logger::logMap]" )
+{
+    createTestPaths( "/tmp/logMap_test" );
+
+    SECTION( "an exception while parsing filenames during the backward search" )
+    {
+        MagAOX::logger::XWCTEST_LOGMAP_LATFM_BADALL1_ns::logMap<XWC_DEFAULT_VERBOSITY> lm;
+
+        MagAOX::file::stdFileName firstFile( "cam1/2024_11_19/cam1_20241119030000000000000.xrif" );
+        MagAOX::file::stdFileName lastFile( "cam1/2024_11_19/cam1_20241119040000000000000.xrif" );
+
+        bool caught = false;
+        try
+        {
+            lm.loadAppToFileMap( "/tmp/logMap_test", "dev1", ".xlog", firstFile, lastFile );
+        }
+        catch( const MagAOX::xwcException &e )
+        {
+            caught = true;
+        }
+        REQUIRE( caught == true );
+    }
+
+    SECTION( "an exception while parsing filenames during the forward search" )
+    {
+        MagAOX::logger::XWCTEST_LOGMAP_LATFM_BADALL2_ns::logMap<XWC_DEFAULT_VERBOSITY> lm;
+
+        MagAOX::file::stdFileName firstFile( "cam1/2024_11_19/cam1_20241119030000000000000.xrif" );
+        MagAOX::file::stdFileName lastFile( "cam1/2024_11_19/cam1_20241119040000000000000.xrif" );
+
+        bool caught = false;
+        try
+        {
+            lm.loadAppToFileMap( "/tmp/logMap_test", "dev1", ".xlog", firstFile, lastFile );
+        }
+        catch( const MagAOX::xwcException &e )
+        {
+            caught = true;
+        }
+        REQUIRE( caught == true );
+    }
+
+    SECTION( "an exception building the file list when prev and following logs are on the same day" )
+    {
+        MagAOX::logger::XWCTEST_LOGMAP_LATFM_BADALL3_ns::logMap<XWC_DEFAULT_VERBOSITY> lm;
+
+        MagAOX::file::stdFileName firstFile( "cam1/2024_11_19/cam1_20241119030000000000000.xrif" );
+        MagAOX::file::stdFileName lastFile( "cam1/2024_11_19/cam1_20241119040000000000000.xrif" );
+
+        bool caught = false;
+        try
+        {
+            lm.loadAppToFileMap( "/tmp/logMap_test", "dev1", ".xlog", firstFile, lastFile );
+        }
+        catch( const MagAOX::xwcException &e )
+        {
+            caught = true;
+        }
+        REQUIRE( caught == true );
+    }
+
+    SECTION( "an exception building the file list when prev and following logs are on different days" )
+    {
+        MagAOX::logger::XWCTEST_LOGMAP_LATFM_XWCE4_ns::logMap<XWC_DEFAULT_VERBOSITY> lm;
+
+        // This spans 2024_11_19 (prev) to 2024_11_21 (following) -- see "File matches first
+        // file by delta-t and first file on next day" above for the non-throwing version.
+        MagAOX::file::stdFileName firstFile( "cam1/2024_11_19/cam1_20241119000061000000000.xrif" );
+        MagAOX::file::stdFileName lastFile( "cam1/2024_11_19/cam1_20241119052200000000000.xrif" );
+
+        bool caught = false;
+        try
+        {
+            lm.loadAppToFileMap( "/tmp/logMap_test", "dev1", ".xlog", firstFile, lastFile );
+        }
+        catch( const MagAOX::xwcException &e )
+        {
+            caught = true;
+        }
+        REQUIRE( caught == true );
+    }
+
+    SECTION( "an exception building the file list for an intervening day" )
+    {
+        MagAOX::logger::XWCTEST_LOGMAP_LATFM_XWCE5_ns::logMap<XWC_DEFAULT_VERBOSITY> lm;
+
+        // This spans 2024_11_19 (prev) to 2024_11_23 (following), so the intervening-day
+        // loop runs for 2024_11_20, 2024_11_21, and 2024_11_22 -- see "Matches first and
+        // last overall files" above for the non-throwing version.
+        MagAOX::file::stdFileName firstFile( "cam1/2024_11_19/cam1_20241119000120000000000.xrif" );
+        MagAOX::file::stdFileName lastFile( "cam1/2024_11_23/cam1_20241123044500000000000.xrif" );
+
+        bool caught = false;
+        try
+        {
+            lm.loadAppToFileMap( "/tmp/logMap_test", "dev1", ".xlog", firstFile, lastFile );
+        }
+        catch( const MagAOX::xwcException &e )
+        {
+            caught = true;
+        }
+        REQUIRE( caught == true );
+    }
+
+    SECTION( "an exception building the file list for the following log's own day" )
+    {
+        MagAOX::logger::XWCTEST_LOGMAP_LATFM_XWCE6_ns::logMap<XWC_DEFAULT_VERBOSITY> lm;
+
+        MagAOX::file::stdFileName firstFile( "cam1/2024_11_19/cam1_20241119000120000000000.xrif" );
+        MagAOX::file::stdFileName lastFile( "cam1/2024_11_23/cam1_20241123044500000000000.xrif" );
+
+        bool caught = false;
+        try
+        {
+            lm.loadAppToFileMap( "/tmp/logMap_test", "dev1", ".xlog", firstFile, lastFile );
+        }
+        catch( const MagAOX::xwcException &e )
+        {
+            caught = true;
+        }
+        REQUIRE( caught == true );
+    }
+}
+
+/// loadAppToFileMap's defensive filesystem-error and file-count sanity checks
+/**
+ * \ingroup logMap_unit_test
+ */
+TEST_CASE( "loadAppToFileMap reports filesystem and file-count errors", "[libMagAOX::logger::logMap]" )
+{
+    createTestPaths( "/tmp/logMap_test" );
+
+    SECTION( "a filesystem error while checking a day during the forward search" )
+    {
+        MagAOX::logger::XWCTEST_LOGMAP_LATFM_DIREXISTS_ERRC_ns::logMap<XWC_DEFAULT_VERBOSITY> lm;
+
+        MagAOX::file::stdFileName firstFile( "cam1/2024_11_19/cam1_20241119030000000000000.xrif" );
+        MagAOX::file::stdFileName lastFile( "cam1/2024_11_19/cam1_20241119040000000000000.xrif" );
+
+        mx::error_t rv = lm.loadAppToFileMap( "/tmp/logMap_test", "dev1", ".xlog", firstFile, lastFile );
+
+        REQUIRE( rv == mx::error_t::eacces );
+    }
+
+    SECTION( "a miscounted file list when prev and following logs are on the same day" )
+    {
+        MagAOX::logger::XWCTEST_LOGMAP_LATFM_SIZEERR1_ns::logMap<XWC_DEFAULT_VERBOSITY> lm;
+
+        MagAOX::file::stdFileName firstFile( "cam1/2024_11_19/cam1_20241119030000000000000.xrif" );
+        MagAOX::file::stdFileName lastFile( "cam1/2024_11_19/cam1_20241119040000000000000.xrif" );
+
+        mx::error_t rv = lm.loadAppToFileMap( "/tmp/logMap_test", "dev1", ".xlog", firstFile, lastFile );
+
+        REQUIRE( rv == mx::error_t::sizeerr );
+    }
+
+    SECTION( "a miscounted file list for the following log's own day" )
+    {
+        MagAOX::logger::XWCTEST_LOGMAP_LATFM_SIZEERR2_ns::logMap<XWC_DEFAULT_VERBOSITY> lm;
+
+        // Unlike the "different days" cases above, this pair finds the following log
+        // normally (forward search lands on 2024_11_21), rather than via the "not found"
+        // fallback -- that's required to reach the branch this macro targets.
+        MagAOX::file::stdFileName firstFile( "cam1/2024_11_19/cam1_20241119000061000000000.xrif" );
+        MagAOX::file::stdFileName lastFile( "cam1/2024_11_19/cam1_20241119052200000000000.xrif" );
+
+        mx::error_t rv = lm.loadAppToFileMap( "/tmp/logMap_test", "dev1", ".xlog", firstFile, lastFile );
+
+        REQUIRE( rv == mx::error_t::sizeerr );
+    }
+}
+
+/// loadAppToFileMap skipping files and subdirectories that don't contribute to the map
+/**
+ * \ingroup logMap_unit_test
+ */
+TEST_CASE( "loadAppToFileMap skips non-standard filenames and empty subdirectories", "[libMagAOX::logger::logMap]" )
+{
+    createTestPaths( "/tmp/logMap_test" );
+
+    SECTION( "a non-standard filename in the search directory is ignored" )
+    {
+        // Both match the getFileNames() prefix/extension filter (start with "dev1", end
+        // with ".xlog") but are not valid stdFileNames, so they must be skipped rather than
+        // corrupting the file count. "dev1_0000.xlog" sorts before all the real timestamped
+        // files, so the forward search (low to high index) hits it first; "dev1_zzzz.xlog"
+        // sorts after all of them, so the backward search (high to low index) hits it first.
+        std::ofstream junkLow( "/tmp/logMap_test/dev1/2024_11_19/dev1_0000.xlog" );
+        junkLow.close();
+        std::ofstream junkHigh( "/tmp/logMap_test/dev1/2024_11_19/dev1_zzzz.xlog" );
+        junkHigh.close();
+
+        MagAOX::file::stdFileName firstFile( "cam1/2024_11_19/cam1_20241119030000000000000.xrif" );
+        MagAOX::file::stdFileName lastFile( "cam1/2024_11_19/cam1_20241119040000000000000.xrif" );
+
+        MagAOX::logger::logMap lm;
+
+        mx::error_t rv = lm.loadAppToFileMap( "/tmp/logMap_test", "dev1", ".xlog", firstFile, lastFile );
+
+        REQUIRE( rv == mx::error_t::noerror );
+        REQUIRE( lm.m_appToFileMap["dev1"].size() == 2 );
+    }
+
+    SECTION( "an existing but empty intervening subdirectory is skipped" )
+    {
+        // 2024_11_20 has no dev1 files, so both the backward search (from 2024_11_21) and
+        // the forward search (from 2024_11_19) must step over it.
+        std::filesystem::create_directories( "/tmp/logMap_test/dev1/2024_11_20" );
+
+        MagAOX::file::stdFileName firstFile( "cam1/2024_11_21/cam1_20241121210000000000000.xrif" );
+        MagAOX::file::stdFileName lastFile( "cam1/2024_11_19/cam1_20241119052200000000000.xrif" );
+
+        MagAOX::logger::logMap lm;
+
+        mx::error_t rv = lm.loadAppToFileMap( "/tmp/logMap_test", "dev1", ".xlog", firstFile, lastFile );
+
+        REQUIRE( rv == mx::error_t::noerror );
+
+        // firstFile (21:00 on 11_21) is well after the last 11_19 file, so the backward
+        // search finds only the last 11_19 file (05:23:00, prevLogFile_n=3, so only that one
+        // index gets included from that day). lastFile (05:22 on 11_19) means follts lands
+        // after all of 11_19's files, so the forward search finds only the first 11_21 file
+        // (22:00:00, follLogFile_n=0, so only that one index gets included from that day).
+        REQUIRE( lm.m_appToFileMap["dev1"].size() == 2 );
+        auto it = lm.m_appToFileMap["dev1"].begin();
+        REQUIRE( it->fullName() == "/tmp/logMap_test/dev1/2024_11_19/dev1_20241119052300000000000.xlog" );
+        ++it;
+        REQUIRE( it->fullName() == "/tmp/logMap_test/dev1/2024_11_21/dev1_20241121220000000000000.xlog" );
+    }
+}
+
+/// loadAppToFileMap's fallback when no following log is found within the search span
+/**
+ * \ingroup logMap_unit_test
+ */
+TEST_CASE( "loadAppToFileMap falls back to the last available day when no following log is found",
+           "[libMagAOX::logger::logMap]" )
+{
+    createTestPaths( "/tmp/logMap_test" );
+
+    // firstFile is 61 seconds after the last 2024_11_23 entry (04:45:10), so the backward
+    // search finds it immediately and prevLogSubDir is 2024_11_23.
+    MagAOX::file::stdFileName firstFile( "cam1/2024_11_23/cam1_20241123044611000000000.xrif" );
+
+    // lastFile is about 3 weeks after the last real data, so the forward search exhausts
+    // its span without finding anything, and the fallback search steps backward from
+    // 2024_12_15 until it finds an existing directory -- which is 2024_11_23, the same day
+    // as prevLogSubDir.
+    MagAOX::file::stdFileName lastFile( "cam1/2024_12_15/cam1_20241215000000000000000.xrif" );
+
+    MagAOX::logger::logMap lm;
+
+    mx::error_t rv = lm.loadAppToFileMap( "/tmp/logMap_test", "dev1", ".xlog", firstFile, lastFile );
+
+    REQUIRE( rv == mx::error_t::noerror );
+
+    // Only the last 2024_11_23 file should be included: prevLogFile_n is its own index, and
+    // with no following log found, follLogFile_n falls back to tmp_flist.size() (one past
+    // the last file in that day's directory).
+    REQUIRE( lm.m_appToFileMap["dev1"].size() == 1 );
+    auto it = lm.m_appToFileMap["dev1"].begin();
+    REQUIRE( it->fullName() == "/tmp/logMap_test/dev1/2024_11_23/dev1_20241123044510000000012.xlog" );
+}
+
+/// getPriorLog scanning a loaded in-memory buffer
+/**
+ * \ingroup logMap_unit_test
+ */
+TEST_CASE( "getPriorLog scans a loaded buffer for the last log at or before a timestamp",
+           "[libMagAOX::logger::logMap]" )
+{
+    std::filesystem::remove_all( "/tmp/logMap_test3" );
+
+    MagAOX::logger::logFileRaw<XWC_DEFAULT_VERBOSITY> writer;
+    writer.logPath( "/tmp/logMap_test3" );
+    writer.logName( "dev1" );
+    writer.logExt( "xlog" );
+    writer.maxLogSize( 1000000 ); // large enough that all 5 entries land in one file
+
+    // Five entries, ten seconds apart, alternating event codes A/B/A/A/B.
+    const time_t         base = 1732170780;
+    flatlogs::bufferPtrT buf;
+    flatlogs::logHeader::createLog<dummyLogA>(
+        buf, flatlogs::timespecX( base, 0 ), "A", flatlogs::logPrio::LOG_NOTICE );
+    writer.writeLog( buf );
+    flatlogs::logHeader::createLog<dummyLogB>(
+        buf, flatlogs::timespecX( base + 10, 0 ), "B", flatlogs::logPrio::LOG_NOTICE );
+    writer.writeLog( buf );
+    flatlogs::logHeader::createLog<dummyLogA>(
+        buf, flatlogs::timespecX( base + 20, 0 ), "A", flatlogs::logPrio::LOG_NOTICE );
+    writer.writeLog( buf );
+    flatlogs::logHeader::createLog<dummyLogA>(
+        buf, flatlogs::timespecX( base + 30, 0 ), "A", flatlogs::logPrio::LOG_NOTICE );
+    writer.writeLog( buf );
+    flatlogs::logHeader::createLog<dummyLogB>(
+        buf, flatlogs::timespecX( base + 40, 0 ), "B", flatlogs::logPrio::LOG_NOTICE );
+    writer.writeLog( buf );
+    writer.close();
+
+    std::string fileName, relPath;
+    MagAOX::file::fileTimeRelPath( fileName, relPath, "dev1", "xlog", base, 0 );
+
+    MagAOX::logger::logMap<XWC_DEFAULT_VERBOSITY> lm;
+
+    MagAOX::file::stdFileName<XWC_DEFAULT_VERBOSITY> sfn( "/tmp/logMap_test3/" + relPath + '/' + fileName );
+    REQUIRE( sfn.valid() );
+    lm.m_appToFileMap["dev1"].insert( sfn );
+
+    SECTION( "no entry at all for the app returns an error" )
+    {
+        char *logBefore = nullptr; // unused output on error, but needs an lvalue
+
+        int rv = lm.getPriorLog( logBefore, "dev2", dummyLogA::eventCode, flatlogs::timespecX( base + 25, 0 ) );
+
+        REQUIRE( rv == -1 );
+    }
+
+    SECTION( "finds the last log at or before the timestamp, with no hint" )
+    {
+        char *logBefore = nullptr;
+
+        int rv = lm.getPriorLog(
+            logBefore, "dev1", dummyLogA::eventCode, flatlogs::timespecX( base + 25, 0 ) );
+
+        REQUIRE( rv == 0 );
+        REQUIRE( flatlogs::logHeader::eventCode( logBefore ) == dummyLogA::eventCode );
+        REQUIRE( flatlogs::logHeader::timespec( logBefore ).time_s == base + 20 );
+    }
+
+    SECTION( "a hint at or before the timestamp is used directly" )
+    {
+        // First, load the buffer and get real pointers into it by walking from the start --
+        // this is exactly what getPriorLog/getNextLog do internally.
+        char *logBefore = nullptr;
+        REQUIRE( lm.getPriorLog( logBefore, "dev1", dummyLogA::eventCode, flatlogs::timespecX( base, 0 ) ) == 0 );
+
+        char *p0 = lm.m_appToBufferMap["dev1"].m_memory.data(); // entry 0: A, base+0
+        char *p1 = p0 + flatlogs::logHeader::totalSize( p0 );   // entry 1: B, base+10
+
+        char *logBefore2 = nullptr;
+        int   rv = lm.getPriorLog( logBefore2, "dev1", dummyLogA::eventCode, flatlogs::timespecX( base + 25, 0 ), p1 );
+
+        REQUIRE( rv == 0 );
+        REQUIRE( flatlogs::logHeader::timespec( logBefore2 ).time_s == base + 20 );
+    }
+
+    SECTION( "a hint after the timestamp falls back to the start of the buffer" )
+    {
+        char *logBefore = nullptr;
+        REQUIRE( lm.getPriorLog( logBefore, "dev1", dummyLogA::eventCode, flatlogs::timespecX( base, 0 ) ) == 0 );
+
+        char *p0 = lm.m_appToBufferMap["dev1"].m_memory.data(); // entry 0: A, base+0
+        char *p1 = p0 + flatlogs::logHeader::totalSize( p0 );   // entry 1: B, base+10
+        char *p2 = p1 + flatlogs::logHeader::totalSize( p1 );   // entry 2: A, base+20
+        char *p3 = p2 + flatlogs::logHeader::totalSize( p2 );   // entry 3: A, base+30
+
+        char *logBefore2 = nullptr;
+        int   rv = lm.getPriorLog( logBefore2, "dev1", dummyLogA::eventCode, flatlogs::timespecX( base + 25, 0 ), p3 );
+
+        REQUIRE( rv == 0 );
+        REQUIRE( flatlogs::logHeader::timespec( logBefore2 ).time_s == base + 20 );
+    }
+
+    SECTION( "an event code that never appears is reported as not found" )
+    {
+        char *logBefore = nullptr;
+
+        int rv = lm.getPriorLog( logBefore, "dev1", 99, flatlogs::timespecX( base + 25, 0 ) );
+
+        REQUIRE( rv == -1 );
+    }
+}
+
+/// getNextLog stepping forward to the next log with a matching event code
+/**
+ * \ingroup logMap_unit_test
+ */
+TEST_CASE( "getNextLog steps forward to the next log with the same event code", "[libMagAOX::logger::logMap]" )
+{
+    std::filesystem::remove_all( "/tmp/logMap_test4" );
+
+    MagAOX::logger::logFileRaw<XWC_DEFAULT_VERBOSITY> writer;
+    writer.logPath( "/tmp/logMap_test4" );
+    writer.logName( "dev1" );
+    writer.logExt( "xlog" );
+    writer.maxLogSize( 1000000 );
+
+    const time_t         base = 1732170780;
+    flatlogs::bufferPtrT buf;
+    flatlogs::logHeader::createLog<dummyLogA>(
+        buf, flatlogs::timespecX( base, 0 ), "A", flatlogs::logPrio::LOG_NOTICE );
+    writer.writeLog( buf );
+    flatlogs::logHeader::createLog<dummyLogB>(
+        buf, flatlogs::timespecX( base + 10, 0 ), "B", flatlogs::logPrio::LOG_NOTICE );
+    writer.writeLog( buf );
+    flatlogs::logHeader::createLog<dummyLogA>(
+        buf, flatlogs::timespecX( base + 20, 0 ), "A", flatlogs::logPrio::LOG_NOTICE );
+    writer.writeLog( buf );
+    flatlogs::logHeader::createLog<dummyLogA>(
+        buf, flatlogs::timespecX( base + 30, 0 ), "A", flatlogs::logPrio::LOG_NOTICE );
+    writer.writeLog( buf );
+    flatlogs::logHeader::createLog<dummyLogB>(
+        buf, flatlogs::timespecX( base + 40, 0 ), "B", flatlogs::logPrio::LOG_NOTICE );
+    writer.writeLog( buf );
+    writer.close();
+
+    std::string fileName, relPath;
+    MagAOX::file::fileTimeRelPath( fileName, relPath, "dev1", "xlog", base, 0 );
+
+    MagAOX::logger::logMap<XWC_DEFAULT_VERBOSITY> lm;
+
+    MagAOX::file::stdFileName<XWC_DEFAULT_VERBOSITY> sfn( "/tmp/logMap_test4/" + relPath + '/' + fileName );
+    lm.m_appToFileMap["dev1"].insert( sfn );
+
+    // Load the buffer (via getPriorLog, as above), then walk to real pointers for each entry.
+    char *logBefore = nullptr;
+    REQUIRE( lm.getPriorLog( logBefore, "dev1", dummyLogA::eventCode, flatlogs::timespecX( base, 0 ) ) == 0 );
+
+    char *p0 = lm.m_appToBufferMap["dev1"].m_memory.data(); // entry 0: A, base+0
+    char *p1 = p0 + flatlogs::logHeader::totalSize( p0 );   // entry 1: B, base+10
+    char *p2 = p1 + flatlogs::logHeader::totalSize( p1 );   // entry 2: A, base+20
+    char *p3 = p2 + flatlogs::logHeader::totalSize( p2 );   // entry 3: A, base+30
+    char *p4 = p3 + flatlogs::logHeader::totalSize( p3 );   // entry 4: B, base+40
+
+    SECTION( "finds the very next entry when it already matches" )
+    {
+        char *logAfter = nullptr;
+        int   rv       = lm.getNextLog( logAfter, p2, "dev1" ); // p2 is A, p3 (next) is also A
+
+        REQUIRE( rv == 0 );
+        REQUIRE( logAfter == p3 );
+    }
+
+    SECTION( "skips entries with a different event code to find the next match" )
+    {
+        char *logAfter = nullptr;
+        int   rv       = lm.getNextLog( logAfter, p1, "dev1" ); // p1 is B; next B is p4, skipping p2 (A) and p3 (A)
+
+        REQUIRE( rv == 0 );
+        REQUIRE( logAfter == p4 );
+    }
+
+    SECTION( "reaches the end of the buffer immediately after the last entry" )
+    {
+        char *logAfter = nullptr;
+        int   rv       = lm.getNextLog( logAfter, p4, "dev1" ); // p4 is the last entry
+
+        REQUIRE( rv == 1 );
+    }
+
+    SECTION( "reaches the end of the buffer while skipping mismatched entries" )
+    {
+        char *logAfter = nullptr;
+        int   rv       = lm.getNextLog( logAfter, p3, "dev1" ); // p3 is A; only B (p4) follows, then the buffer ends
+
+        REQUIRE( rv == 1 );
+    }
+}
+
+/// loadFiles selecting which on-disk files to bring into memory
+/**
+ * \ingroup logMap_unit_test
+ */
+TEST_CASE( "loadFiles selects on-disk files to bring into memory", "[libMagAOX::logger::logMap]" )
+{
+    std::filesystem::remove_all( "/tmp/logMap_test5" );
+
+    MagAOX::logger::logFileRaw<XWC_DEFAULT_VERBOSITY> writer;
+    writer.logPath( "/tmp/logMap_test5" );
+    writer.logName( "dev1" );
+    writer.logExt( "xlog" );
+    writer.maxLogSize( 1 ); // force every entry into its own file
+
+    const time_t base = 1732170780; // 2024_11_21 06:33:00
+    const time_t times[4]{ base, base + 7200, base + 14400, base + 21600 };
+
+    for( auto t : times )
+    {
+        flatlogs::bufferPtrT buf;
+        flatlogs::logHeader::createLog<dummyLogA>( buf, flatlogs::timespecX( t, 0 ), "A", flatlogs::logPrio::LOG_NOTICE );
+        writer.writeLog( buf );
+    }
+    writer.close();
+
+    MagAOX::logger::logMap<XWC_DEFAULT_VERBOSITY> lm;
+
+    for( auto t : times )
+    {
+        std::string fileName, relPath;
+        MagAOX::file::fileTimeRelPath( fileName, relPath, "dev1", "xlog", t, 0 );
+
+        MagAOX::file::stdFileName<XWC_DEFAULT_VERBOSITY> sfn( "/tmp/logMap_test5/" + relPath + '/' + fileName );
+        REQUIRE( sfn.valid() );
+        lm.m_appToFileMap["dev1"].insert( sfn );
+    }
+
+    SECTION( "no files for the app is an error" )
+    {
+        MagAOX::logger::logMap<XWC_DEFAULT_VERBOSITY> emptyLm;
+
+        int rv = emptyLm.loadFiles( "dev1", flatlogs::timespecX( base, 0 ) );
+
+        REQUIRE( rv == -1 );
+    }
+
+    SECTION( "the first load picks the file before the target time and the one after it" )
+    {
+        int rv = lm.loadFiles( "dev1", flatlogs::timespecX( times[1] + 1800, 0 ) );
+
+        REQUIRE( rv == 0 );
+        REQUIRE( lm.m_appToBufferMap["dev1"].m_memory.size() > 0 );
+        REQUIRE( lm.m_appToBufferMap["dev1"].m_startTime.time_s == times[1] );
+    }
+
+    SECTION( "a second call within the already-loaded range returns immediately" )
+    {
+        REQUIRE( lm.loadFiles( "dev1", flatlogs::timespecX( times[1] + 1800, 0 ) ) == 0 );
+
+        int rv = lm.loadFiles( "dev1", flatlogs::timespecX( times[1] + 1800, 0 ) );
+
+        REQUIRE( rv == 0 );
+    }
+
+    SECTION( "loading an earlier time extends the buffer backward" )
+    {
+        REQUIRE( lm.loadFiles( "dev1", flatlogs::timespecX( times[2] + 1800, 0 ) ) == 0 );
+
+        int rv = lm.loadFiles( "dev1", flatlogs::timespecX( times[0], 0 ) );
+
+        REQUIRE( rv == 0 );
+    }
+
+    SECTION( "loading a later time extends the buffer forward" )
+    {
+        REQUIRE( lm.loadFiles( "dev1", flatlogs::timespecX( times[0] + 1800, 0 ) ) == 0 );
+
+        int rv = lm.loadFiles( "dev1", flatlogs::timespecX( times[3], 0 ) );
+
+        REQUIRE( rv == 0 );
     }
 }
 

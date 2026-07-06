@@ -134,11 +134,11 @@ mx::error_t logMap<verboseT>::addFileListToFileMap( const std::string           
         #endif
 
         #ifdef XWCTEST_LOGMAP_AFLTFM_BADALL
-            throw std::bad_alloc; // LCOV_EXCL_LINE
+            throw std::bad_alloc(); // LCOV_EXCL_LINE
         #endif
 
         #ifdef XWCTEST_LOGMAP_AFLTFM_EXCEPTION
-            throw std::exception; // LCOV_EXCL_LINE
+            throw std::exception(); // LCOV_EXCL_LINE
         #endif
         // clang-format on
 
@@ -313,6 +313,12 @@ mx::error_t logMap<verboseT>::loadAppToFileMap( const std::string               
 
             isdir = mx::ioutils::dir_exists_is( basedir + subdir.path(), errc );
 
+            // clang-format off
+            #ifdef XWCTEST_LOGMAP_LATFM_DIREXISTS_ERRC
+                errc = mx::error_t::eacces; // LCOV_EXCL_LINE
+            #endif
+            // clang-format on
+
             if( errc != mx::error_t::noerror )
             {
                 return mx::error_report<verboseT>( errc, "error from std::filesystem" );
@@ -413,6 +419,13 @@ mx::error_t logMap<verboseT>::loadAppToFileMap( const std::string               
             else
             {
                 ++follLogFile_n;
+
+                // clang-format off
+                #ifdef XWCTEST_LOGMAP_LATFM_SIZEERR1
+                    follLogFile_n = tmp_flist.size() + 1; // LCOV_EXCL_LINE
+                #endif
+                // clang-format on
+
                 if( follLogFile_n > tmp_flist.size() )
                 {
                     return mx::error_report<verboseT>( mx::error_t::sizeerr,
@@ -524,6 +537,13 @@ mx::error_t logMap<verboseT>::loadAppToFileMap( const std::string               
                 else
                 {
                     ++follLogFile_n;
+
+                    // clang-format off
+                    #ifdef XWCTEST_LOGMAP_LATFM_SIZEERR2
+                        follLogFile_n = tmp_flist.size() + 1; // LCOV_EXCL_LINE
+                    #endif
+                    // clang-format on
+
                     if( follLogFile_n > tmp_flist.size() )
                     {
                         return mx::error_report<verboseT>( mx::error_t::sizeerr,

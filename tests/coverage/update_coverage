@@ -78,7 +78,7 @@ genhtml coverage_filtered.info --output-directory coverage_report \
                                --hierarchical \
                                --merge-aliases \
                                --suppress-aliases \
-                               --filter function \
+                               --filter function,brace,blank \
                                --prefix "$repo_root" \
                                --demangle-cpp \
                                --css-file tests/coverage/gcov.css

@@ -15,6 +15,7 @@
 
 ../libMagAOX/logger/tests/logFileRaw_test
 ../libMagAOX/logger/tests/logFileRaw_fileTime_error_test
+../libMagAOX/logger/tests/logManager_test
 ../libMagAOX/logger/tests/logMap_test
 ../libMagAOX/logger/tests/logTypes_Accessor_test
 
@@ -108,6 +109,8 @@
 
 
 ../libMagAOX/common/tests/common_test
+../libMagAOX/common/tests/common_exceptions_test
+../libMagAOX/ImageStreamIO/tests/pixaccess_test
 ../libMagAOX/ImageStreamIO/tests/ImageStreamIO_test
 ../libMagAOX/modbus/tests/modbus_test
 ../libMagAOX/sys/tests/runCommand_test

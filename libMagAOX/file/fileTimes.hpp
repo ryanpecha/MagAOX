@@ -68,8 +68,8 @@ mx::error_t timestamp( std::string &tstamp, /**< [out] the timestamp string*/
         // clang-format on
 
         tstamp = std::format( "{:04}{:02}{:02}{:02}{:02}{:02}{:09}",
-                              uttime.tm_year + 1900,
-                              uttime.tm_mon + 1,
+                              uttime.tm_year + 1900, // LCOV_EXCL_LINE
+                              uttime.tm_mon + 1, // LCOV_EXCL_LINE
                               uttime.tm_mday,
                               uttime.tm_hour,
                               uttime.tm_min,
