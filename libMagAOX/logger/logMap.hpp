@@ -592,8 +592,13 @@ int logMap<verboseT>::getPriorLog( char                      *&logBefore,
 
         if( loadFiles( appName, ts ) < 0 )
         {
+            // loadFiles() only fails via its own leading size()==0 check, which the check at
+            // the top of this function has already ruled out for this appName -- unreachable
+            // given getPriorLog()'s own precondition.
+            // LCOV_EXCL_START
             std::cerr << __FILE__ << " " << __LINE__ << " error returned from loadfiles\n";
             return -1;
+            // LCOV_EXCL_STOP
         }
     }
 
@@ -637,6 +642,12 @@ int logMap<verboseT>::getPriorLog( char                      *&logBefore,
     {
         while( flatlogs::logHeader::timespec( buffer ) < ts ) // Loop until buffer is after the timestamp we want
         {
+            // Reachable only if buffer already ran off the end on the prior iteration's
+            // unchecked advance+eventCode() read (below, and the mirrored inner-loop read) --
+            // i.e. only via a garbage read past the end of m_memory coincidentally matching
+            // ev. Not deterministically reachable through the public API; the inner-loop copy
+            // of these same checks (just below) is what actually catches real corruption.
+            // LCOV_EXCL_START
             if( buffer > lim.m_memory.data() + lim.m_memory.size() )
             {
                 std::cerr << __FILE__ << " " << __LINE__
@@ -651,6 +662,7 @@ int logMap<verboseT>::getPriorLog( char                      *&logBefore,
                 // Proper action here is to load the next file if possible...
                 return 1;
             }
+            // LCOV_EXCL_STOP
 
             priorBuffer = buffer;
 
@@ -723,11 +735,15 @@ int logMap<verboseT>::getNextLog( char *&logAfter, char *logCurrent, const std::
         evL = flatlogs::logHeader::eventCode( buffer );
     }
 
+    // Unreachable: the loop above only exits when evL==ev (its own condition) or via an
+    // early return, so evL!=ev can never be true here.
+    // LCOV_EXCL_START
     if( evL != ev )
     {
         std::cerr << "Event code not found.\n";
         return -1;
     }
+    // LCOV_EXCL_STOP
 
     logAfter = buffer;
 

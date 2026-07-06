@@ -9,6 +9,11 @@
 #include <cerrno>
 #include <cstring>
 
+#ifdef XWCTEST_NAMESPACE
+namespace XWCTEST_NAMESPACE
+{
+#endif
+
 namespace
 {
 
@@ -118,7 +123,15 @@ bool modbus::modbus_set_timeouts( int seconds, int microseconds )
         return false;
     }
 
-    if( setsockopt( _socket, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof( timeout ) ) != 0 )
+    int sndRv = setsockopt( _socket, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof( timeout ) );
+
+    // clang-format off
+    #ifdef XWCTEST_MODBUS_SET_TIMEOUTS_SNDTIMEO_FAIL
+        sndRv = -1; // LCOV_EXCL_LINE
+    #endif
+    // clang-format on
+
+    if( sndRv != 0 )
     {
         return false;
     }
@@ -434,6 +447,12 @@ ssize_t modbus::modbus_send( uint8_t *to_send, int length )
         modbusConnectionError( *this, "send" );
     }
 
+    // clang-format off
+    #ifdef XWCTEST_MODBUS_SEND_PARTIAL
+        sent = length - 1; // LCOV_EXCL_LINE -- simulate a short write without touching real I/O
+    #endif
+    // clang-format on
+
     if( sent != length )
     {
         errno = EIO;
@@ -487,3 +506,7 @@ void modbus::modbus_error_handle( uint8_t *msg, int func )
         }
     }
 }
+
+#ifdef XWCTEST_NAMESPACE
+} // namespace XWCTEST_NAMESPACE
+#endif

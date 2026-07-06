@@ -98,6 +98,17 @@
 #undef XWCTEST_NAMESPACE
 #undef XWCTEST_LOGMAP_LATFM_SIZEERR2
 
+// logInMemory::loadFile is defined out-of-line in logMap.cpp, so exercising its own fault
+// path (as opposed to logMap<verboseT>'s inline template methods above) needs a namespaced
+// re-inclusion of both the header and the source together.
+#undef logger_logMap_hpp
+#define XWCTEST_NAMESPACE XWCTEST_LOGMAP_LOADFILE_SHORTREAD_ns
+#define XWCTEST_LOGINMEMORY_LOADFILE_SHORTREAD
+#include "../logMap.hpp"
+#include "../logMap.cpp"
+#undef XWCTEST_NAMESPACE
+#undef XWCTEST_LOGINMEMORY_LOADFILE_SHORTREAD
+
 namespace libXWCTest
 {
 
@@ -242,6 +253,60 @@ struct dummyLogB
 // Out-of-line definitions, needed because getPriorLog takes eventCode by const reference.
 const flatlogs::eventCodeT dummyLogA::eventCode;
 const flatlogs::eventCodeT dummyLogB::eventCode;
+
+// A log type that always declares a large message length regardless of what's actually
+// written, so its header can be used to fabricate a truncated/corrupt trailing entry (the
+// buffer createLog allocates is sized to match the declared length, so writing a small
+// message into it is memory-safe -- only the header's declared length is a lie).
+struct dummyLogBigDeclared
+{
+    static const flatlogs::eventCodeT eventCode   = 50;
+    static const flatlogs::logPrioT   defaultLevel = flatlogs::logPrio::LOG_NOTICE;
+
+    typedef int messageT;
+
+    static flatlogs::msgLenT length( const messageT & )
+    {
+        return 5000;
+    }
+
+    static int format( void *msgBuffer, const messageT &msg )
+    {
+        memcpy( msgBuffer, &msg, sizeof( msg ) );
+        return 0;
+    }
+};
+const flatlogs::eventCodeT dummyLogBigDeclared::eventCode;
+
+// Writes a single-file log with one dummyLogA entry per supplied timestamp, and returns it
+// as a stdFileName ready to hand to logInMemory::loadFile directly.
+MagAOX::file::stdFileName<XWC_DEFAULT_VERBOSITY> writeSingleLogFile( const std::string        &dir,
+                                                                     const std::string        &dev,
+                                                                     const std::vector<time_t> &times )
+{
+    std::filesystem::remove_all( dir );
+
+    MagAOX::logger::logFileRaw<XWC_DEFAULT_VERBOSITY> writer;
+    writer.logPath( dir );
+    writer.logName( dev );
+    writer.logExt( "xlog" );
+    writer.maxLogSize( 1000000 ); // large enough that all entries land in one file
+
+    flatlogs::bufferPtrT buf;
+    for( auto t : times )
+    {
+        flatlogs::logHeader::createLog<dummyLogA>( buf, flatlogs::timespecX( t, 0 ), dummyLogA::msg(), flatlogs::logPrio::LOG_NOTICE );
+        writer.writeLog( buf );
+    }
+    writer.close();
+
+    std::string fileName, relPath;
+    MagAOX::file::fileTimeRelPath( fileName, relPath, dev, "xlog", times.front(), 0 );
+
+    MagAOX::file::stdFileName<XWC_DEFAULT_VERBOSITY> sfn( dir + '/' + relPath + '/' + fileName );
+    REQUIRE( sfn.valid() );
+    return sfn;
+}
 
 /// Building the app-to-file map
 /**
@@ -911,6 +976,76 @@ TEST_CASE( "getPriorLog scans a loaded buffer for the last log at or before a ti
 
         REQUIRE( rv == -1 );
     }
+
+    SECTION( "reaches the end of the buffer scanning past the last matching-code entry" )
+    {
+        // Request the last entry's own event code (B, at base+40) with a timestamp beyond
+        // it: the scan advances directly off the last entry on the *outer* step (no
+        // event-code skipping needed), landing exactly at the end of the buffer.
+        char *logBefore = nullptr;
+
+        int rv = lm.getPriorLog( logBefore, "dev1", dummyLogB::eventCode, flatlogs::timespecX( base + 100, 0 ) );
+
+        REQUIRE( rv == 1 );
+    }
+
+    SECTION( "reaches the end of the buffer while skipping a mismatched last entry" )
+    {
+        // Request A with a timestamp beyond everything: the scan reaches the last entry
+        // (B, a mismatch), and the *inner* skip-loop's advance off of it lands exactly at
+        // the end of the buffer.
+        char *logBefore = nullptr;
+
+        int rv = lm.getPriorLog( logBefore, "dev1", dummyLogA::eventCode, flatlogs::timespecX( base + 100, 0 ) );
+
+        REQUIRE( rv == 1 );
+    }
+
+    SECTION( "detects a corrupt length field that would overshoot the buffer (requesting the corrupted entry's own code)" )
+    {
+        char *logBefore = nullptr;
+
+        // Populate the buffer first with a normal, in-range call.
+        REQUIRE( lm.getPriorLog( logBefore, "dev1", dummyLogA::eventCode, flatlogs::timespecX( base, 0 ) ) == 0 );
+
+        // Walk to the last entry (B, at base+40) and inflate its declared message length so
+        // that totalSize() overshoots the real end of m_memory.
+        std::vector<char> &mem = lm.m_appToBufferMap["dev1"].m_memory;
+        char              *p   = mem.data();
+        for( int i = 0; i < 4; ++i )
+        {
+            p += flatlogs::logHeader::totalSize( p );
+        }
+        p[flatlogs::logHeader::headerSize( p ) - 1] += 50;
+
+        // Requesting B (the corrupted entry's own code) with a timestamp beyond it: the scan
+        // reaches the corrupted entry via the inner skip-loop (skipping the two intervening A
+        // entries), then overshoots advancing off of it.
+        int rv = lm.getPriorLog( logBefore, "dev1", dummyLogB::eventCode, flatlogs::timespecX( base + 100, 0 ) );
+
+        REQUIRE( rv == -1 );
+    }
+
+    SECTION( "detects a corrupt length field that would overshoot the buffer (requesting a different code)" )
+    {
+        char *logBefore = nullptr;
+
+        REQUIRE( lm.getPriorLog( logBefore, "dev1", dummyLogA::eventCode, flatlogs::timespecX( base, 0 ) ) == 0 );
+
+        std::vector<char> &mem = lm.m_appToBufferMap["dev1"].m_memory;
+        char              *p   = mem.data();
+        for( int i = 0; i < 4; ++i )
+        {
+            p += flatlogs::logHeader::totalSize( p );
+        }
+        p[flatlogs::logHeader::headerSize( p ) - 1] += 50;
+
+        // Requesting A with a timestamp beyond everything makes the scan reach the
+        // corrupted (mismatched, B) entry via the inner skip-loop.
+        int rv = lm.getPriorLog( logBefore, "dev1", dummyLogA::eventCode, flatlogs::timespecX( base + 100, 0 ) );
+
+        REQUIRE( rv == -1 );
+    }
 }
 
 /// getNextLog stepping forward to the next log with a matching event code
@@ -1079,6 +1214,110 @@ TEST_CASE( "loadFiles selects on-disk files to bring into memory", "[libMagAOX::
         int rv = lm.loadFiles( "dev1", flatlogs::timespecX( times[3], 0 ) );
 
         REQUIRE( rv == 0 );
+    }
+
+    SECTION( "extending backward past every known file stops at the oldest one" )
+    {
+        // Fake an already-loaded buffer whose m_startTime is after every file in the map,
+        // so the backward search (walking forward looking for the first file at or after
+        // m_startTime) runs off the end of the map instead of finding one.
+        lm.m_appToBufferMap["dev1"].m_memory.assign( 1, 0 );
+        lm.m_appToBufferMap["dev1"].m_startTime = flatlogs::timespecX( times[3] + 100, 0 );
+        lm.m_appToBufferMap["dev1"].m_endTime   = flatlogs::timespecX( times[3] + 100, 0 );
+
+        int rv = lm.loadFiles( "dev1", flatlogs::timespecX( times[0], 0 ) );
+
+        REQUIRE( rv == 0 );
+    }
+
+    SECTION( "extending forward past every known file stops at the newest one" )
+    {
+        // Fake an already-loaded buffer whose m_endTime is before every file in the map, so
+        // the first search (walking backward looking for a file at or before m_endTime)
+        // runs off the beginning of the map, and the second (walking forward looking for a
+        // file at or after the requested time) runs off the end of the map.
+        lm.m_appToBufferMap["dev1"].m_memory.assign( 1, 0 );
+        lm.m_appToBufferMap["dev1"].m_startTime = flatlogs::timespecX( times[0] - 100, 0 );
+        lm.m_appToBufferMap["dev1"].m_endTime   = flatlogs::timespecX( times[0] - 100, 0 );
+
+        int rv = lm.loadFiles( "dev1", flatlogs::timespecX( times[3] + 100, 0 ) );
+
+        REQUIRE( rv == 0 );
+    }
+}
+
+/// logInMemory::loadFile's own defensive checks, called directly (no logMap involved)
+/**
+ * \ingroup logMap_unit_test
+ */
+TEST_CASE( "logInMemory::loadFile detects filesystem and framing errors", "[libMagAOX::logger::logMap]" )
+{
+    const time_t base = 1732170780;
+
+    SECTION( "a short read (fewer bytes than the file's reported size) is reported as an error" )
+    {
+        // A genuine short read from a regular file (stat size != bytes actually read) isn't
+        // reproducible without a concurrent truncation race, so this uses the namespaced
+        // build of logInMemory that forces nrd to 0 after the real read() call.
+        auto sfn = writeSingleLogFile( "/tmp/logMap_test_loadfile_shortread", "dev1", { base } );
+
+        MagAOX::logger::XWCTEST_LOGMAP_LOADFILE_SHORTREAD_ns::logInMemory lim;
+        int                                                               rv = lim.loadFile( sfn );
+
+        REQUIRE( rv == -1 );
+    }
+
+    SECTION( "a truncated trailing entry after otherwise-valid entries is reported as corrupt" )
+    {
+        auto sfn = writeSingleLogFile( "/tmp/logMap_test_loadfile_corrupt", "dev1", { base, base + 10 } );
+
+        // Append a header claiming a 5000-byte message, but write only the header itself --
+        // the file ends long before the message it claims to contain, so walking the buffer
+        // by declared entry sizes overshoots the actual file size.
+        flatlogs::bufferPtrT buf;
+        flatlogs::logHeader::createLog<dummyLogBigDeclared>(
+            buf, flatlogs::timespecX( base + 20, 0 ), 0, flatlogs::logPrio::LOG_NOTICE );
+        size_t hsz = flatlogs::logHeader::headerSize( buf.get() );
+
+        std::ofstream fout( sfn.fullName(), std::ios::binary | std::ios::app );
+        fout.write( buf.get(), hsz );
+        fout.close();
+
+        MagAOX::logger::logInMemory lim;
+        int                         rv = lim.loadFile( sfn );
+
+        REQUIRE( rv == -1 );
+    }
+
+    SECTION( "a file overlapping the start of an already-loaded buffer is rejected" )
+    {
+        auto sfnA = writeSingleLogFile( "/tmp/logMap_test_loadfile_overlapA", "dev1", { base, base + 10, base + 20 } );
+        auto sfnB = writeSingleLogFile( "/tmp/logMap_test_loadfile_overlapB", "dev2", { base - 10, base + 5 } );
+
+        MagAOX::logger::logInMemory lim;
+        REQUIRE( lim.loadFile( sfnA ) == 0 );
+        REQUIRE( lim.m_startTime == flatlogs::timespecX( base, 0 ) );
+
+        // sfnB starts before lim's start (base-10 < base) and ends at/after it (base+5 >= base).
+        int rv = lim.loadFile( sfnB );
+
+        REQUIRE( rv == -1 );
+    }
+
+    SECTION( "a file whose range falls inside an already-loaded buffer hits the fallback branch" )
+    {
+        auto sfnA = writeSingleLogFile( "/tmp/logMap_test_loadfile_middleA", "dev1", { base, base + 20 } );
+        auto sfnB = writeSingleLogFile( "/tmp/logMap_test_loadfile_middleB", "dev2", { base + 5, base + 15 } );
+
+        MagAOX::logger::logInMemory lim;
+        REQUIRE( lim.loadFile( sfnA ) == 0 );
+        REQUIRE( lim.m_startTime == flatlogs::timespecX( base, 0 ) );
+        REQUIRE( lim.m_endTime == flatlogs::timespecX( base + 20, 0 ) );
+
+        // sfnB's start (base+5) is neither before lim's start nor after lim's end.
+        int rv = lim.loadFile( sfnB );
+
+        REQUIRE( rv == -1 );
     }
 }
 

@@ -1,6 +1,10 @@
 #include <assert.h>
+#include <sstream>
 #include "../../../../tests/catch2/catch.hpp"
 #include "../generated/logCodes.hpp"
+#include "../generated/logVerify.hpp"
+#include "../generated/logCodeValid.hpp"
+#include "../generated/logStdFormat.hpp"
 #include "../types/{{name}}.hpp"
 {% if hasGeneratedHfile %}
 #include "../types/generated/{{name}}_generated.h"
@@ -44,6 +48,11 @@ public:
 
   // Flatbuffers verifier success/failure
   bool m_verify{false};
+
+  // Whether the code-generated central dispatchers (logVerify/logCodeValid/logStdFormat)
+  // agree with calling this log type directly -- this is what exercises those dispatch
+  // switches' case for this type, one real type at a time via this same generator.
+  bool m_centralDispatchOk{false};
 
   // flatbuffer data length; used in ::verify
   int L;
@@ -113,6 +122,39 @@ public:
 
     // Run the {{name}} verifier
     m_verify = verify({{classVarName}});
+
+    // Cross-check the central, code-generated dispatchers against calling this type
+    // directly, instead of hand-enumerating every event code's expected behavior here.
+    m_centralDispatchOk = checkCentralDispatch({{classVarName}});
+  }
+
+  // Cross-checks logVerify/logCodeValid/logStdFormat (each a switch over every real event
+  // code, generated into logger/generated/) against calling this type directly.
+  bool checkCentralDispatch(const typename MagAOX::logger::{{name}}::messageT& msg) {
+
+    flatlogs::timespecX tsx{0,0};
+    flatlogs::logPrioT prio{flatlogs::logPrio::LOG_DEFAULT};
+
+    flatlogs::bufferPtrT logBuffer;
+    {% if 'software_log' in name %}
+    flatlogs::logHeader::createLog<MagAOX::logger::software_notice>(logBuffer
+                                                             , tsx, msg
+                                                             , prio);
+    {% else %}
+    flatlogs::logHeader::createLog<MagAOX::logger::{{name}}>(logBuffer
+                                                             , tsx, msg
+                                                             , prio);
+    {% endif %}
+
+    bool verifyMatches = ( MagAOX::logger::logVerify(MagAOX::logger::{{name}}::eventCode, logBuffer, L)
+                           == MagAOX::logger::{{name}}::verify(logBuffer, L) );
+
+    bool codeIsValid = MagAOX::logger::logCodeValid(MagAOX::logger::{{name}}::eventCode);
+
+    std::ostringstream oss;
+    MagAOX::logger::logStdFormat(oss, logBuffer);
+
+    return verifyMatches && codeIsValid && !oss.str().empty();
   }
 
   // Run the flatbuffer Verifier for this log type
@@ -183,6 +225,7 @@ SCENARIO( "Create {{name}} {{outerLoopI}}", "[a log item]")
             {% endif %}
             {% endfor %}
             REQUIRE({{classVarName}}.m_verify);
+            REQUIRE({{classVarName}}.m_centralDispatchOk);
         }
     }
 }

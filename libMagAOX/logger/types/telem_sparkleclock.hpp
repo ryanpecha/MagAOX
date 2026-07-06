@@ -25,7 +25,7 @@ namespace logger
 struct telem_sparkleclock : public flatbuffer_log
 {
    ///The event code
-   static const flatlogs::eventCodeT eventCode = eventCodes::TELEM_DMSPECK;
+   static const flatlogs::eventCodeT eventCode = eventCodes::TELEM_SPARKLECLOCK;
 
    ///The default level
    static const flatlogs::logPrioT defaultLevel = flatlogs::logPrio::LOG_TELEM;
@@ -94,10 +94,13 @@ struct telem_sparkleclock : public flatbuffer_log
       }
 
       msg += "seps: ";
-      for(flatbuffers::Vector<float>::const_iterator it = fbs->separations()->begin(); it != fbs->separations()->end(); ++it)
+      if(fbs->separations() != nullptr)
       {
-         msg+= std::to_string(*it);
-         msg+= " ";
+         for(flatbuffers::Vector<float>::const_iterator it = fbs->separations()->begin(); it != fbs->separations()->end(); ++it)
+         {
+            msg+= std::to_string(*it);
+            msg+= " ";
+         }
       }
       msg += "angle offset: ";
       msg += std::to_string(fbs->angleOffset());

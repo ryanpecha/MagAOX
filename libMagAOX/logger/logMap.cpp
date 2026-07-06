@@ -25,6 +25,11 @@ namespace MagAOX
 namespace logger
 {
 
+#ifdef XWCTEST_NAMESPACE
+namespace XWCTEST_NAMESPACE
+{
+#endif
+
 int logInMemory::loadFile( file::stdFileName<verboseT> const &lfn )
 {
     int fd = open( lfn.fullName().c_str(), O_RDONLY );
@@ -36,6 +41,12 @@ int logInMemory::loadFile( file::stdFileName<verboseT> const &lfn )
     ssize_t nrd = read( fd, memory.data(), memory.size() );
 
     close( fd );
+
+    // clang-format off
+    #ifdef XWCTEST_LOGINMEMORY_LOADFILE_SHORTREAD
+        nrd = 0; // LCOV_EXCL_LINE
+    #endif
+    // clang-format on
 
     if( nrd != fsz )
     {
@@ -121,8 +132,13 @@ int logInMemory::loadFile( file::stdFileName<verboseT> const &lfn )
     return -1;
 }
 
+#ifdef XWCTEST_NAMESPACE
+} // namespace XWCTEST_NAMESPACE
+#endif
 
+#ifndef XWCTEST_NAMESPACE
 template class logMap<XWC_DEFAULT_VERBOSITY>;
+#endif
 
 } // namespace logger
 } // namespace MagAOX

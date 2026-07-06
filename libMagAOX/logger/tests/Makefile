@@ -2,8 +2,7 @@
 ### Hide commands
 AT=@
 GEN_TEST_FILES = ./generated_tests/*_generated_tests.cpp
-C_STD=c++20
-MXLIB_CFLAGS := $(shell pkg-config --cflags mxlib)
+include ../../../Make/common.mk
 include ../../../Make/python.mk
 ### default entropy test settings
 # seed
@@ -14,12 +13,6 @@ e=1
 n=2
 # types to use
 f=""
-
-ifeq ($(COVERAGE),1)
-  LDFLAGS += --coverage
-  CFLAGS += --coverage
-  CXXFLAGS += --coverage
-endif
 
 ########################################################################
 ### Generate code, run tests
@@ -54,7 +47,7 @@ $(GEN_TEST_FILES) :
 	$(AT)$(PYTHON) generateTemplatedCatch2Tests.py
 
 catch2_tests: ../generated/binarySchemata.inc $(GEN_TEST_FILES) catch2_tests.cpp
-	$(AT)g++ -std=$(C_STD) $(CXXFLAGS) $(MXLIB_CFLAGS) -I. -I./../types -I../../../flatlogs/include/ $(GEN_TEST_FILES) catch2_tests.cpp -o $@
+	$(AT)g++ $(CXXFLAGS) -I. -I./../types $(GEN_TEST_FILES) catch2_tests.cpp ../../app/stateCodes.cpp -o $@
 
 do_catch2_test: catch2_tests
 	$(AT)./catch2_tests
@@ -63,7 +56,7 @@ do_catch2_test: catch2_tests
 ### Build and run Catch2 Entropy tests
 entropy_test: ../generated/binarySchemata.inc catch2_tests.cpp
 	$(AT)$(PYTHON) generateEntropyTests.py -e $(e) -n $(n) -s $(s) -f $(f)
-	$(AT)g++ -std=$(C_STD) $(CXXFLAGS) $(MXLIB_CFLAGS) -I. -I.. -I./../types -I../../../flatlogs/include/ -I./generated_tests gen_entropy_tests/generated_test_e$(e)_n$(n).cpp catch2_tests.cpp -o generated_entropy_test_e$(e)_n$(n)
+	$(AT)g++ $(CXXFLAGS) -I. -I.. -I./../types -I./generated_tests gen_entropy_tests/generated_test_e$(e)_n$(n).cpp catch2_tests.cpp ../../app/stateCodes.cpp -o generated_entropy_test_e$(e)_n$(n)
 
 do_entropy_test: entropy_test
 	$(AT)./generated_entropy_test_e$(e)_n$(n) "Scenario: test_e$(e)_n$(n)"

@@ -90,6 +90,11 @@ int logMeta::setLog( const logMetaSpec & lms )
          case valTypes::Bool:
             m_spec.format = "%d";
             break;
+         // Char/UChar/Short/UShort/Long/ULong are not produced by any generated log type's
+         // getAccessor() (verified by grepping every types/*.hpp) -- MagAO-X log values are
+         // always Bool/Int/UInt/Float/Double/String/ULongLong or a Vector of those, so these
+         // cases are unreachable in practice.
+         // LCOV_EXCL_START
          case valTypes::Char:
             m_spec.format = "%d";
             break;
@@ -102,18 +107,21 @@ int logMeta::setLog( const logMetaSpec & lms )
          case valTypes::UShort:
             m_spec.format = "%u";
             break;
+         // LCOV_EXCL_STOP
          case valTypes::Int:
             m_spec.format = "%d";
             break;
          case valTypes::UInt:
             m_spec.format = "%u";
             break;
+         // LCOV_EXCL_START
          case valTypes::Long:
             m_spec.format = "%ld";
             break;
          case valTypes::ULong:
             m_spec.format = "%lu";
             break;
+         // LCOV_EXCL_STOP
          case valTypes::Float:
             m_spec.format = "%G";
             break;

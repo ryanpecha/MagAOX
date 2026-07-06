@@ -17,6 +17,7 @@
 ../libMagAOX/logger/tests/logFileRaw_fileTime_error_test
 ../libMagAOX/logger/tests/logManager_test
 ../libMagAOX/logger/tests/logMap_test
+../libMagAOX/logger/tests/logMeta_test
 ../libMagAOX/logger/tests/logTypes_Accessor_test
 
 ../libMagAOX/sys/tests/thSetuid_test
@@ -113,10 +114,13 @@
 ../libMagAOX/ImageStreamIO/tests/pixaccess_test
 ../libMagAOX/ImageStreamIO/tests/ImageStreamIO_test
 ../libMagAOX/modbus/tests/modbus_test
+../libMagAOX/modbus/tests/modbus_exception_test
 ../libMagAOX/sys/tests/runCommand_test
 ../libMagAOX/sys/tests/thSetuid_test
 ../libMagAOX/tty/tests/tty_test
 ../libMagAOX/tty/tests/ttyIOUtils_test
+../libMagAOX/tty/tests/ttyErrors_test
+../libMagAOX/tty/tests/usbDevice_test
 
 ../utils/logsurgeon/tests/logsurgeon_config_test
 

@@ -204,11 +204,13 @@ TEST_CASE( "logManager configuration", "[libMagAOX::logger::logManager]" )
                                   { "/tmp/logManager_test_dir", "binlog", "1000", "2000", "5" } );
 
         mx::app::appConfigurator config;
-        config.readConfig( "/tmp/logManager_test.conf" );
 
         logManagerTestT lm;
 
         REQUIRE( lm.setupConfig( config ) == 0 );
+
+        config.readConfig( "/tmp/logManager_test.conf" );
+
         REQUIRE( lm.loadConfig( config ) == 0 );
 
         REQUIRE( lm.logPath() == "/tmp/logManager_test_dir" );
@@ -223,11 +225,13 @@ TEST_CASE( "logManager configuration", "[libMagAOX::logger::logManager]" )
         mx::app::writeConfigFile( "/tmp/logManager_test.conf", { "logger" }, { "logLevel" }, { "WARNING" } );
 
         mx::app::appConfigurator config;
-        config.readConfig( "/tmp/logManager_test.conf" );
 
         logManagerTestT lm;
 
         REQUIRE( lm.setupConfig( config ) == 0 );
+
+        config.readConfig( "/tmp/logManager_test.conf" );
+
         REQUIRE( lm.loadConfig( config ) == 0 );
 
         REQUIRE( lm.logLevel() == flatlogs::logPrio::LOG_WARNING );
@@ -238,11 +242,13 @@ TEST_CASE( "logManager configuration", "[libMagAOX::logger::logManager]" )
         mx::app::writeConfigFile( "/tmp/logManager_test.conf", { "logger" }, { "logLevel" }, { "DEFAULT" } );
 
         mx::app::appConfigurator config;
-        config.readConfig( "/tmp/logManager_test.conf" );
 
         logManagerTestT lm;
 
         REQUIRE( lm.setupConfig( config ) == 0 );
+
+        config.readConfig( "/tmp/logManager_test.conf" );
+
         REQUIRE( lm.loadConfig( config ) == 0 );
 
         REQUIRE( lm.logLevel() == flatlogs::logPrio::LOG_INFO );
@@ -253,11 +259,13 @@ TEST_CASE( "logManager configuration", "[libMagAOX::logger::logManager]" )
         mx::app::writeConfigFile( "/tmp/logManager_test.conf", { "logger" }, { "logLevel" }, { "zzz" } );
 
         mx::app::appConfigurator config;
-        config.readConfig( "/tmp/logManager_test.conf" );
 
         logManagerTestT lm;
 
         REQUIRE( lm.setupConfig( config ) == 0 );
+
+        config.readConfig( "/tmp/logManager_test.conf" );
+
         REQUIRE( lm.loadConfig( config ) == 0 );
 
         REQUIRE( lm.logLevel() == flatlogs::logPrio::LOG_INFO );

@@ -111,7 +111,7 @@ pcommand:
 
 .PHONY: magaox_git_version.h
 magaox_git_version.h:
-	@gengithead.sh $(abspath $(SELF_DIR)/../) $(SELF_DIR)/../magaox_git_version.h MAGAOX
+	@gengithead.sh $(abspath $(SELF_DIR)/../) $(SELF_DIR)/../magaox_git_version.h.tmp.$$$$ MAGAOX && mv -f $(SELF_DIR)/../magaox_git_version.h.tmp.$$$$ $(SELF_DIR)/../magaox_git_version.h
 
 .PHONY: clean
 clean:
