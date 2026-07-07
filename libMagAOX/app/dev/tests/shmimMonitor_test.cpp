@@ -155,6 +155,15 @@ struct smTest : public MagAOX::app::MagAOXApp<false>, public MAPPNS::shmimMonito
     {
     }
 
+    // Constructs a real (but FIFO-less) indiDriver so m_indiDriver != nullptr, the same
+    // pattern MagAOXApp_test.hpp's setConfigName() uses -- indi::updateIfChanged() catches
+    // its own send failures, so this doesn't need a live, connected INDI server.
+    void setConfigNameWithDriver( const std::string &cn )
+    {
+        m_configName = cn;
+        m_indiDriver = new MagAOX::app::indiDriver<MagAOX::app::MagAOXApp<false>>( this, m_configName, "0", "0" );
+    }
+
     int setupConfig( mx::app::appConfigurator &config )
     {
         return shmimMonitorT::setupConfig( config );
@@ -717,12 +726,22 @@ SCENARIO( "shmimMonitor updateINDI", "[dev::shmimMonitor]" )
 
         int rv = pdt.updateINDI();
         REQUIRE( rv == 0 );
+    }
 
-        // NOTE: the branch where derived().m_indiDriver is non-null (actually
-        // publishing values via indi::updateIfChanged) is not covered here: it
-        // requires a live, connected indiDriver<MagAOXApp> instance (real FIFO-based
-        // IPC), which is out of scope for a focused unit test of shmimMonitor and
-        // risks flakiness/hangs without a real INDI server on the other end.
+    GIVEN( "a shmimMonitor with a real (FIFO-less) indiDriver connected" )
+    {
+        // indi::updateIfChanged() catches its own send failures internally (already
+        // covered directly in indiUtils_test.cpp), so a FIFO-less driver here is enough
+        // to exercise updateINDI()'s publishing branch without a live INDI server.
+        smTest pdt;
+        ThreadGuard guard( pdt );
+        pdt.setShmimName( "smUpdateIndi" );
+        pdt.setConfigNameWithDriver( "smUpdateIndiTest" );
+
+        REQUIRE( pdt.appStartup() == 0 );
+
+        int rv = pdt.updateINDI();
+        REQUIRE( rv == 0 );
     }
 }
 

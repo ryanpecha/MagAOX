@@ -160,6 +160,15 @@ struct fgTest : public MagAOX::app::MagAOXApp<true>,
     {
     }
 
+    // Constructs a real (but FIFO-less) indiDriver so m_indiDriver != nullptr -- the same
+    // pattern MagAOXApp_test.hpp's setConfigName() uses. indi::updateIfChanged() catches
+    // its own send failures, so this doesn't need a live, connected INDI server.
+    void setConfigNameWithDriver( const std::string &cn )
+    {
+        m_configName = cn;
+        m_indiDriver = new MagAOX::app::indiDriver<MagAOX::app::MagAOXApp<true>>( this, m_configName, "0", "0" );
+    }
+
     // MagAOXApp's pure virtuals -- tests call frameGrabberT::appStartup()/appLogic()/
     // appShutdown() explicitly, so these trivial overrides just satisfy instantiability
     // and disambiguate unqualified lookup between MagAOXApp and dev::frameGrabber.
@@ -789,6 +798,30 @@ TEST_CASE( "frameGrabber updateINDI is a no-op without an active INDI driver", "
     REQUIRE( app.updateINDI() == 0 );
 }
 
+/// updateINDI() with a real (FIFO-less) indiDriver connected exercises its
+/// indi::updateIfChanged() publishing calls (already covered directly in
+/// indiUtils_test.cpp for the send-failure paths those calls take internally).
+/**
+ * \ingroup app_dev_unit_tests
+ */
+TEST_CASE( "frameGrabber updateINDI publishes properties with an active INDI driver", "[frameGrabber]" )
+{
+    fgTest app;
+    app.setConfigNameWithDriver( uniqueShmimName( "updateindi" ) );
+
+    REQUIRE( app.frameGrabberT::appStartup() == 0 );
+
+    // Non-zero latency stats (as appLogic() would compute from real frames) so
+    // updateINDI() also exercises its fps-from-mean-latency divisions.
+    app.m_mna = 0.01;
+    app.m_mnw = 0.02;
+
+    REQUIRE( app.updateINDI() == 0 );
+
+    app.m_shutdown = 1;
+    REQUIRE( app.frameGrabberT::appShutdown() == 0 );
+}
+
 /// appStartup() registers the shmimName, frameSize, and timing properties and starts
 /// the framegrabber thread; each property registration failure is reported.
 /**
@@ -1304,6 +1337,29 @@ TEST_CASE( "frameGrabber fgThreadExec drives the full acquisition loop", "[frame
 
         REQUIRE( app.loadImageIntoStreamCalls == 2 );
         REQUIRE( app.m_cbFPS == 50 );
+    }
+
+    SECTION( "the fps changing to a negative value mid-acquisition reports the "
+             "configCircBuffs() failure" )
+    {
+        fgTest app;
+        primeForSyncExec( app );
+        app.m_shmimName              = uniqueShmimName( "fpsnegative" );
+        app.m_circBuffLength         = 1;
+        app.fpsValue                 = 100;
+        app.m_latencyCircBuffMaxTime = 5;
+        app.acquireResults           = { 0, 0 };
+
+        // Same mid-iteration fps-change mechanism as above, but to a negative value:
+        // configCircBuffs() itself then returns -1 (only reachable via a real, negative
+        // fps() reading, not a hand-enumerated error code).
+        app.bumpFpsAfterCall = 1;
+        app.bumpedFpsValue   = -1;
+
+        app.fgThreadExec();
+
+        REQUIRE( app.loadImageIntoStreamCalls == 2 );
+        REQUIRE( app.m_cbFPS == -1 );
     }
 }
 

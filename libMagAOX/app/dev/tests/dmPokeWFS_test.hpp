@@ -101,11 +101,16 @@ struct dmPokeWFSTest : public MagAOX::app::MagAOXApp<false>,
     int  m_runSensorRV{ 0 };          ///< canned return value when not using the real sensor
     bool m_lastFirstRun{ false };
     int  m_runSensorCalls{ 0 };
+    int  m_runSensorSleepMs{ 0 }; ///< if >0, widens the measuring==1/2 window so a test can observe it
 
     int runSensor( bool firstRun )
     {
         m_lastFirstRun = firstRun;
         ++m_runSensorCalls;
+        if( m_runSensorSleepMs > 0 )
+        {
+            mx::sys::milliSleep( m_runSensorSleepMs );
+        }
         if( m_useRealRunSensor )
         {
             return basicRunSensor();
@@ -381,6 +386,76 @@ struct dmPokeWFSTest : public MagAOX::app::MagAOXApp<false>,
         m_indiP_measurement.add( { "delta_x", 0.0 } );
         m_indiP_measurement.add( { "delta_y", 0.0 } );
         m_indiP_measurement.add( { "counter", 0 } );
+    }
+
+    /// Post the real wfs semaphore without setting m_single/m_continuous first, which
+    /// production code never does (both callbacks always set one of the flags
+    /// immediately before posting) -- exercises wfsThreadExec()'s defensive
+    /// neither-flag-set branch, which causes the thread to return outright.
+    void postWfsSemaphoreWithNoModeSet()
+    {
+        m_single     = 0;
+        m_continuous = 0;
+        sem_post( &m_wfsSemaphore );
+    }
+
+    // -- direct control of the dmPokeWFS/shmimMonitor std::thread bookkeeping,
+    // mirroring shmimMonitor_test.cpp's setSmThread()/abandonSmThread() pattern, so
+    // appLogic()'s three separate "thread has exited" propagation branches can each
+    // be exercised independently without a full, real appStartup().
+
+    void setWfsMeasurementThread( std::thread &&t )
+    {
+        m_wfsThread = std::move( t );
+    }
+
+    void abandonWfsMeasurementThread()
+    {
+        std::thread tmp;
+        tmp.swap( m_wfsThread );
+        new( &tmp ) std::thread();
+    }
+
+    void joinWfsMeasurementThread()
+    {
+        if( m_wfsThread.joinable() )
+            m_wfsThread.join();
+    }
+
+    void setWfsMonitorThread( std::thread &&t )
+    {
+        shmimMonitorT::m_smThread = std::move( t );
+    }
+
+    void abandonWfsMonitorThread()
+    {
+        std::thread tmp;
+        tmp.swap( shmimMonitorT::m_smThread );
+        new( &tmp ) std::thread();
+    }
+
+    void joinWfsMonitorThread()
+    {
+        if( shmimMonitorT::m_smThread.joinable() )
+            shmimMonitorT::m_smThread.join();
+    }
+
+    void setDarkMonitorThread( std::thread &&t )
+    {
+        darkShmimMonitorT::m_smThread = std::move( t );
+    }
+
+    void joinDarkMonitorThread()
+    {
+        if( darkShmimMonitorT::m_smThread.joinable() )
+            darkShmimMonitorT::m_smThread.join();
+    }
+
+    void abandonDarkMonitorThread()
+    {
+        std::thread tmp;
+        tmp.swap( darkShmimMonitorT::m_smThread );
+        new( &tmp ) std::thread();
     }
 };
 

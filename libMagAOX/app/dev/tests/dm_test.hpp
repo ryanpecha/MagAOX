@@ -45,6 +45,15 @@ struct dmTest : public MagAOX::app::MagAOXApp<false>,
     {
     }
 
+    // Constructs a real (but FIFO-less) indiDriver so m_indiDriver != nullptr, the same
+    // pattern used in shmimMonitor_test.cpp/frameGrabber_test.cpp -- indi::updateIfChanged()
+    // and friends catch their own send failures, so this doesn't need a live INDI server.
+    void setConfigNameWithDriver( const std::string &cn )
+    {
+        m_configName = cn;
+        m_indiDriver = new MagAOX::app::indiDriver<MagAOX::app::MagAOXApp<false>>( this, m_configName, "0", "0" );
+    }
+
     int setupConfig( mx::app::appConfigurator &config )
     {
         return dmT::setupConfig( config );
@@ -85,19 +94,22 @@ struct dmTest : public MagAOX::app::MagAOXApp<false>,
         return dmT::updateINDI();
     }
 
+    int m_initDMRV{ 0 };
     int initDM()
     {
-        return 0;
+        return m_initDMRV;
     }
 
+    int m_zeroDMRV{ 0 };
     int zeroDM()
     {
-        return 0;
+        return m_zeroDMRV;
     }
 
+    int m_releaseDMRV{ 0 };
     int releaseDM()
     {
-        return 0;
+        return m_releaseDMRV;
     }
 
     void setSize( int w, int h, int d )
@@ -233,6 +245,98 @@ struct dmTest : public MagAOX::app::MagAOXApp<false>,
     void requestShutdown()
     {
         m_shutdown = 1;
+    }
+
+    /// Exposes MagAOXApp<false>::setupBasicConfig()'s "power management enabled but
+    /// _useINDI==false" critical-shutdown branch, which is otherwise unreachable from
+    /// MagAOXApp_test.cpp (that harness only instantiates MagAOXApp<true>).
+    void setPowerMgtEnabled( bool pme )
+    {
+        m_powerMgtEnabled = pme;
+    }
+
+    /// Exposes MagAOXApp<false>::startINDI()'s trivial-success branch when _useINDI is
+    /// false, also otherwise unreachable from MagAOXApp_test.cpp.
+    int startINDI()
+    {
+        return MagAOX::app::MagAOXApp<false>::startINDI();
+    }
+
+    /// Exposes MagAOXApp<false>::createINDIFIFOS()'s trivial-success branch, also
+    /// otherwise unreachable from MagAOXApp_test.cpp.
+    int callCreateINDIFIFOS()
+    {
+        return MagAOX::app::MagAOXApp<false>::createINDIFIFOS();
+    }
+
+    /// Exposes the MagAOXApp<false> (constexpr !m_useINDI) early-return branches of the
+    /// INDI handle* callbacks, also otherwise unreachable from MagAOXApp_test.cpp (which
+    /// only instantiates MagAOXApp<true>).
+    void callHandleGetProperties( const pcf::IndiProperty &ipRecv )
+    {
+        MagAOX::app::MagAOXApp<false>::handleGetProperties( ipRecv );
+    }
+
+    void callHandleNewProperty( const pcf::IndiProperty &ipRecv )
+    {
+        MagAOX::app::MagAOXApp<false>::handleNewProperty( ipRecv );
+    }
+
+    void callHandleSetProperty( const pcf::IndiProperty &ipRecv )
+    {
+        MagAOX::app::MagAOXApp<false>::handleSetProperty( ipRecv );
+    }
+
+    /// Exposes the two registerIndiPropertyNew() overloads that build the property from
+    /// type/perm/state (with and without an explicit switch rule) under MagAOXApp<false>,
+    /// otherwise unreachable from MagAOXApp_test.cpp (only MagAOXApp<true> there, and
+    /// neither overload is used by any dev:: mixin in this codebase).
+    int callRegisterIndiPropertyNew( pcf::IndiProperty &prop, const std::string &propName )
+    {
+        return MagAOX::app::MagAOXApp<false>::registerIndiPropertyNew(
+            prop, propName, pcf::IndiProperty::Number, pcf::IndiProperty::ReadWrite, pcf::IndiProperty::Idle, nullptr );
+    }
+
+    /// Exposes MagAOXApp<false>::sendNewStandardIndiToggle()'s constexpr !_useINDI
+    /// trivial-success branch, also otherwise unreachable from MagAOXApp_test.cpp.
+    int callSendNewStandardIndiToggle( const std::string &device, const std::string &property, bool onoff )
+    {
+        return MagAOX::app::MagAOXApp<false>::sendNewStandardIndiToggle( device, property, onoff );
+    }
+
+    int callRegisterIndiPropertyNewWithRule( pcf::IndiProperty &prop, const std::string &propName )
+    {
+        return MagAOX::app::MagAOXApp<false>::registerIndiPropertyNew( prop,
+                                                                       propName,
+                                                                       pcf::IndiProperty::Switch,
+                                                                       pcf::IndiProperty::ReadWrite,
+                                                                       pcf::IndiProperty::Idle,
+                                                                       pcf::IndiProperty::OneOfMany,
+                                                                       nullptr );
+    }
+
+    /// sem_init() the saturation semaphore without running the rest of appStartup(),
+    /// so processImage()'s sem_post( &m_satSemaphore ) call is well-defined when tests
+    /// drive processImage() directly.
+    void initSatSemaphoreForTest()
+    {
+        sem_init( &m_satSemaphore, 0, 0 );
+    }
+
+    /// Direct control of the saturation thread's std::thread bookkeeping, mirroring
+    /// shmimMonitor_test.cpp's setSmThread()/abandonSmThread() pattern, so appLogic()'s
+    /// "saturation thread has exited" branch can be exercised without ever starting the
+    /// real thread (avoiding the real-thread-teardown hazards noted in dm_test.cpp).
+    void setSatThread( std::thread &&t )
+    {
+        m_satThread = std::move( t );
+    }
+
+    void abandonSatThread()
+    {
+        std::thread tmp;
+        tmp.swap( m_satThread );
+        new( &tmp ) std::thread();
     }
 };
 

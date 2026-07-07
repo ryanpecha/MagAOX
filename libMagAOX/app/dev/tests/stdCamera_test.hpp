@@ -442,6 +442,16 @@ struct stdCameraFullHarness : public MagAOX::app::MagAOXApp<false>,
         return MagAOX::app::MagAOXApp<false>::registerIndiPropertySet( prop, devName, propName, cb );
     }
 
+    // Constructs a real (but FIFO-less) indiDriver so m_indiDriver != nullptr -- the same
+    // pattern used in dm_test.hpp/MagAOXApp_test.hpp -- so that onPowerOff()/whilePowerOff()/
+    // updateINDI()'s `if(!derived().m_indiDriver) return 0;` early-return guards are passed,
+    // letting the rest of those functions' bodies run (indi::updateIfChanged() and friends
+    // catch their own send failures, so this doesn't need a live INDI server).
+    void setupRealDriver()
+    {
+        m_indiDriver = new MagAOX::app::indiDriver<MagAOX::app::MagAOXApp<false>>( this, m_configName, "0", "0" );
+    }
+
     // -- capture outgoing goto-focus commands instead of requiring a real INDI driver --
     int sendNewProperty( const pcf::IndiProperty &ipSend )
     {
@@ -884,6 +894,12 @@ struct stdCameraReportOnlyHarness : public MagAOX::app::MagAOXApp<false>,
     int powerOnDefaults()
     {
         return 0;
+    }
+
+    // See stdCameraFullHarness::setupRealDriver() for why this is needed.
+    void setupRealDriver()
+    {
+        m_indiDriver = new MagAOX::app::indiDriver<MagAOX::app::MagAOXApp<false>>( this, m_configName, "0", "0" );
     }
 };
 

@@ -1081,6 +1081,50 @@ TEST_CASE( "stdCamera onPowerOff and whilePowerOff", "[dev::stdCamera]" )
         REQUIRE( app.whilePowerOff() == 0 );
     }
 
+    SECTION( "full harness, with a real driver, exercises every property-update branch" )
+    {
+        stdCameraFullHarness app;
+        configureFullHarness( app );
+        REQUIRE( app.appStartup() == 0 );
+        app.setupRealDriver();
+
+        app.m_shutterStatus = "OPERATING";
+        app.m_shutterState  = 0;
+        REQUIRE( app.onPowerOff() == 0 );
+
+        app.m_shutterStatus = "READY";
+        app.m_shutterState  = 1;
+        REQUIRE( app.onPowerOff() == 0 );
+
+        app.m_shutterStatus = "POWERON";
+        REQUIRE( app.onPowerOff() == 0 );
+
+        app.m_shutterStatus = "UNKNOWN";
+        REQUIRE( app.onPowerOff() == 0 );
+
+        app.m_fanSpeedValid   = true;
+        app.m_analogGainValid = true;
+        app.m_ledStateValid   = true;
+        app.m_ledState        = true;
+        REQUIRE( app.onPowerOff() == 0 );
+
+        app.m_ledState = false;
+        REQUIRE( app.onPowerOff() == 0 );
+
+        app.m_shutterStatus = "OPERATING";
+        REQUIRE( app.whilePowerOff() == 0 );
+
+        app.m_shutterStatus = "READY";
+        REQUIRE( app.whilePowerOff() == 0 );
+
+        app.m_shutterStatus = "UNKNOWN";
+        app.m_ledState      = true;
+        REQUIRE( app.whilePowerOff() == 0 ); // m_fanSpeedValid/m_analogGainValid are already true too
+
+        app.m_ledState = false;
+        REQUIRE( app.whilePowerOff() == 0 );
+    }
+
     SECTION( "report-only harness onPowerOff/whilePowerOff" )
     {
         mx::app::writeConfigFile( "/tmp/stdCamera_onPowerOff_reportonly.conf", { "none" }, { "nada" }, { "0" } );
@@ -1097,6 +1141,14 @@ TEST_CASE( "stdCamera onPowerOff and whilePowerOff", "[dev::stdCamera]" )
     }
 }
 
+TEST_CASE( "stdCamera appShutdown is a trivial no-op", "[dev::stdCamera]" )
+{
+    stdCameraFullHarness app;
+    configureFullHarness( app );
+    REQUIRE( app.appStartup() == 0 );
+    REQUIRE( app.appShutdown() == 0 );
+}
+
 /// Test stdCamera::updateINDI.
 /**
  * \ingroup stdCamera_tests
@@ -1108,6 +1160,7 @@ TEST_CASE( "stdCamera updateINDI", "[dev::stdCamera]" )
         stdCameraFullHarness app;
         configureFullHarness( app );
         REQUIRE( app.appStartup() == 0 );
+        app.setupRealDriver();
 
         // Temp control not on target
         app.m_tempControlStatus   = true;
@@ -1132,6 +1185,7 @@ TEST_CASE( "stdCamera updateINDI", "[dev::stdCamera]" )
         app.m_cropMode = false;
         REQUIRE( app.updateINDI() == 0 );
 
+        app.m_modeName = "modeA";
         app.m_nextMode = "modeB";
         REQUIRE( app.updateINDI() == 0 );
         app.m_nextMode = "";
@@ -1152,6 +1206,11 @@ TEST_CASE( "stdCamera updateINDI", "[dev::stdCamera]" )
         REQUIRE( app.updateINDI() == 0 );
         app.m_ledState = false;
         REQUIRE( app.updateINDI() == 0 );
+
+        // m_stateStringValidResult defaults to true (the "valid" branch); flip it to
+        // exercise the "invalid" branch too.
+        app.m_stateStringValidResult = false;
+        REQUIRE( app.updateINDI() == 0 );
     }
 
     SECTION( "with no INDI driver set, returns immediately" )
@@ -1171,6 +1230,24 @@ TEST_CASE( "stdCamera updateINDI", "[dev::stdCamera]" )
         config.readConfig( "/tmp/stdCamera_updateINDI_reportonly.conf" );
         REQUIRE( app.loadConfig( config ) == 0 );
         REQUIRE( app.appStartup() == 0 );
+        REQUIRE( app.updateINDI() == 0 );
+    }
+
+    SECTION( "report-only harness with a real driver exercises the fps-report-only branch" )
+    {
+        mx::app::writeConfigFile( "/tmp/stdCamera_updateINDI_reportonly2.conf", { "none" }, { "nada" }, { "0" } );
+
+        stdCameraReportOnlyHarness app;
+        mx::app::appConfigurator   config;
+        REQUIRE( app.setupConfig( config ) == 0 );
+        config.readConfig( "/tmp/stdCamera_updateINDI_reportonly2.conf" );
+        REQUIRE( app.loadConfig( config ) == 0 );
+        REQUIRE( app.appStartup() == 0 );
+        app.setupRealDriver();
+
+        // c_stdCamera_temp is true and c_stdCamera_tempControl is false on this harness,
+        // so this also exercises the temp-report-only branch (distinct from the
+        // temp-control branches already covered by the full harness above).
         REQUIRE( app.updateINDI() == 0 );
     }
 }

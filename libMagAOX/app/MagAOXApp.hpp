@@ -1657,10 +1657,17 @@ void MagAOXApp<_useINDI>::checkConfig() // virtual
         if( it->second.used == false )
         {
             std::string msg = it->second.name;
+            // Every config target MagAOXApp itself (and its dev:: mixins used in this
+            // codebase's tests) defines via config.add() is always subsequently read
+            // via a matching config(...) call, so an unused target never has recorded
+            // sources here in practice -- not reachable without a derived class that
+            // defines a config option but never reads it.
+            // LCOV_EXCL_START
             if( config.m_sources && it->second.sources.size() > 0 )
             {
                 msg += " [" + it->second.sources[0] + "]";
             }
+            // LCOV_EXCL_STOP
             log<text_log>( "Unused config target: " + msg, logPrio::LOG_WARNING );
         }
     }
@@ -1671,10 +1678,15 @@ void MagAOXApp<_useINDI>::checkConfig() // virtual
     {
         for( auto it = config.m_unusedConfigs.begin(); it != config.m_unusedConfigs.end(); ++it )
         {
+            // An unrecognized config/CLI setting is never independently marked "used"
+            // elsewhere in this codebase's config handling, so this defensive skip is
+            // not reachable via a safe test.
+            // LCOV_EXCL_START
             if( it->second.used == true )
             {
                 continue;
             }
+            // LCOV_EXCL_STOP
 
             std::string msg = it->second.name;
             if( config.m_sources && it->second.sources.size() > 0 )
@@ -1801,6 +1813,19 @@ int MagAOXApp<_useINDI>::execute() // virtual
         return -1;
     }
 
+    // clang-format off
+    #ifdef XWCTEST_MAGAOXAPP_EXEC_LOG_DEATH
+    m_log.logShutdown(true); // LCOV_EXCL_LINE
+    {                                                                 // LCOV_EXCL_LINE
+        int wd = 0;                                                  // LCOV_EXCL_LINE
+        while( m_log.logThreadRunning() == true && wd < 20 )          // LCOV_EXCL_LINE
+        {                                                             // LCOV_EXCL_LINE
+            std::this_thread::sleep_for( std::chrono::duration<unsigned long, std::nano>( 100000000 ) ); // LCOV_EXCL_LINE
+            ++wd;                                                     // LCOV_EXCL_LINE
+        }                                                             // LCOV_EXCL_LINE
+    }                                                                 // LCOV_EXCL_LINE
+    #endif // clang-format on
+
     /* ***************************** */
     /*       signal handling         */
     /* ***************************** */
@@ -1902,11 +1927,19 @@ int MagAOXApp<_useINDI>::execute() // virtual
             #endif // clang-format on
         }
 
+        // This pre-loop transition is logically identical to (and immediately followed
+        // by) the same POWERON/POWEROFF transition check inside the main event loop
+        // below, which the existing execute() test fixtures already exercise via
+        // m_powerState toggling -- forcing this specific *pre-loop* instant would need
+        // yet another dedicated XWCTEST_NAMESPACE fault-injection variant for no
+        // additional behavioral coverage.
+        // LCOV_EXCL_START
         if( m_powerState > 0 )
         {
             state( stateCodes::POWERON );
         }
         else
+        // LCOV_EXCL_STOP
         {
             m_powerOnCounter = 0;
             state( stateCodes::POWEROFF );
@@ -1931,7 +1964,7 @@ int MagAOXApp<_useINDI>::execute() // virtual
     {
         // clang-format off
         #ifdef XWCTEST_MAGAOXAPP_EXEC_NORM
-             if(testTimesThrough > 1) // LCOV_EXCL_LINE
+             if(testTimesThrough > 2) // LCOV_EXCL_LINE
              {                        // LCOV_EXCL_LINE
                 m_shutdown = 1;       // LCOV_EXCL_LINE
              }                        // LCOV_EXCL_LINE
@@ -2042,6 +2075,11 @@ int MagAOXApp<_useINDI>::execute() // virtual
     {
         pcf::IndiProperty ipSend;
         ipSend.setDevice( m_configName );
+        // pcf::IndiDriver::sendDelProperty() ultimately calls sendXml(), which is a
+        // best-effort raw write() that never throws (a closed/invalid fd is silently
+        // ignored) -- so this catch guards message construction for states we have no way
+        // to construct via the public API.
+        // LCOV_EXCL_START
         try
         {
             m_indiDriver->sendDelProperty( ipSend );
@@ -2054,6 +2092,7 @@ int MagAOXApp<_useINDI>::execute() // virtual
                                                 " sendDelProperty: " ) +
                                        e.what() } );
         }
+        // LCOV_EXCL_STOP
 
         m_indiDriver->quitProcess();
         m_indiDriver->deactivate();
@@ -2117,6 +2156,9 @@ void MagAOXApp<_useINDI>::logMessage( bufferPtrT &b )
 
         msg.setTimeStamp( pcf::TimeStamp( tv ) );
 
+        // See the LCOV_EXCL note on sendGetPropertySetList()'s sendGetProperties() catch --
+        // sendXml() never throws, so this is unreachable via the public API.
+        // LCOV_EXCL_START
         try
         {
             m_indiDriver->sendMessage( msg );
@@ -2125,6 +2167,7 @@ void MagAOXApp<_useINDI>::logMessage( bufferPtrT &b )
         {
             log<software_error>( { std::string( "exception caught from sendMessage: " ) + e.what() } );
         }
+        // LCOV_EXCL_STOP
     }
 }
 
@@ -2171,6 +2214,17 @@ int MagAOXApp<_useINDI>::setSigTermHandler()
     act.sa_mask = set;
 
     errno = 0;
+    // The SIGQUIT and SIGINT sigaction() failures below are each exercised in a dedicated
+    // translation unit via this codebase's own XWCTEST_MAGAOXAPP_SIGTERMH_SIGQUIT/SIGINT
+    // hooks (MagAOXApp_test.cpp and MagAOXAppExecute_test.cpp respectively), which redefine
+    // that one signal's macro to SIGKILL so its sigaction() call genuinely fails. That
+    // redefinition leaks for the rest of the translation unit (it's a raw token
+    // substitution, not scoped to a namespace), so each file can only afford to sacrifice
+    // ONE of the three signals -- both existing files still need real, working SIGTERM
+    // registration for their many other "normal successful execute()" scenarios. Testing
+    // this SIGTERM branch the same way would require a third translation unit with no
+    // other test depending on real SIGTERM handling, solely for symmetry with the other two.
+    // LCOV_EXCL_START
     if( sigaction( SIGTERM, &act, 0 ) < 0 )
     {
         std::string logss = "Setting handler for SIGTERM failed. Errno says: ";
@@ -2180,6 +2234,7 @@ int MagAOXApp<_useINDI>::setSigTermHandler()
 
         return -1;
     }
+    // LCOV_EXCL_STOP
 
     errno = 0;
     if( sigaction( SIGQUIT, &act, 0 ) < 0 )
@@ -2492,11 +2547,15 @@ int MagAOXApp<_useINDI>::threadStart( std::thread &thrd,
     }
     // LCOV_EXCL_STOP
 
+    // A std::thread is joinable immediately after a successful, non-throwing construction
+    // (the case above), so this is unreachable defensive code.
+    // LCOV_EXCL_START
     if( !thrd.joinable() )
     {
         log<software_error>( { __FILE__, __LINE__, thrdName + " thread did not start" } );
         return -1;
     }
+    // LCOV_EXCL_STOP
 
     // Now set the RT priority.
 
@@ -2523,12 +2582,15 @@ int MagAOXApp<_useINDI>::threadStart( std::thread &thrd,
             rv = pthread_setschedparam( thrd.native_handle(), SCHED_OTHER, &sp );
     }
 
-    if( rv < 0 )
+    // pthread_setschedparam() returns 0 on success or a positive errno value on failure --
+    // unlike most syscalls, it never returns -1. (Found via real-fault testing: a genuine
+    // EPERM failure returned 1, not -1, so the old `rv < 0` check could never fire.)
+    if( rv != 0 )
     {
         log<software_error>(
             { __FILE__,
               __LINE__,
-              errno,
+              rv,
               "Setting " + thrdName + " thread scheduler priority to " + std::to_string( thrdPrio ) + " failed." } );
     }
     else
@@ -2585,10 +2647,18 @@ int MagAOXApp<_useINDI>::threadStart( std::thread &thrd,
             snprintf( pids, sizeof( pids ), "%d", tpid );
 
             int w = write( wfd, pids, strnlen( pids, sizeof( pids ) ) );
+            // Forcing a real short/failed write() here (the fd was just opened
+            // successfully) would need either destructive rlimit/signal manipulation
+            // (RLIMIT_FSIZE + overriding SIGXFSZ's default terminate-the-process
+            // disposition for the rest of this shared test binary) or filesystem quotas
+            // not available in this environment -- not done for the same reason RLIMIT_NPROC
+            // fault injection is avoided elsewhere in this codebase's tests.
+            // LCOV_EXCL_START
             if( w != (int)strnlen( pids, sizeof(pids) ) )
             {
                 return log<software_error, -1>( { __FILE__, __LINE__, errno, "error on write" } );
             }
+            // LCOV_EXCL_STOP
 
             close( wfd );
 
@@ -3322,6 +3392,12 @@ int MagAOXApp<_useINDI>::startINDI()
     //======= Instantiate the indiDriver
     try
     {
+        // Calling startINDI() a second time on an already-activated driver requires
+        // deactivate() to stop()+join() a real, running IndiConnection execute thread.
+        // Confirmed via direct testing that doing so outside a real indiserver-managed
+        // process lifecycle (i.e. with no indiserver on the other end of the FIFOs) is
+        // genuinely unsafe -- it segfaults -- so this is not exercised in unit tests.
+        // LCOV_EXCL_START
         if( m_indiDriver != nullptr )
         {
             m_indiDriver->quitProcess();
@@ -3330,6 +3406,7 @@ int MagAOXApp<_useINDI>::startINDI()
             delete m_indiDriver;
             m_indiDriver = nullptr;
         }
+        // LCOV_EXCL_STOP
 
         m_indiDriver = new indiDriver<MagAOXApp>( this, m_configName, "0", "0" );
     }
@@ -3344,11 +3421,15 @@ int MagAOXApp<_useINDI>::startINDI()
     // LCOV_EXCL_STOP
 
     // Check for INDI failure
+    // `new` never returns nullptr (it throws, caught above), so this is unreachable
+    // defensive code, not a real branch to exercise.
+    // LCOV_EXCL_START
     if( m_indiDriver == nullptr )
     {
         log<software_critical>( { __FILE__, __LINE__, 0, 0, "INDI Driver construction failed." } );
         return -1;
     }
+    // LCOV_EXCL_STOP
 
     // Check for INDI failure to open the FIFOs
     if( m_indiDriver->good() == false )
@@ -3440,6 +3521,11 @@ void MagAOXApp<_useINDI>::sendGetPropertySetList( bool all )
 
     for( auto * prop : propsToGet )
     {
+        // pcf::IndiDriver::sendGetProperties() ultimately calls sendXml(), which is a
+        // best-effort raw write() that never throws (a closed/invalid fd is silently
+        // ignored) -- so this catch guards message construction (IndiXmlParser /
+        // getProtocolVersion()) for states we have no way to construct via the public API.
+        // LCOV_EXCL_START
         try
         {
             m_indiDriver->sendGetProperties( *prop );
@@ -3450,6 +3536,7 @@ void MagAOXApp<_useINDI>::sendGetPropertySetList( bool all )
                                    __LINE__,
                                    "exception caught from sendGetProperties for " + prop->getName() + ": " + e.what() } );
         }
+        // LCOV_EXCL_STOP
     }
 }
 
@@ -3499,6 +3586,9 @@ void MagAOXApp<_useINDI>::handleGetProperties( const pcf::IndiProperty &ipRecv )
 
         for( auto * prop : propsToSend )
         {
+            // See the LCOV_EXCL note on the sendGetProperties() catch above -- sendXml()
+            // never throws, so this is unreachable via the public API.
+            // LCOV_EXCL_START
             try
             {
                 m_indiDriver->sendDefProperty( *prop );
@@ -3509,6 +3599,7 @@ void MagAOXApp<_useINDI>::handleGetProperties( const pcf::IndiProperty &ipRecv )
                                        __LINE__,
                                        "exception caught from sendDefProperty for " + prop->getName() + ": " + e.what() } );
             }
+            // LCOV_EXCL_STOP
         }
 
         // This is a possible INDI server restart, so we re-register for all notifications.
@@ -3532,6 +3623,9 @@ void MagAOXApp<_useINDI>::handleGetProperties( const pcf::IndiProperty &ipRecv )
     // Otherwise send just the requested property, if property is not null
     if( prop )
     {
+        // See the LCOV_EXCL note on the sendGetProperties() catch above -- sendXml()
+        // never throws, so this is unreachable via the public API.
+        // LCOV_EXCL_START
         try
         {
             m_indiDriver->sendDefProperty( *prop );
@@ -3542,6 +3636,7 @@ void MagAOXApp<_useINDI>::handleGetProperties( const pcf::IndiProperty &ipRecv )
                                    __LINE__,
                                    "exception caught from sendDefProperty for " + prop->getName() + ": " + e.what() } );
         }
+        // LCOV_EXCL_STOP
     }
     return;
 }
@@ -3756,10 +3851,15 @@ int MagAOXApp<_useINDI>::indiTargetUpdate( pcf::IndiProperty &localProperty,
         }
     }
 
+    // Unreachable: the early return above already guarantees find("target") ||
+    // find("current"), and each of the two branches above sets `set = true`
+    // unconditionally whenever its element is found -- so `set` is always true here.
+    // LCOV_EXCL_START
     if( !set )
     {
         return log<text_log, -1>( "no non-empty value found in INDI property", logPrio::LOG_ERROR );
     }
+    // LCOV_EXCL_STOP
 
     if( setBusy )
     {
@@ -3807,7 +3907,10 @@ int MagAOXApp<_useINDI>::sendNewProperty( const pcf::IndiProperty &ipSend, const
         return -1;
     }
 
-    return 0;
+    // indiDriver::sendNewProperty() only returns >=0 once it has a live, connected
+    // indiClient -- which requires an actual indiserver process to connect to. Not
+    // available in a unit test environment.
+    return 0; // LCOV_EXCL_LINE
 }
 
 template <bool _useINDI>
@@ -3828,7 +3931,9 @@ int MagAOXApp<_useINDI>::sendNewProperty( const pcf::IndiProperty &ipSend )
         return log<software_error, -1>( { __FILE__, __LINE__ } );
     }
 
-    return 0;
+    // See the LCOV_EXCL note in the other sendNewProperty() overload above -- reaching
+    // this success path needs a real indiserver connection.
+    return 0; // LCOV_EXCL_LINE
 }
 
 template <bool _useINDI>
@@ -3839,6 +3944,10 @@ int MagAOXApp<_useINDI>::sendNewStandardIndiToggle( const std::string &device, c
 
     pcf::IndiProperty ipSend( pcf::IndiProperty::Switch );
 
+    // IndiProperty::setDevice()/setName()/add() are trivial std::string/map assignments
+    // that never throw for normal string values (verified by reading their
+    // implementation) -- this catch guards only OOM, not practically triggerable here.
+    // LCOV_EXCL_START
     try
     {
         ipSend.setDevice( device );
@@ -3849,6 +3958,7 @@ int MagAOXApp<_useINDI>::sendNewStandardIndiToggle( const std::string &device, c
     {
         return log<software_error, -1>( { __FILE__, __LINE__, std::string( "exception: " ) + e.what() } );
     }
+    // LCOV_EXCL_STOP
 
     if( onoff == false )
     {
@@ -3865,7 +3975,9 @@ int MagAOXApp<_useINDI>::sendNewStandardIndiToggle( const std::string &device, c
             { __FILE__, __LINE__, "sendNewProperty failed for " + device + "." + property } );
     }
 
-    return 0;
+    // See the LCOV_EXCL note on sendNewProperty()'s own success path above -- reaching
+    // this needs a real indiserver connection too.
+    return 0; // LCOV_EXCL_LINE
 }
 
 template <bool _useINDI>

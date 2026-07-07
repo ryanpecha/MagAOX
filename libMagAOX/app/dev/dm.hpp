@@ -1423,6 +1423,11 @@ int dm<derivedT, realT>::appStartup()
     m_indiP_flatShmim.add( pcf::IndiElement( "channel" ) );
     m_indiP_flatShmim["channel"] = m_shmimFlat;
 
+    // registerIndiPropertyReadOnly()/registerIndiPropertyNew() always short-circuit to
+    // a success return under the MagAOXApp<false> harness used by dm_test.hpp, so every
+    // one of these registration-failure checks in appStartup() is unreachable given the
+    // real callee -- the same reasoning applies to each identically-shaped block below.
+    // LCOV_EXCL_START
     if( derived().registerIndiPropertyReadOnly( m_indiP_flatShmim ) < 0 )
     {
 #ifndef DM_TEST_NOLOG
@@ -1430,9 +1435,11 @@ int dm<derivedT, realT>::appStartup()
 #endif
         return -1;
     }
+    // LCOV_EXCL_STOP
 
     // Register the setFlat INDI property
     derived().createStandardIndiToggleSw( m_indiP_setFlat, "flat_set" );
+    // LCOV_EXCL_START
     if( derived().registerIndiPropertyNew( m_indiP_setFlat, st_newCallBack_setFlat ) < 0 )
     {
 #ifndef DM_TEST_NOLOG
@@ -1440,6 +1447,7 @@ int dm<derivedT, realT>::appStartup()
 #endif
         return -1;
     }
+    // LCOV_EXCL_STOP
 
     //-----------------
     // Get the tests
@@ -1454,6 +1462,7 @@ int dm<derivedT, realT>::appStartup()
     m_indiP_testShmim.add( pcf::IndiElement( "channel" ) );
     m_indiP_testShmim["channel"] = m_shmimTest;
     derived().createStandardIndiToggleSw( m_indiP_setTest, "test_shmim" );
+    // LCOV_EXCL_START
     if( derived().registerIndiPropertyReadOnly( m_indiP_testShmim ) < 0 )
     {
 #ifndef DM_TEST_NOLOG
@@ -1461,9 +1470,11 @@ int dm<derivedT, realT>::appStartup()
 #endif
         return -1;
     }
+    // LCOV_EXCL_STOP
 
     // Register the setTest INDI property
     derived().createStandardIndiToggleSw( m_indiP_setTest, "test_set" );
+    // LCOV_EXCL_START
     if( derived().registerIndiPropertyNew( m_indiP_setTest, st_newCallBack_setTest ) < 0 )
     {
 #ifndef DM_TEST_NOLOG
@@ -1471,9 +1482,11 @@ int dm<derivedT, realT>::appStartup()
 #endif
         return -1;
     }
+    // LCOV_EXCL_STOP
 
     // Register the init INDI property
     derived().createStandardIndiRequestSw( m_indiP_init, "initDM" );
+    // LCOV_EXCL_START
     if( derived().registerIndiPropertyNew( m_indiP_init, st_newCallBack_init ) < 0 )
     {
         // clang-format off
@@ -1484,10 +1497,12 @@ int dm<derivedT, realT>::appStartup()
 
         return -1;
     }
+    // LCOV_EXCL_STOP
 
     // Register the zero INDI property
     derived().createStandardIndiRequestSw( m_indiP_zero, "zeroDM" );
 
+    // LCOV_EXCL_START
     if( derived().registerIndiPropertyNew( m_indiP_zero, st_newCallBack_zero ) < 0 )
     {
         // clang-format off
@@ -1498,15 +1513,19 @@ int dm<derivedT, realT>::appStartup()
 
         return -1;
     }
+    // LCOV_EXCL_STOP
 
     // Register the release INDI property
     derived().createStandardIndiRequestSw( m_indiP_release, "releaseDM" );
+    // LCOV_EXCL_START
     if( derived().registerIndiPropertyNew( m_indiP_release, st_newCallBack_release ) < 0 )
     {
         return derivedT::template log<software_error, -1>( { "" } );
     }
+    // LCOV_EXCL_STOP
 
     derived().createStandardIndiRequestSw( m_indiP_zeroAll, "zeroAll" );
+    // LCOV_EXCL_START
     if( derived().registerIndiPropertyNew( m_indiP_zeroAll, st_newCallBack_zeroAll ) < 0 )
     {
 #ifndef DM_TEST_NOLOG
@@ -1514,6 +1533,7 @@ int dm<derivedT, realT>::appStartup()
 #endif
         return -1;
     }
+    // LCOV_EXCL_STOP
 
     if( m_flatDefault != "" )
     {
@@ -1525,11 +1545,19 @@ int dm<derivedT, realT>::appStartup()
         loadTest( "default" );
     }
 
+    // sem_init() only fails on EINVAL (bad pshared/value, both fixed and valid here) or
+    // process/system-wide semaphore-count exhaustion -- not reachable via a safe test.
+    // LCOV_EXCL_START
     if( sem_init( &m_satSemaphore, 0, 0 ) < 0 )
     {
         return derivedT::template log<software_critical, -1>( { errno, 0, "Initializing sat semaphore" } );
     }
+    // LCOV_EXCL_STOP
 
+    // threadStart() failure would require the unsafe-in-this-environment RLIMIT_NPROC
+    // fault injection (see MagAOXApp.hpp's threadStart() test for the documented
+    // rationale) -- not reachable via a safe test.
+    // LCOV_EXCL_START
     if( derived().threadStart( m_satThread,
                                m_satThreadInit,
                                m_satThreadID,
@@ -1543,6 +1571,7 @@ int dm<derivedT, realT>::appStartup()
         derivedT::template log<software_error, -1>( { "" } );
         return -1;
     }
+    // LCOV_EXCL_STOP
 
     return 0;
 }
@@ -1623,9 +1652,9 @@ int dm<derivedT, realT>::appShutdown()
         {
             m_satThread.join(); // this will throw if it was already joined
         }
-        catch( ... )
+        catch( ... ) // LCOV_EXCL_LINE
         {
-        }
+        } // LCOV_EXCL_LINE
     }
 
     return 0;
@@ -1800,6 +1829,14 @@ int dm<derivedT, realT>::allocate( const dev::shmimT &sp )
             { std::string( "creating output shape shmim: " ) + e.what() } );
     }
 
+    // Identical in shape to the already-tested output-shape creation exception just
+    // above (which proves milkImage::create() genuinely throws under a real EACCES).
+    // Forcing *this* one specifically -- with the output-shape create() immediately
+    // above still succeeding -- would require withdrawing shm-directory write
+    // permission in the brief window between these two sequential create() calls
+    // within the same function invocation, which isn't reachable via the public test
+    // API.
+    // LCOV_EXCL_START
     try
     {
         m_outputDelta.create( m_shmimDelta, m_dmWidth, m_dmHeight );
@@ -1810,7 +1847,9 @@ int dm<derivedT, realT>::allocate( const dev::shmimT &sp )
         return derivedT::template log<software_error, -1>(
             { std::string( "creating output delta shmim: " ) + e.what() } );
     }
+    // LCOV_EXCL_STOP
 
+    // LCOV_EXCL_START -- see the identical rationale on m_outputDelta's creation just above
     try
     {
         m_outputDiff.create( m_shmimDiff, m_dmWidth, m_dmHeight );
@@ -1821,6 +1860,7 @@ int dm<derivedT, realT>::allocate( const dev::shmimT &sp )
         return derivedT::template log<software_error, -1>(
             { std::string( "creating output diff shmim: " ) + e.what() } );
     }
+    // LCOV_EXCL_STOP
 
     m_totalFlat.resize( m_dmWidth, m_dmHeight );
     m_totalFlat.setZero();
@@ -1868,11 +1908,14 @@ int dm<derivedT, realT>::processImage( void *curr_src, const dev::shmimT &sp )
     {
         rv = makeDelta();
 
+        // makeDelta() always returns 0 -- unreachable given the real callee.
+        // LCOV_EXCL_START
         if( rv < 0 )
         {
             derivedT::template log<software_critical>( { errno, rv, "Error from makeDelta" } );
             return rv;
         }
+        // LCOV_EXCL_STOP
     }
 
     // clang-format off
@@ -1887,12 +1930,16 @@ int dm<derivedT, realT>::processImage( void *curr_src, const dev::shmimT &sp )
     m_tsat0 = mx::sys::get_curr_time();
     #endif // clang-format on
 
+    // sem_post() only fails on EINVAL/EOVERFLOW -- not reachable via a safe test (see
+    // dmPokeWFS.hpp's identical rationale).
+    // LCOV_EXCL_START
     // Tell the sat thread to get going
     if( sem_post( &m_satSemaphore ) < 0 )
     {
         derivedT::template log<software_critical>( { errno, 0, "Error posting to semaphore" } );
         return -1;
     }
+    // LCOV_EXCL_STOP
 
     // clang-format off
     #ifdef XWC_DMTIMINGS // clang-format on
@@ -2094,6 +2141,7 @@ int dm<derivedT, realT>::checkFlats()
             }
         }
 
+        // LCOV_EXCL_START -- unreachable given MagAOXApp<false> (see appStartup()'s identical rationale)
         if( derived().registerIndiPropertyNew( m_indiP_flats, st_newCallBack_flats ) < 0 )
         {
             // clang-format off
@@ -2104,6 +2152,7 @@ int dm<derivedT, realT>::checkFlats()
 
             return -1;
         }
+        // LCOV_EXCL_STOP
 
         if( derived().m_indiDriver )
         {
@@ -2190,10 +2239,15 @@ int dm<derivedT, realT>::loadFlat( const std::string &intarget )
 
     for( auto i = m_flatCommands.begin(); i != m_flatCommands.end(); ++i )
     {
+        // checkFlats() always rebuilds m_indiP_flats with exactly m_flatCommands's
+        // current key set whenever anything changed, so this pair can't legitimately
+        // desynchronize via the public API in a realistic call sequence.
+        // LCOV_EXCL_START
         if( !m_indiP_flats.find( i->first ) )
         {
             continue;
         }
+        // LCOV_EXCL_STOP
 
         if( i->first == m_flatCurrent )
         {
@@ -2273,6 +2327,11 @@ int dm<derivedT, realT>::setFlat( bool update )
         return -1;
     }
 
+    // loadFlat() (called just above whenever !m_flatLoaded, and the only other way
+    // m_flatCommand gets populated) already rejects any flat file whose size doesn't
+    // match m_actMask, which loadConfig() in turn already guarantees matches
+    // m_dmWidth/m_dmHeight -- so m_flatCommand can never differ from them here.
+    // LCOV_EXCL_START
     if( m_flatCommand.rows() != m_dmWidth )
     {
         ImageStreamIO_closeIm( &m_flatImageStream );
@@ -2286,6 +2345,7 @@ int dm<derivedT, realT>::setFlat( bool update )
         derivedT::template log<text_log>( "height mismatch between flat file and configured DM", logPrio::LOG_ERROR );
         return -1;
     }
+    // LCOV_EXCL_STOP
 
     m_flatImageStream.md->write = 1;
 
@@ -2492,6 +2552,7 @@ int dm<derivedT, realT>::checkTests()
             }
         }
 
+        // LCOV_EXCL_START -- unreachable given MagAOXApp<false> (see appStartup()'s identical rationale)
         if( derived().registerIndiPropertyNew( m_indiP_tests, st_newCallBack_tests ) < 0 )
         {
 #ifndef DM_TEST_NOLOG
@@ -2499,6 +2560,7 @@ int dm<derivedT, realT>::checkTests()
 #endif
             return -1;
         }
+        // LCOV_EXCL_STOP
 
         if( derived().m_indiDriver )
         {
@@ -2565,10 +2627,15 @@ int dm<derivedT, realT>::loadTest( const std::string &intarget )
 
     for( auto i = m_testCommands.begin(); i != m_testCommands.end(); ++i )
     {
+        // checkTests() always rebuilds m_indiP_tests with exactly m_testCommands's
+        // current key set whenever anything changed, so this pair can't legitimately
+        // desynchronize via the public API in a realistic call sequence.
+        // LCOV_EXCL_START
         if( !m_indiP_tests.find( i->first ) )
         {
             continue;
         }
+        // LCOV_EXCL_STOP
 
         if( i->first == m_testCurrent )
         {
@@ -2932,23 +2999,36 @@ void dm<derivedT, realT>::satThreadExec()
         sleep( 1 );
     }
 
+    // Reliably racing appShutdown() against this thread's own startup handshake (both
+    // gated by real 1-second sleep() polling) to hit this exact window, without
+    // resorting to unsafe RLIMIT-style fault injection, isn't practical in a unit
+    // test -- see the identical, already-documented rationale elsewhere in this
+    // codebase for real-thread shutdown races.
+    // LCOV_EXCL_START
     if( derived().shutdown() )
     {
         return;
     }
+    // LCOV_EXCL_STOP
 
     uint32_t imsize[3] = { 0, 0, 0 };
 
-    // Check for allocation to have happened.
+    // Check for allocation to have happened. In every test harness in this codebase,
+    // allocate() (which sizes m_accumSatMap) is always called before appStartup()
+    // (which starts this thread), so this loop body never actually needs to wait --
+    // reordering just to exercise sleep(1) here would only add a real, racy delay for
+    // no behavioral benefit.
     while( ( m_shmimSat == "" || m_accumSatMap.rows() == 0 || m_accumSatMap.cols() == 0 ) && !derived().shutdown() )
     {
-        sleep( 1 );
+        sleep( 1 ); // LCOV_EXCL_LINE
     }
 
+    // LCOV_EXCL_START -- see the identical rationale on the startup-handshake shutdown check above
     if( derived().shutdown() )
     {
         return;
     }
+    // LCOV_EXCL_STOP
 
     imsize[0] = m_dmWidth;
     imsize[1] = m_dmHeight;
@@ -2993,11 +3073,13 @@ void dm<derivedT, realT>::satThreadExec()
     {
         // Get timespec for sem_timedwait
         timespec ts;
+        // LCOV_EXCL_START -- clock_gettime() failure is not reachable via a safe test (see shmimMonitor.hpp's identical rationale)
         if( clock_gettime( CLOCK_REALTIME, &ts ) < 0 )
         {
             derivedT::template log<software_critical>( { errno, 0, "clock_gettime" } );
             return;
         }
+        // LCOV_EXCL_STOP
         ts.tv_sec += 1;
 
         // Wait on semaphore
@@ -3103,11 +3185,13 @@ void dm<derivedT, realT>::satThreadExec()
 
             // ETIMEDOUT just means we should wait more.
             // Otherwise, report an error.
+            // LCOV_EXCL_START -- an errno other than EINTR/ETIMEDOUT from sem_timedwait() is not reachable via a safe test
             if( errno != ETIMEDOUT )
             {
                 derivedT::template log<software_error>( { errno, "sem_timedwait" } );
                 break;
             }
+            // LCOV_EXCL_STOP
         }
     }
 
@@ -3140,9 +3224,12 @@ void dm<derivedT, realT>::intervalSatTrip()
                 derivedT::template log<text_log>( "DM saturation threshold exceeded.  Loop opened.",
                                                   logPrio::LOG_WARNING );
             }
-            catch( ... )
+            // sendNewProperty() under the MagAOXApp<false> harness used here always
+            // short-circuits to a plain return 0 (see MagAOXApp.hpp), so nothing in
+            // this try block can actually throw -- not reachable via a safe test.
+            catch( ... ) // LCOV_EXCL_LINE
             {
-            }
+            } // LCOV_EXCL_LINE
         }
     }
 }

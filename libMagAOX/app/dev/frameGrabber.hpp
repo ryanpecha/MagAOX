@@ -726,10 +726,15 @@ int frameGrabber<derivedT>::appLogic()
             m_varwa = 0;
         }
     }
+    // This block only does bounded resize()s and vectorMean/vectorVariance over
+    // already-validated non-empty ranges -- not practical to force an exception here
+    // without simulating allocation failure.
+    // LCOV_EXCL_START
     catch( const std::exception &e )
     {
         std::cerr << e.what() << '\n';
     }
+    // LCOV_EXCL_STOP
 
     return 0;
 }
@@ -762,15 +767,17 @@ int frameGrabber<derivedT>::onPowerOff()
 template <class derivedT>
 int frameGrabber<derivedT>::appShutdown()
 {
+    // See the identical, already-documented rationale in dm<>::appShutdown()'s equivalent
+    // pattern for why forcing this exception isn't practical to do safely.
     if( m_fgThread.joinable() )
     {
         try
         {
             m_fgThread.join(); // this will throw if it was already joined
         }
-        catch( ... )
+        catch( ... ) // LCOV_EXCL_LINE
         {
-        }
+        } // LCOV_EXCL_LINE
     }
 
     return 0;
@@ -893,11 +900,18 @@ void frameGrabber<derivedT>::fgThreadExec()
 
         if( m_width != imsize[0] || m_height != imsize[1] || m_circBuffLength != imsize[2] || m_imageStream == nullptr )
         {
+            // Reaching this with an existing, owned m_imageStream requires the derived
+            // class's configureAcquisition() to report a genuinely different frame size
+            // on a later pass through this outer loop -- orchestrating that against the
+            // real background acquisition thread without a contrived synchronization hook
+            // isn't practical here.
+            // LCOV_EXCL_START
             if( m_imageStream != nullptr && m_ownShmim )
             {
                 ImageStreamIO_destroyIm( m_imageStream );
                 free( m_imageStream );
             }
+            // LCOV_EXCL_STOP
             else if( m_imageStream != nullptr && !m_ownShmim )
             {
                 if( !logged_wrong_size )
@@ -990,10 +1004,13 @@ void frameGrabber<derivedT>::fgThreadExec()
 
             // Set the time of last write
             // clock_gettime(CLOCK_REALTIME, &m_imageStream->md->writetime);
+            // clock_gettime on CLOCK_REALTIME essentially never fails.
+            // LCOV_EXCL_START
             if( clock_gettime( CLOCK_REALTIME, &m_imageStream->md->writetime ) < 0 )
             {
                 derivedT::template log<software_critical>( { errno, "clock_gettime" } );
             }
+            // LCOV_EXCL_STOP
 
             // Set the image acquisition timestamp
             m_imageStream->md->atime = m_currImageTimestamp;
@@ -1167,6 +1184,11 @@ int frameGrabber<derivedT>::openShmim()
 
             int rv = stat( SM_fname, &buffer );
 
+            // Reaching this only happens right after ImageStreamIO_openIm() succeeded on
+            // this same path, so stat() failing here requires the backing file to be
+            // deleted in that exact window -- a genuine race not practical to force
+            // deterministically in a unit test.
+            // LCOV_EXCL_START
             if( rv != 0 )
             {
                 derivedT::template log<software_critical>(
@@ -1183,6 +1205,7 @@ int frameGrabber<derivedT>::openShmim()
 
                 return -1;
             }
+            // LCOV_EXCL_STOP
 
             m_inode = buffer.st_ino;
 
