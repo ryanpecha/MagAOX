@@ -385,6 +385,9 @@ int dssShutter<derivedT>::appStartup()
    act.sa_mask = set;
 
    errno = 0;
+   // sigaction() fails only for an invalid signal number or invalid flags, both fixed and
+   // valid here -- not reachable without corrupting process state.
+   // LCOV_EXCL_START
    if( sigaction(SIGUSR1, &act, 0) < 0 )
    {
       std::string logss = "Setting handler for SIGUSR1 failed. Errno says: ";
@@ -394,6 +397,7 @@ int dssShutter<derivedT>::appStartup()
 
       return -1;
    }
+   // LCOV_EXCL_STOP
 
    return 0;
 
@@ -446,15 +450,19 @@ int dssShutter<derivedT>::appShutdown()
       pthread_kill(m_shutThread.native_handle(), SIGUSR1);
    }
 
+   // Reliably racing a signal against a real thread's blocking wait to force the
+   // already-joined exception here (without risking an abort from a subsequently
+   // reaped/recycled thread ID) isn't practical -- see the identical, already-documented
+   // rationale in dm<>::appShutdown()'s equivalent pattern.
    if(m_openThread.joinable())
    {
       try
       {
          m_openThread.join(); //this will throw if it was already joined
       }
-      catch(...)
+      catch(...) // LCOV_EXCL_LINE
       {
-      }
+      } // LCOV_EXCL_LINE
    }
 
    if(m_shutThread.joinable())
@@ -463,9 +471,9 @@ int dssShutter<derivedT>::appShutdown()
       {
          m_shutThread.join(); //this will throw if it was already joined
       }
-      catch(...)
+      catch(...) // LCOV_EXCL_LINE
       {
-      }
+      } // LCOV_EXCL_LINE
    }
    return 0;
 }

@@ -273,7 +273,11 @@ struct software_log : public flatbuffer_log
         }
         else
         {
-            ret += "????";
+            // file is a required const char* in every messageT constructor, always passed
+            // to builder.CreateString() -- file() is never nullptr. (Passing a null literal
+            // for file would itself be undefined behavior in CreateString, so this can't be
+            // exercised safely either.)
+            ret += "????"; // LCOV_EXCL_LINE
         }
 
         ret += std::format( " LINE: {}", rgs->line() );

@@ -20,6 +20,11 @@ struct outletControllerTest : public MagAOXApp<false>, dev::outletController<out
 {
    std::vector<double> m_timestamps;
 
+   /// If set to a valid outlet number, turnOutletOn/turnOutletOff will fail (return -1)
+   /// for that outlet number only.  Used to simulate a hardware failure to exercise
+   /// the error-return paths in turnChannelOn/turnChannelOff.  -1 (default) means never fail.
+   int m_failOutlet {-1};
+
    outletControllerTest()
         : MagAOX::app::MagAOXApp<false>( "", false )
    {
@@ -66,6 +71,8 @@ struct outletControllerTest : public MagAOXApp<false>, dev::outletController<out
 
    int turnOutletOn( int outletNum )
    {
+      if(m_failOutlet == outletNum) return -1;
+
       m_outletStates[outletNum] = 2;
       mx::sys::nanoSleep(1);
       m_timestamps[outletNum] = mx::sys::get_curr_time();
@@ -75,6 +82,8 @@ struct outletControllerTest : public MagAOXApp<false>, dev::outletController<out
 
    int turnOutletOff( int outletNum )
    {
+      if(m_failOutlet == outletNum) return -1;
+
       m_outletStates[outletNum] = 0;
       mx::sys::nanoSleep(1);
       m_timestamps[outletNum] = mx::sys::get_curr_time();
@@ -1702,6 +1711,347 @@ SCENARIO( "outletController Operation with delays", "[outletController]" )
       }
    }
    std::cout << "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n";
+}
+
+/// outletController Configuration Error Handling
+/**
+ * \ingroup outletController_tests
+ *
+ * Exercises the error-return branches of loadConfig().
+ */
+SCENARIO( "outletController Configuration Error Handling", "[outletController]" )
+{
+   GIVEN("a channel section with the outlet keyword present but no value")
+   {
+      mx::app::writeConfigFile( "/tmp/outletController_test.conf", {"channel1"},
+                                                        {"outlet"},
+                                                        {""} );
+
+      mx::app::appConfigurator config;
+      config.readConfig("/tmp/outletController_test.conf");
+
+      outletControllerTest pdt;
+      int rv = pdt.setupConfig(config);
+      REQUIRE( rv == 0);
+
+      WHEN("loadConfig is called")
+      {
+         rv = pdt.loadConfig(config);
+         REQUIRE( rv == -1);
+      }
+   }
+
+   GIVEN("a channel section with an outlet number that is out of range")
+   {
+      //pdt has 4 outlets (0-3), so outlet 10 is invalid
+      mx::app::writeConfigFile( "/tmp/outletController_test.conf", {"channel1"},
+                                                        {"outlet"},
+                                                        {"10"} );
+
+      mx::app::appConfigurator config;
+      config.readConfig("/tmp/outletController_test.conf");
+
+      outletControllerTest pdt;
+      int rv = pdt.setupConfig(config);
+      REQUIRE( rv == 0);
+
+      WHEN("loadConfig is called")
+      {
+         rv = pdt.loadConfig(config);
+         REQUIRE( rv == -1);
+      }
+   }
+
+   GIVEN("a channel section with a mismatched onOrder size")
+   {
+      mx::app::writeConfigFile( "/tmp/outletController_test.conf", {"channel1", "channel1"},
+                                                        {"outlet",   "onOrder"},
+                                                        {"0,1",      "0"} );
+
+      mx::app::appConfigurator config;
+      config.readConfig("/tmp/outletController_test.conf");
+
+      outletControllerTest pdt;
+      int rv = pdt.setupConfig(config);
+      REQUIRE( rv == 0);
+
+      WHEN("loadConfig is called")
+      {
+         rv = pdt.loadConfig(config);
+         REQUIRE( rv == -1);
+      }
+   }
+
+   GIVEN("a channel section with a mismatched offOrder size")
+   {
+      mx::app::writeConfigFile( "/tmp/outletController_test.conf", {"channel1", "channel1"},
+                                                        {"outlet",   "offOrder"},
+                                                        {"0,1",      "0"} );
+
+      mx::app::appConfigurator config;
+      config.readConfig("/tmp/outletController_test.conf");
+
+      outletControllerTest pdt;
+      int rv = pdt.setupConfig(config);
+      REQUIRE( rv == 0);
+
+      WHEN("loadConfig is called")
+      {
+         rv = pdt.loadConfig(config);
+         REQUIRE( rv == -1);
+      }
+   }
+
+   GIVEN("a channel section with a mismatched onDelays size")
+   {
+      mx::app::writeConfigFile( "/tmp/outletController_test.conf", {"channel1", "channel1"},
+                                                        {"outlet",   "onDelays"},
+                                                        {"0,1",      "100"} );
+
+      mx::app::appConfigurator config;
+      config.readConfig("/tmp/outletController_test.conf");
+
+      outletControllerTest pdt;
+      int rv = pdt.setupConfig(config);
+      REQUIRE( rv == 0);
+
+      WHEN("loadConfig is called")
+      {
+         rv = pdt.loadConfig(config);
+         REQUIRE( rv == -1);
+      }
+   }
+
+   GIVEN("a channel section with a mismatched offDelays size")
+   {
+      mx::app::writeConfigFile( "/tmp/outletController_test.conf", {"channel1", "channel1"},
+                                                        {"outlet",   "offDelays"},
+                                                        {"0,1",      "100"} );
+
+      mx::app::appConfigurator config;
+      config.readConfig("/tmp/outletController_test.conf");
+
+      outletControllerTest pdt;
+      int rv = pdt.setupConfig(config);
+      REQUIRE( rv == 0);
+
+      WHEN("loadConfig is called")
+      {
+         rv = pdt.loadConfig(config);
+         REQUIRE( rv == -1);
+      }
+   }
+}
+
+/// outletController updateOutletStates
+/**
+ * \ingroup outletController_tests
+ *
+ * Exercises the default updateOutletStates() implementation, both the
+ * success path (all outlets update cleanly) and the error path (an outlet
+ * reports an error, which should short-circuit the loop).
+ */
+SCENARIO( "outletController updateOutletStates default implementation", "[outletController]" )
+{
+   GIVEN("a controller with 4 outlets, all in a valid state")
+   {
+      outletControllerTest pdt;
+      pdt.setNumberOfOutlets(4);
+
+      WHEN("updateOutletStates is called and all outlets report valid states")
+      {
+         int rv = pdt.updateOutletStates();
+         REQUIRE( rv == 0);
+      }
+
+      WHEN("updateOutletStates is called and an outlet reports an error")
+      {
+         pdt.m_outletStates[2] = -7;
+         int rv = pdt.updateOutletStates();
+         REQUIRE( rv == -7);
+         pdt.m_outletStates[2] = 0; //reset
+      }
+   }
+}
+
+/// outletController turnChannelOn/turnChannelOff edge cases
+/**
+ * \ingroup outletController_tests
+ *
+ * Exercises the branches of turnChannelOn/turnChannelOff that are not hit
+ * by ordinary operation: the null-mutex fallback, the already-on/already-off
+ * no-ops, the state-delay skip logic, and the outlet-error return paths.
+ */
+SCENARIO( "outletController turnChannelOn/turnChannelOff edge cases", "[outletController]" )
+{
+   GIVEN("a config file with 2 channels for 4 outlets")
+   {
+      mx::app::writeConfigFile( "/tmp/outletController_test.conf", {"channel1",  "channel2" },
+                                                        {"outlet",   "outlet"   },
+                                                        {"0,1",      "2,3"   } );
+
+      mx::app::appConfigurator config;
+      config.readConfig("/tmp/outletController_test.conf");
+
+      outletControllerTest pdt;
+      pdt.setupConfig(config);
+      pdt.loadConfig(config);
+
+      WHEN("the channel mutex is null")
+      {
+         //Force the null-mutex fallback path (channelSpec::m_mutex).  The underlying
+         //mutex is still owned and deleted via m_channelMutexes, so this is safe.
+         pdt.m_channels["channel1"].m_mutex = nullptr;
+
+         int rv = pdt.turnChannelOn("channel1");
+         REQUIRE( rv == 0 );
+         REQUIRE( pdt.channelState("channel1") == 2 );
+
+         pdt.m_channels["channel1"].m_mutex = nullptr;
+         rv = pdt.turnChannelOff("channel1");
+         REQUIRE( rv == 0 );
+         REQUIRE( pdt.channelState("channel1") == 0 );
+      }
+
+      WHEN("turning on a channel that is already on")
+      {
+         pdt.turnChannelOn("channel1");
+         REQUIRE( pdt.channelState("channel1") == 2 );
+
+         int rv = pdt.turnChannelOn("channel1");
+         REQUIRE( rv == 0 );
+         REQUIRE( pdt.channelState("channel1") == 2 );
+      }
+
+      WHEN("turning off a channel that is already off")
+      {
+         REQUIRE( pdt.channelState("channel1") == 0 );
+
+         int rv = pdt.turnChannelOff("channel1");
+         REQUIRE( rv == 0 );
+         REQUIRE( pdt.channelState("channel1") == 0 );
+      }
+
+      WHEN("the state delay has not elapsed when turning a channel on")
+      {
+         pdt.m_stateDelay = 5.0; //large delay so it won't elapse during the test
+
+         //First transition: default m_stateTime is old, so this proceeds normally.
+         int rv = pdt.turnChannelOn("channel1");
+         REQUIRE( rv == 0 );
+         REQUIRE( pdt.channelState("channel1") == 2 );
+
+         //Force the channel to appear off without going through turnChannelOff,
+         //so m_stateTime remains recent (i.e. within the delay window).
+         pdt.m_outletStates[0] = 0;
+         pdt.m_outletStates[1] = 0;
+         REQUIRE( pdt.channelState("channel1") == 0 );
+
+         //Now attempting to turn it on again should be skipped by the delay logic.
+         rv = pdt.turnChannelOn("channel1");
+         REQUIRE( rv == 0 );
+         REQUIRE( pdt.outletState(0) == 0 ); //unchanged -- turnOutletOn was not actually called
+         REQUIRE( pdt.outletState(1) == 0 );
+      }
+
+      WHEN("the state delay has not elapsed when turning a channel off")
+      {
+         pdt.m_stateDelay = 5.0; //large delay so it won't elapse during the test
+
+         //Turn the channel on -- this sets m_stateTime to now.
+         int rv = pdt.turnChannelOn("channel1");
+         REQUIRE( rv == 0 );
+         REQUIRE( pdt.channelState("channel1") == 2 );
+
+         //Immediately attempting to turn it off should be skipped by the delay logic.
+         rv = pdt.turnChannelOff("channel1");
+         REQUIRE( rv == 0 );
+         REQUIRE( pdt.channelState("channel1") == 2 ); //unchanged -- still on
+      }
+
+      WHEN("the first outlet fails to turn on")
+      {
+         pdt.m_failOutlet = 0; //channel1's first outlet
+
+         int rv = pdt.turnChannelOn("channel1");
+         REQUIRE( rv == -1 );
+
+         pdt.m_failOutlet = -1; //reset
+      }
+
+      WHEN("a subsequent outlet fails to turn on")
+      {
+         pdt.m_failOutlet = 1; //channel1's second outlet
+
+         int rv = pdt.turnChannelOn("channel1");
+         REQUIRE( rv == -1 );
+         REQUIRE( pdt.outletState(0) == 2 ); //first outlet succeeded before the failure
+
+         pdt.m_failOutlet = -1; //reset
+      }
+
+      WHEN("the first outlet fails to turn off")
+      {
+         pdt.turnChannelOn("channel1");
+         REQUIRE( pdt.channelState("channel1") == 2 );
+
+         pdt.m_failOutlet = 0; //channel1's first outlet
+
+         int rv = pdt.turnChannelOff("channel1");
+         REQUIRE( rv == -1 );
+
+         pdt.m_failOutlet = -1; //reset
+      }
+
+      WHEN("a subsequent outlet fails to turn off")
+      {
+         pdt.turnChannelOn("channel1");
+         REQUIRE( pdt.channelState("channel1") == 2 );
+
+         pdt.m_failOutlet = 1; //channel1's second outlet
+
+         int rv = pdt.turnChannelOff("channel1");
+         REQUIRE( rv == -1 );
+         REQUIRE( pdt.outletState(0) == 0 ); //first outlet succeeded before the failure
+
+         pdt.m_failOutlet = -1; //reset
+      }
+   }
+}
+
+/// outletController stateIntToString
+/**
+ * \ingroup outletController_tests
+ *
+ * Exercises all four branches (Off/Int/On/Unk) of the free function
+ * MagAOX::app::dev::stateIntToString, which is compiled into libMagAOX.a
+ * from outletController.cpp (not header-only).
+ */
+SCENARIO( "outletController stateIntToString", "[outletController]" )
+{
+   GIVEN("the four possible outlet state values")
+   {
+      WHEN("the state is OUTLET_STATE_OFF")
+      {
+         REQUIRE( dev::stateIntToString(OUTLET_STATE_OFF) == "Off" );
+      }
+
+      WHEN("the state is OUTLET_STATE_INTERMEDIATE")
+      {
+         REQUIRE( dev::stateIntToString(OUTLET_STATE_INTERMEDIATE) == "Int" );
+      }
+
+      WHEN("the state is OUTLET_STATE_ON")
+      {
+         REQUIRE( dev::stateIntToString(OUTLET_STATE_ON) == "On" );
+      }
+
+      WHEN("the state is an unknown/unexpected value")
+      {
+         REQUIRE( dev::stateIntToString(OUTLET_STATE_UNKNOWN) == "Unk" );
+         REQUIRE( dev::stateIntToString(42) == "Unk" );
+      }
+   }
 }
 
 } //namespace outletController_tests

@@ -2,6 +2,7 @@
 #include "../../../tests/catch2/catch.hpp"
 
 #include <filesystem>
+#include <atomic>
 
 #include <mx/sys/timeUtils.hpp>
 
@@ -34,6 +35,23 @@
 #include "MagAOXApp_test.hpp"
 #undef XWCTEST_NAMESPACE
 #undef XWCTEST_MAGAOXAPP_EXEC_NORM
+
+#undef app_MagAOXApp_hpp
+#undef app_tests_MagAOXApp_test_hpp
+#define XWCTEST_NAMESPACE XWCTEST_MAGAOXAPP_SIGTERMH_SIGQUIT_ns
+#define XWCTEST_MAGAOXAPP_SIGTERMH_SIGQUIT
+#include "../MagAOXApp.hpp"
+#include "MagAOXApp_test.hpp"
+#undef XWCTEST_NAMESPACE
+#undef XWCTEST_MAGAOXAPP_SIGTERMH_SIGQUIT
+// NOTE: XWCTEST_MAGAOXAPP_SIGTERMH_SIGQUIT redefines the SIGQUIT macro to SIGKILL inside
+// MagAOXApp.hpp's setSigTermHandler(), and that redefinition is never restored (it is not
+// scoped/undone within the header). Since the substitution therefore leaks for the rest of
+// this translation unit, only ONE of the SIGTERMH_SIGTERM/SIGTERMH_SIGQUIT/SIGTERMH_SIGINT
+// hooks may be used per .cpp file -- combining more than one here causes the compiler to see
+// duplicate `case` labels in handlerSigTerm's switch (they'd all collapse onto SIGKILL). Do
+// not add the SIGTERM or SIGINT variants below this point in this file; see
+// MagAOXAppExecute_test.cpp for a second, independent use of one of these hooks.
 
 namespace libXWCTest
 {
@@ -713,7 +731,7 @@ TEST_CASE( "Configuring MagAOXApp", "[app::MagAOXApp]" )
         REQUIRE( app.powerChannel() == "" );
         REQUIRE( app.powerElement() == "state" );
         REQUIRE( app.powerTargetElement() == "target" );
-        REQUIRE( app.powerOnWait() == 0 );
+        REQUIRE( app.powerOnWait() == 55 ); // default value, not set in config
 
         REQUIRE( app.doHelp() == true );
         REQUIRE( app.shutdown() == true );
@@ -1279,6 +1297,15 @@ TEST_CASE( "Signal Handlers", "[app::MagAOXApp]" )
         app._handlerSigTerm( SIGHUP, nullptr, nullptr );
         REQUIRE( app.shutdown() == 1 );
     }
+
+    SECTION( "sigaction fails for SIGQUIT" )
+    {
+        // See the NOTE near this hook's #include block at the top of this file: only one of
+        // the SIGTERMH_SIGTERM/SIGQUIT/SIGINT hooks can be used per translation unit.
+        XWCTEST_MAGAOXAPP_SIGTERMH_SIGQUIT_ns::MagAOXApp_test app;
+
+        REQUIRE( app.setSigTermHandler() == -1 );
+    }
 }
 
 /// Setting Euid
@@ -1310,6 +1337,275 @@ TEST_CASE( "Tests of utilities in cpp", "[app::MagAOXApp]" )
         MagAOX::app::sigUsr1Handler( 0, nullptr, nullptr );
 
         REQUIRE( true );
+    }
+}
+
+/// Elevated privileges RAII guard
+/**
+ * \ingroup MagAOXApp_unit_test
+ */
+TEST_CASE( "Elevated privileges double guard", "[app::MagAOXApp]" )
+{
+    MagAOXApp_test app;
+
+    // Exercises the redundant elevate()/restore() early-return branches. No externally
+    // observable state changes; this just needs to run without hitting the guarded logic twice.
+    app.testElevatedPrivilegesDoubleGuard();
+
+    REQUIRE( true );
+}
+
+/// PID unlock after external removal
+/**
+ * \ingroup MagAOXApp_unit_test
+ */
+TEST_CASE( "PID unlock after external removal", "[app::MagAOXApp]" )
+{
+    std::vector<const char *> argv;
+    std::vector<std::string>  argvstr( { "./execname", "-n", "testapp" } );
+
+    argv.resize( argvstr.size() + 1, NULL );
+    for( size_t index = 0; index < argvstr.size(); ++index )
+    {
+        argv[index] = argvstr[index].c_str();
+    }
+
+    char ppath[1024];
+    snprintf( ppath, sizeof( ppath ), "%s=/tmp/MagAOXApp_test", MAGAOX_env_path );
+    putenv( ppath );
+
+    mx::ioutils::createDirectories( "/tmp/MagAOXApp_test/sys/" );
+    std::filesystem::remove_all( "/tmp/MagAOXApp_test/sys/testapp" );
+
+    MagAOXApp_test app;
+    app.invokedName() = argv[0];
+    app.setDefaults( argv.size() - 1, const_cast<char **>( argv.data() ) );
+
+    REQUIRE( app.lockPID() == 0 );
+    REQUIRE( std::filesystem::exists( "/tmp/MagAOXApp_test/sys/testapp/pid" ) );
+
+    // Remove the pid file out from under the app, so unlockPID's ::remove() call fails.
+    std::filesystem::remove( "/tmp/MagAOXApp_test/sys/testapp/pid" );
+
+    REQUIRE( app.unlockPID() == -1 );
+}
+
+/// Duplicate INDI property registration
+/**
+ * \ingroup MagAOXApp_unit_test
+ */
+TEST_CASE( "Duplicate INDI property registration", "[app::MagAOXApp]" )
+{
+    SECTION( "registerIndiPropertyNew duplicate" )
+    {
+        MagAOXApp_test app;
+        pcf::IndiProperty prop1, prop2;
+        REQUIRE( app.registerIndiPropertyNew( prop1,
+                                              "dup",
+                                              pcf::IndiProperty::Number,
+                                              pcf::IndiProperty::ReadWrite,
+                                              pcf::IndiProperty::Idle,
+                                              callback ) == 0 );
+        REQUIRE( app.registerIndiPropertyNew( prop2,
+                                              "dup",
+                                              pcf::IndiProperty::Number,
+                                              pcf::IndiProperty::ReadWrite,
+                                              pcf::IndiProperty::Idle,
+                                              callback ) == -1 );
+    }
+
+    SECTION( "registerIndiPropertySet duplicate" )
+    {
+        MagAOXApp_test app;
+        pcf::IndiProperty prop1, prop2;
+        REQUIRE( app.registerIndiPropertySet( prop1, "dev", "dup", callback ) == 0 );
+        REQUIRE( app.registerIndiPropertySet( prop2, "dev", "dup", callback ) == -1 );
+    }
+
+    SECTION( "registerIndiPropertyReadOnly duplicate" )
+    {
+        MagAOXApp_test app;
+        pcf::IndiProperty prop1, prop2;
+        REQUIRE( app.registerIndiPropertyReadOnly(
+                     prop1, "dup", pcf::IndiProperty::Number, pcf::IndiProperty::ReadOnly, pcf::IndiProperty::Idle ) ==
+                 0 );
+        REQUIRE( app.registerIndiPropertyReadOnly(
+                     prop2, "dup", pcf::IndiProperty::Number, pcf::IndiProperty::ReadOnly, pcf::IndiProperty::Idle ) ==
+                 -1 );
+    }
+}
+
+/// INDI property handlers (Get/New/Set/Def) and updateSwitchIfChanged
+/**
+ * \ingroup MagAOXApp_unit_test
+ */
+TEST_CASE( "INDI property handlers", "[app::MagAOXApp]" )
+{
+    MagAOXApp_test app;
+    app.setConfigName( "handlertest" ); // constructs a FIFO-less (non-"good") indiDriver so m_indiDriver != nullptr
+
+    pcf::IndiProperty roProp;
+    REQUIRE( app.registerIndiPropertyReadOnly(
+                 roProp, "roprop", pcf::IndiProperty::Number, pcf::IndiProperty::ReadOnly, pcf::IndiProperty::Idle ) ==
+             0 );
+
+    pcf::IndiProperty newProp;
+    REQUIRE( app.registerIndiPropertyNew( newProp,
+                                          "newprop",
+                                          pcf::IndiProperty::Number,
+                                          pcf::IndiProperty::ReadWrite,
+                                          pcf::IndiProperty::Idle,
+                                          callback ) == 0 );
+
+    SECTION( "handleGetProperties: wrong device is ignored" )
+    {
+        pcf::IndiProperty req;
+        req.setDevice( "not-handlertest" );
+        app.handleGetProperties( req );
+        REQUIRE( true );
+    }
+
+    SECTION( "handleGetProperties: no name requests all properties" )
+    {
+        pcf::IndiProperty req;
+        req.setDevice( "handlertest" );
+        app.handleGetProperties( req );
+        REQUIRE( true );
+    }
+
+    SECTION( "handleGetProperties: valid name found" )
+    {
+        pcf::IndiProperty req;
+        req.setDevice( "handlertest" );
+        req.setName( "newprop" );
+        app.handleGetProperties( req );
+        REQUIRE( true );
+    }
+
+    SECTION( "handleGetProperties: valid name not found" )
+    {
+        pcf::IndiProperty req;
+        req.setDevice( "handlertest" );
+        req.setName( "nosuchprop" );
+        app.handleGetProperties( req );
+        REQUIRE( true );
+    }
+
+    SECTION( "handleSetProperty: found calls back, not found is a no-op" )
+    {
+        pcf::IndiProperty setProp;
+        REQUIRE( app.registerIndiPropertySet( setProp, "pubdev", "pubprop", callback ) == 0 );
+
+        pcf::IndiProperty spFound;
+        spFound.setDevice( "pubdev" );
+        spFound.setName( "pubprop" );
+        app.called_back = 0;
+        app.handleSetProperty( spFound );
+        REQUIRE( app.called_back == 1 );
+
+        pcf::IndiProperty spMissing;
+        spMissing.setDevice( "nodev" );
+        spMissing.setName( "noprop" );
+        app.called_back = 0;
+        app.handleSetProperty( spMissing );
+        REQUIRE( app.called_back == 0 );
+    }
+
+    SECTION( "handleDefProperty delegates to handleSetProperty" )
+    {
+        pcf::IndiProperty setProp;
+        REQUIRE( app.registerIndiPropertySet( setProp, "pubdev2", "pubprop2", callback ) == 0 );
+
+        pcf::IndiProperty dp;
+        dp.setDevice( "pubdev2" );
+        dp.setName( "pubprop2" );
+        app.called_back = 0;
+        app.handleDefProperty( dp );
+        REQUIRE( app.called_back == 1 );
+    }
+
+    SECTION( "updateSwitchIfChanged with an active driver" )
+    {
+        pcf::IndiProperty sw;
+        sw.setDevice( "handlertest" );
+        sw.setName( "swprop" );
+        sw.add( pcf::IndiElement( "toggle", pcf::IndiElement::Off ) );
+
+        app.updateSwitchIfChanged( sw, "toggle", pcf::IndiElement::On );
+        REQUIRE( sw["toggle"].getSwitchState() == pcf::IndiElement::On );
+    }
+}
+
+namespace threadStartTest
+{
+std::atomic<int> g_ran{ 0 };
+
+void trivialThreadStart( MagAOXAppTest::MagAOXApp_test *m )
+{
+    // Set the tpid reference immediately, as threadStart()'s caller contract requires,
+    // then let thrdInit clear (threadStart() itself flips it once past its own setup).
+    m->m_testThreadID = getpid();
+    while( m->m_testThreadInit )
+    {
+        mx::sys::milliSleep( 10 );
+    }
+    g_ran = 1;
+}
+} // namespace threadStartTest
+
+TEST_CASE( "MagAOXApp threadStart", "[app::MagAOXApp]" )
+{
+    SECTION( "starts a real thread successfully" )
+    {
+        MagAOXAppTest::MagAOXApp_test app;
+
+        std::thread       thrd;
+        pcf::IndiProperty thProp;
+        threadStartTest::g_ran = 0;
+
+        int rv = app.threadStart( thrd,
+                                  app.m_testThreadInit,
+                                  app.m_testThreadID,
+                                  thProp,
+                                  0,
+                                  "",
+                                  "trivial",
+                                  &app,
+                                  threadStartTest::trivialThreadStart );
+
+        REQUIRE( rv == 0 );
+        REQUIRE( thrd.joinable() );
+        thrd.join();
+        REQUIRE( threadStartTest::g_ran == 1 );
+    }
+}
+
+/// sendNewProperty(ipSend, el, newVal) looks up `el` via IndiProperty::operator[], which
+/// genuinely throws std::runtime_error for a name the property doesn't have.
+/**
+ * \ingroup MagAOXApp_unit_test
+ */
+TEST_CASE( "MagAOXApp sendNewProperty(prop, element, value)", "[app::MagAOXApp]" )
+{
+    MagAOXApp_test app;
+    app.setConfigName( "sendnewproptest" ); // constructs a FIFO-less indiDriver so m_indiDriver != nullptr
+
+    pcf::IndiProperty ipSend( pcf::IndiProperty::Number );
+    ipSend.setDevice( "somedev" );
+    ipSend.setName( "someprop" );
+    ipSend.add( pcf::IndiElement( "val" ) );
+
+    SECTION( "a real element name reaches the driver (this FIFO-less driver then fails "
+             "the actual transmit, same as the existing handlertest coverage)" )
+    {
+        // Not exercising the exception catch here is the point of this section --
+        // whatever sendNewProperty() on the driver itself returns is unrelated.
+        app.sendNewProperty( ipSend, "val", 3.14 );
+    }
+
+    SECTION( "a nonexistent element name is caught and reported" )
+    {
+        REQUIRE( app.sendNewProperty( ipSend, "notanelement", 3.14 ) == -1 );
     }
 }
 

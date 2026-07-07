@@ -34,7 +34,7 @@ BASENAME=$(basename $(TARGET))
 PATHNAME=$(dir $(TARGET))
 OBJNAME = $(PATHNAME)$(notdir $(BASENAME)).o
 TESTNAME = $(PATHNAME)$(notdir $(BASENAME))
-EDT_TESTS = ocam2KCtrl_test ocam2KCtrl_lifecycle_test cred2Ctrl_test cred2Ctrl_lifecycle_test
+EDT_TESTS = ocam2KCtrl_test ocam2KCtrl_lifecycle_test cred2Ctrl_test cred2Ctrl_lifecycle_test edtCamera_test
 
 # add extra libraries for special cases
 

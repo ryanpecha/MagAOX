@@ -112,7 +112,7 @@ struct telem_telcat : public flatbuffer_log
       }
       else
       {
-         return std::string("");
+         return std::string(""); // LCOV_EXCL_LINE -- catObj is always created by the only constructor
       }
    }
 
@@ -125,7 +125,7 @@ struct telem_telcat : public flatbuffer_log
       }
       else
       {
-         return std::string("");
+         return std::string(""); // LCOV_EXCL_LINE -- catRm is always created by the only constructor
       }
    }
 

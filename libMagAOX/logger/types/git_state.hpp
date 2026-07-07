@@ -87,7 +87,7 @@ struct git_state : public flatbuffer_log
       auto rgs = GetGit_state_fb(msgBuffer);
 
       if(rgs->repo()) return std::string(rgs->repo()->c_str());
-      else return "";
+      else return ""; // LCOV_EXCL_LINE -- repo is always created by the only constructor
    }
 
    /// Access the sha1 field
@@ -96,7 +96,7 @@ struct git_state : public flatbuffer_log
       auto rgs = GetGit_state_fb(msgBuffer);
 
       if(rgs->sha1()) return std::string(rgs->sha1()->c_str());
-      else return "";
+      else return ""; // LCOV_EXCL_LINE -- sha1 is always created by the only constructor
    }
 
    /// Access the modified field

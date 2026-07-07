@@ -2354,6 +2354,9 @@ int MagAOXApp<_useINDI>::lockPID()
             std::ifstream procIn;
             std::string   pidCmdLine;
 
+            // procIn never has exceptions() enabled, so open()/good()/>>/close() never
+            // throw here -- this catch is unreachable defensive code.
+            // LCOV_EXCL_START
             try
             {
                 procIn.open( procN.str() );
@@ -2367,6 +2370,7 @@ int MagAOXApp<_useINDI>::lockPID()
             {
                 log<software_critical, -1>( { __FILE__, __LINE__, 0, 0, "exception caught testing /proc/pid" } );
             }
+            // LCOV_EXCL_STOP
 
             // If pidCmdLine == "" at this point we just allow the rest of the
             // logic to run...
@@ -2469,6 +2473,12 @@ int MagAOXApp<_useINDI>::threadStart( std::thread &thrd,
     {
         thrd = std::thread( thrdStart, thrdThis );
     }
+    // Forcing std::thread's pthread_create() to genuinely fail requires exhausting a
+    // resource limit like RLIMIT_NPROC, which is process-wide but enforced per-UID --
+    // lowering it in-process risks starving other, unrelated processes owned by the same
+    // user (this was verified to actually happen and abort the test process), so it's not
+    // done here.
+    // LCOV_EXCL_START
     catch( const std::exception &e )
     {
         log<software_error>(
@@ -2480,6 +2490,7 @@ int MagAOXApp<_useINDI>::threadStart( std::thread &thrd,
         log<software_error>( { __FILE__, __LINE__, "Unkown exception on " + thrdName + " thread start" } );
         return -1;
     }
+    // LCOV_EXCL_STOP
 
     if( !thrd.joinable() )
     {
@@ -2998,6 +3009,11 @@ int MagAOXApp<_useINDI>::registerIndiPropertyReadOnly( pcf::IndiProperty &prop )
 
         return 0;
     }
+    // std::map::insert with a std::string key only throws on allocation failure --
+    // not reachable without exhausting process memory. The same reasoning applies to
+    // every other registerIndiProperty*() overload's identically-shaped catch blocks
+    // below.
+    // LCOV_EXCL_START
     catch( std::exception &e )
     {
         return log<software_error, -1>( { __FILE__, __LINE__, std::string( "Exception caught: " ) + e.what() } );
@@ -3006,6 +3022,7 @@ int MagAOXApp<_useINDI>::registerIndiPropertyReadOnly( pcf::IndiProperty &prop )
     {
         return log<software_error, -1>( { __FILE__, __LINE__, "Unknown exception caught." } );
     }
+    // LCOV_EXCL_STOP
 
 }
 
@@ -3040,6 +3057,7 @@ int MagAOXApp<_useINDI>::registerIndiPropertyReadOnly( pcf::IndiProperty &prop,
 
         return 0;
     }
+    // LCOV_EXCL_START
     catch( std::exception &e )
     {
         return log<software_error, -1>( { __FILE__, __LINE__, std::string( "Exception caught: " ) + e.what() } );
@@ -3048,6 +3066,7 @@ int MagAOXApp<_useINDI>::registerIndiPropertyReadOnly( pcf::IndiProperty &prop,
     {
         return log<software_error, -1>( { __FILE__, __LINE__, "Unknown exception caught." } );
     }
+    // LCOV_EXCL_STOP
 
 }
 
@@ -3072,6 +3091,7 @@ int MagAOXApp<_useINDI>::registerIndiPropertyNew( pcf::IndiProperty &prop,
 
         return 0;
     }
+    // LCOV_EXCL_START
     catch( std::exception &e )
     {
         return log<software_error, -1>( { __FILE__, __LINE__, std::string( "Exception caught: " ) + e.what() } );
@@ -3080,6 +3100,7 @@ int MagAOXApp<_useINDI>::registerIndiPropertyNew( pcf::IndiProperty &prop,
     {
         return log<software_error, -1>( { __FILE__, __LINE__, "Unknown exception caught." } );
     }
+    // LCOV_EXCL_STOP
 
 }
 
@@ -3150,6 +3171,7 @@ int MagAOXApp<_useINDI>::registerIndiPropertySet( pcf::IndiProperty &prop,
                 { __FILE__, __LINE__, "failed to insert INDI property: " + prop.createUniqueKey() + ". Possible duplicate." } );
         }
     }
+    // LCOV_EXCL_START
     catch( std::exception &e )
     {
         return log<software_error, -1>( { __FILE__, __LINE__, std::string( "Exception caught: " ) + e.what() } );
@@ -3158,6 +3180,7 @@ int MagAOXApp<_useINDI>::registerIndiPropertySet( pcf::IndiProperty &prop,
     {
         return log<software_error, -1>( { __FILE__, __LINE__, "Unknown exception caught." } );
     }
+    // LCOV_EXCL_STOP
 
     return 0;
 }
@@ -3310,11 +3333,15 @@ int MagAOXApp<_useINDI>::startINDI()
 
         m_indiDriver = new indiDriver<MagAOXApp>( this, m_configName, "0", "0" );
     }
+    // Forcing indiDriver's own constructor to throw would require corrupting the just-
+    // verified-present FIFOs or exhausting memory -- not practical to trigger safely.
+    // LCOV_EXCL_START
     catch( ... )
     {
         log<software_critical>( { __FILE__, __LINE__, 0, 0, "INDI Driver construction exception." } );
         return -1;
     }
+    // LCOV_EXCL_STOP
 
     // Check for INDI failure
     if( m_indiDriver == nullptr )

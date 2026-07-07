@@ -30,6 +30,12 @@ struct MagAOXApp_test : public APP_XWCTEST_BASE
     bool appLogicFail{ false };
     bool appShutdownFail{ false };
 
+    // For exercising threadStart(), whose thread-start function only ever receives the
+    // thisPtr argument -- tpid/thrdInit must be reachable through it, the same way real
+    // derived apps (e.g. dev::dm's m_satThreadID/m_satThreadInit) expose them.
+    bool  m_testThreadInit{ false };
+    pid_t m_testThreadID{ 0 };
+
     void addUnusedConfig()
     {
         config.add( "name2", "", "name2", argType::Required, "", "", true, "string", "" );
@@ -116,6 +122,12 @@ struct MagAOXApp_test : public APP_XWCTEST_BASE
         m_configBase = cb;
     }
 
+    template <typename T>
+    int sendNewProperty( const pcf::IndiProperty &ipSend, const std::string &el, const T &newVal )
+    {
+        return APP_XWCTEST_BASE::sendNewProperty( ipSend, el, newVal );
+    }
+
     int called_back{ 0 };
 
     void setAlert()
@@ -159,13 +171,24 @@ struct MagAOXApp_test : public APP_XWCTEST_BASE
         return m_powerOnWait;
     }
 
+    bool onPowerOffFail{ false };
+    bool whilePowerOffFail{ false };
+
     int onPowerOff()
     {
+        if( onPowerOffFail )
+        {
+            return -1;
+        }
         return APP_XWCTEST_BASE::onPowerOff();
     }
 
     int whilePowerOff()
     {
+        if( whilePowerOffFail )
+        {
+            return -1;
+        }
         return APP_XWCTEST_BASE::whilePowerOff();
     }
 
@@ -256,6 +279,23 @@ struct MagAOXApp_test : public APP_XWCTEST_BASE
     int unlockPID()
     {
         return APP_XWCTEST_BASE::unlockPID();
+    }
+
+    /// Exercise the elevatedPrivileges RAII guard's redundant elevate()/restore() early-return branches.
+    void testElevatedPrivilegesDoubleGuard()
+    {
+        APP_XWCTEST_BASE::elevatedPrivileges ep( this );
+        ep.elevate(); // already elevated -- hits the early return
+        ep.restore();
+        ep.restore(); // already restored -- hits the early return
+    }
+
+    void updateSwitchIfChanged( pcf::IndiProperty &p,
+                                const std::string &el,
+                                const pcf::IndiElement::SwitchStateType &newVal,
+                                pcf::IndiProperty::PropertyStateType ipState = pcf::IndiProperty::Ok )
+    {
+        APP_XWCTEST_BASE::updateSwitchIfChanged( p, el, newVal, ipState );
     }
 
     std::string setPropertyKey( const pcf::IndiProperty &prop )

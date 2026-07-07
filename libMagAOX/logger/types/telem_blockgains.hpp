@@ -100,6 +100,10 @@ struct telem_blockgains : public flatbuffer_log
                 }
             }
         }
+        // gains_constant is a required parameter in the only messageT constructor, always
+        // passed to builder.CreateVector() -- gains_constant() is never nullptr, so this
+        // branch (gains present but gains_constant absent) is unreachable.
+        // LCOV_EXCL_START
         else if( fbs->gains() )
         {
             for( size_t i = 0; i < fbs->gains()->size(); ++i )
@@ -109,6 +113,7 @@ struct telem_blockgains : public flatbuffer_log
                 msg += " (?)";
             }
         }
+        // LCOV_EXCL_STOP
 
         msg += " [mcs] ";
         if( fbs->mcs() && fbs->mcs_constant() )
@@ -134,6 +139,10 @@ struct telem_blockgains : public flatbuffer_log
                 }
             }
         }
+        // mcs_constant is a required parameter in the only messageT constructor, always
+        // passed to builder.CreateVector() -- mcs_constant() is never nullptr, so this
+        // branch (mcs present but mcs_constant absent) is unreachable.
+        // LCOV_EXCL_START
         else if( fbs->mcs() )
         {
             for( size_t i = 0; i < fbs->mcs()->size(); ++i )
@@ -143,6 +152,7 @@ struct telem_blockgains : public flatbuffer_log
                 msg += " (?)";
             }
         }
+        // LCOV_EXCL_STOP
 
         msg += " [lims] ";
 
@@ -169,6 +179,10 @@ struct telem_blockgains : public flatbuffer_log
                 }
             }
         }
+        // lims_constant is a required parameter in the only messageT constructor, always
+        // passed to builder.CreateVector() -- lims_constant() is never nullptr, so this
+        // branch (lims present but lims_constant absent) is unreachable.
+        // LCOV_EXCL_START
         else if( fbs->lims() )
         {
             for( size_t i = 0; i < fbs->lims()->size(); ++i )
@@ -178,6 +192,7 @@ struct telem_blockgains : public flatbuffer_log
                 msg += " (?)";
             }
         }
+        // LCOV_EXCL_STOP
 
         return msg;
     }

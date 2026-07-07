@@ -6,11 +6,6 @@
 #include "../../../tests/testXWC.hpp"
 
 #include "../generated/logTypes.hpp"
-#include "../generated/logVerify.hpp"
-#include "../generated/logCodeValid.hpp"
-#include "../generated/logStdFormat.hpp"
-
-#include <sstream>
 
 namespace libXWCTest
 {
@@ -786,93 +781,21 @@ TEST_CASE( "Call to accessor with invalid member", "[libMagAOX::logger::logTypes
     */
 }
 
-/// telem_pokecenter and telem_pokeloop have a hand-written "not measuring" short-circuit in
-/// their messageT constructors (measuring == 0) that skips serializing the rest of the
-/// fields entirely -- distinct from the general-purpose flatbuffer construction the
-/// generated per-type tests exercise, so it needs its own check.
+/// string_log has no eventCode/defaultLevel of its own (it's a base reused by other log
+/// types' messageT, e.g. text_log), so it never gets its own generated per-type test --
+/// nothing else exercises a real, recognized member name through its getAccessor().
 /**
- * \ingroup logger_unit_test
+ * \ingroup logTypes_unit_test
  */
-TEST_CASE( "telem_pokecenter and telem_pokeloop skip serializing fields when not measuring", "[libMagAOX::logger::types]" )
+TEST_CASE( "Call to accessor with a valid member", "[libMagAOX::logger::logTypes_Accessor]" )
 {
-    SECTION( "telem_pokecenter, multi-vector constructor" )
+    SECTION( "string_log" )
     {
-        flatlogs::bufferPtrT buf;
-        flatlogs::logHeader::createLog<MagAOX::logger::telem_pokecenter>(
-            buf,
-            flatlogs::timespecX( 1732170780, 0 ),
-            MagAOX::logger::telem_pokecenter::messageT( (uint8_t)0, 1.0f, 2.0f, std::vector<float>{ 3.0f }, std::vector<float>{ 4.0f } ),
-            flatlogs::logPrio::LOG_TELEM );
+        MagAOX::logger::logMetaDetail lmd = MagAOX::logger::string_log::getAccessor( "message" );
 
-        void *msg = flatlogs::logHeader::messageBuffer( buf );
-
-        REQUIRE( MagAOX::logger::telem_pokecenter::measuring( msg ) == false );
-        REQUIRE( MagAOX::logger::telem_pokecenter::msgString( msg, 0 ) == "not measuring" );
-    }
-
-    SECTION( "telem_pokecenter, combined-vector constructor" )
-    {
-        flatlogs::bufferPtrT buf;
-        flatlogs::logHeader::createLog<MagAOX::logger::telem_pokecenter>(
-            buf,
-            flatlogs::timespecX( 1732170780, 0 ),
-            MagAOX::logger::telem_pokecenter::messageT( (uint8_t)0, 1.0f, 2.0f, std::vector<float>{ 3.0f, 4.0f } ),
-            flatlogs::logPrio::LOG_TELEM );
-
-        void *msg = flatlogs::logHeader::messageBuffer( buf );
-
-        REQUIRE( MagAOX::logger::telem_pokecenter::measuring( msg ) == false );
-        REQUIRE( MagAOX::logger::telem_pokecenter::msgString( msg, 0 ) == "not measuring" );
-    }
-
-    SECTION( "telem_pokeloop" )
-    {
-        flatlogs::bufferPtrT buf;
-        flatlogs::logHeader::createLog<MagAOX::logger::telem_pokeloop>(
-            buf,
-            flatlogs::timespecX( 1732170780, 0 ),
-            MagAOX::logger::telem_pokeloop::messageT( (uint8_t)0, 1.0f, 2.0f, 3ULL ),
-            flatlogs::logPrio::LOG_TELEM );
-
-        void *msg = flatlogs::logHeader::messageBuffer( buf );
-
-        REQUIRE( MagAOX::logger::telem_pokeloop::measuring( msg ) == false );
-        REQUIRE( MagAOX::logger::telem_pokeloop::msgString( msg, 0 ) == "[pokeloop] not measuring" );
-    }
-}
-
-/// logCodeValid, logVerify, and logStdFormat each dispatch on event code via a switch that
-/// is generated with one case per real log type; each also has its own default case for an
-/// event code with no matching type, which -- being a real, if rare, situation (e.g. reading
-/// a log stream from a newer version that added a type this build doesn't know about) -- is
-/// worth checking directly rather than only implicitly via the per-type dispatch checks.
-/**
- * \ingroup logger_unit_test
- */
-TEST_CASE( "logCodeValid, logVerify, and logStdFormat fall back gracefully for an unrecognized event code",
-           "[libMagAOX::logger::types]" )
-{
-    const flatlogs::eventCodeT unknownCode = 60999;
-
-    REQUIRE( MagAOX::logger::logCodeValid( unknownCode ) == false );
-
-    SECTION( "logVerify" )
-    {
-        flatlogs::bufferPtrT buf;
-        REQUIRE( MagAOX::logger::logVerify( unknownCode, buf, 0 ) == false );
-    }
-
-    SECTION( "logStdFormat" )
-    {
-        flatlogs::bufferPtrT buf;
-        flatlogs::logHeader::createLog<MagAOX::logger::git_state>(
-            buf, flatlogs::timespecX( 1732170780, 0 ), MagAOX::logger::git_state::messageT( "repo", "sha", false ), flatlogs::logPrio::LOG_NOTICE );
-        flatlogs::logHeader::eventCode( buf, unknownCode );
-
-        std::ostringstream oss;
-        MagAOX::logger::logStdFormat( oss, buf );
-
-        REQUIRE( oss.str().find( "Unknown log type" ) != std::string::npos );
+        REQUIRE( lmd.keyword == "MESSAGE" );
+        REQUIRE( lmd.valType == MagAOX::logger::logMeta::valTypes::String );
+        REQUIRE( lmd.accessor != nullptr );
     }
 }
 

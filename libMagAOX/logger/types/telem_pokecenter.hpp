@@ -157,10 +157,15 @@ struct telem_pokecenter : public flatbuffer_log
                 msg += " [poke-avg] ? [pokes] ?";
             }
         }
+        // poke_x/poke_y are always created (both messageT constructors always call
+        // builder.CreateVector() for them, even given an empty input vector), so this
+        // branch (either one entirely absent) is unreachable via the public API.
+        // LCOV_EXCL_START
         else
         {
             msg += " [poke-avg] ? [pokes] ?";
         }
+        // LCOV_EXCL_STOP
 
         return msg;
     }

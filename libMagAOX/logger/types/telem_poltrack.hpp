@@ -111,7 +111,7 @@ struct telem_poltrack : public flatbuffer_log
         {
             return std::string(fbs->pos_name()->c_str());
         }
-        else return std::string();
+        else return std::string(); // LCOV_EXCL_LINE -- pos_name is always created by the only constructor
     }
 
     static bool tracking( void *msgBuffer )

@@ -91,8 +91,10 @@ struct ao_operator : public flatbuffer_log
       if(fbs->email())
       {
          msg += fbs->email()->c_str();
+         // institution is a required std::string in the only messageT constructor, so
+         // builder.CreateString() always creates it -- institution() is never nullptr.
          if(fbs->institution()) msg += ", ";
-         else msg += " ";
+         else msg += " "; // LCOV_EXCL_LINE
       }
 
       if(fbs->institution())

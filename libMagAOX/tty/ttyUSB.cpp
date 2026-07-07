@@ -21,10 +21,28 @@
 #include "ttyErrors.hpp"
 
 
+// Test-only overrides (never redefined outside unit tests) letting tests point the sysfs
+// scan at a real, always-present, non-USB tty entry (e.g. "tty0"/"console") to reach the
+// "found a device but it has no usb parent" branch, or at a scratch directory to reach
+// the "not a real udev syspath" branch -- both using genuinely real OS state rather than
+// a mock, since no real ttyUSB hardware is available in a CI/build environment. The
+// defaults below are exactly the production behavior.
+#ifndef XWCTEST_TTYUSB_SYSFS_DIR
+#define XWCTEST_TTYUSB_SYSFS_DIR "/sys/class/tty/"
+#endif
+#ifndef XWCTEST_TTYUSB_SYSFS_PREFIX
+#define XWCTEST_TTYUSB_SYSFS_PREFIX "ttyUSB"
+#endif
+
 namespace MagAOX
 {
 namespace tty
 {
+
+#ifdef XWCTEST_NAMESPACE
+namespace XWCTEST_NAMESPACE
+{
+#endif
 
 int ttyUSBDevName( std::string & devName,       // [out] the /dev/ttyUSBX device name.
                    const std::string & vendor,  // [in] the 4-digit vendor identifier.
@@ -37,7 +55,7 @@ int ttyUSBDevName( std::string & devName,       // [out] the /dev/ttyUSBX device
    std::vector<std::string> devNames;
 
    devName = "";
-   mx_error_check_rv(mx::ioutils::getFileNames(devNames, "/sys/class/tty/", "ttyUSB", "", ""),-1);
+   mx_error_check_rv(mx::ioutils::getFileNames(devNames, XWCTEST_TTYUSB_SYSFS_DIR, XWCTEST_TTYUSB_SYSFS_PREFIX, "", ""),-1);
 
    if(devNames.size() == 0) return TTY_E_NODEVNAMES;
 
@@ -73,6 +91,9 @@ int ttyUSBDevName( std::string & devName,       // [out] the /dev/ttyUSBX device
          continue;
       }
 
+      // idVendor/idProduct/serial sysattrs, and a successful match, only exist on a real
+      // attached USB-serial device -- unreachable in a build/test environment without one.
+      // LCOV_EXCL_START
       const char * idVendor = udev_device_get_sysattr_value( dev, "idVendor" );
 
       if(idVendor == nullptr)
@@ -126,6 +147,7 @@ int ttyUSBDevName( std::string & devName,       // [out] the /dev/ttyUSBX device
       udev_unref(udev);
 
       return TTY_E_NOERROR;
+      // LCOV_EXCL_STOP
    }
 
    devName = "";
@@ -145,7 +167,7 @@ int ttyUSBDevNames( std::vector<std::string> & devNames, // [out] the /dev/ttyUS
    devNames.clear();
 
    typedef mx::verbose::vvv verboseT;
-   mx_error_check_rv(mx::ioutils::getFileNames(pdevNames, "/sys/class/tty/", "ttyUSB", "", ""), -1);
+   mx_error_check_rv(mx::ioutils::getFileNames(pdevNames, XWCTEST_TTYUSB_SYSFS_DIR, XWCTEST_TTYUSB_SYSFS_PREFIX, "", ""), -1);
 
    if(pdevNames.size() == 0) return TTY_E_NODEVNAMES;
 
@@ -175,6 +197,9 @@ int ttyUSBDevNames( std::vector<std::string> & devNames, // [out] the /dev/ttyUS
          continue;
       }
 
+      // idVendor/idProduct sysattrs, and a successful match, only exist on a real attached
+      // USB-serial device -- unreachable in a build/test environment without one.
+      // LCOV_EXCL_START
       const char * idVendor = udev_device_get_sysattr_value( dev, "idVendor" );
 
       if(idVendor == nullptr)
@@ -208,6 +233,7 @@ int ttyUSBDevNames( std::vector<std::string> & devNames, // [out] the /dev/ttyUS
       devNames.push_back( "/dev/" + p.filename().string());
 
       udev_device_unref(dev0);
+      // LCOV_EXCL_STOP
    }
 
    udev_unref(udev);
@@ -216,6 +242,11 @@ int ttyUSBDevNames( std::vector<std::string> & devNames, // [out] the /dev/ttyUS
    else return TTY_E_DEVNOTFOUND;
 
 }
+
+#ifdef XWCTEST_NAMESPACE
+} // namespace XWCTEST_NAMESPACE
+#endif
+
 } //namespace tty
 } //namespace MagAOX
 
