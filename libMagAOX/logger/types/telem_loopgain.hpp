@@ -79,7 +79,7 @@ struct telem_loopgain : public flatbuffer_log
         msg += std::to_string( fbs->limit() );
 
         return msg;
-    }
+    } // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
 
     static uint8_t state( void *msgBuffer )
     {

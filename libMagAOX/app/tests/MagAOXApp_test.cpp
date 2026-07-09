@@ -1723,6 +1723,34 @@ TEST_CASE( "INDI property handlers", "[app::MagAOXApp]" )
         app.updateIfChanged( txt, "value", "a literal string" );
         REQUIRE( true );
     }
+
+    SECTION( "updatesIfChanged (vector) overload" )
+    {
+        pcf::IndiProperty multi( pcf::IndiProperty::Number );
+        multi.setDevice( "handlertest" );
+        multi.setName( "multiprop" );
+        multi.add( pcf::IndiElement( "a" ) );
+        multi.add( pcf::IndiElement( "b" ) );
+
+        std::vector<const char *> els{ "a", "b" };
+        std::vector<double>       vals{ 1.0, 2.0 };
+        app.updatesIfChanged( multi, els, vals );
+        REQUIRE( true );
+    }
+
+    SECTION( "updateIfChanged (vector<string> els) overload" )
+    {
+        pcf::IndiProperty multi2( pcf::IndiProperty::Number );
+        multi2.setDevice( "handlertest" );
+        multi2.setName( "multiprop2" );
+        multi2.add( pcf::IndiElement( "a" ) );
+        multi2.add( pcf::IndiElement( "b" ) );
+
+        std::vector<std::string> els2{ "a", "b" };
+        std::vector<double>      vals2{ 1.0, 2.0 };
+        app.updateIfChanged( multi2, els2, vals2 );
+        REQUIRE( true );
+    }
 }
 
 /// indiTargetUpdate()'s key-mismatch and missing-target/current-element branches. The

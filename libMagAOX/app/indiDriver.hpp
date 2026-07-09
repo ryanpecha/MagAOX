@@ -210,7 +210,8 @@ indiDriver<parentT>::indiDriver ( parentT * parent,
 
 
    close(fd);
-}
+} // LCOV_EXCL_LINE -- gcc emits complete- and base-object clones of this constructor; the
+  // never-invoked clone's epilogue counter lands on this brace, so it cannot be covered.
 
 template<class parentT>
 indiDriver<parentT>::~indiDriver()

@@ -83,6 +83,44 @@ TEST_CASE( "logCodeValid, logVerify, logStdFormat, eventCode, and eventCodeName 
         REQUIRE( oss.str().find( "Unknown log type" ) != std::string::npos );
     }
 
+    SECTION( "the short/min/json format dispatchers have the same unknown-log-type fallback" )
+    {
+        flatlogs::bufferPtrT buf;
+        flatlogs::logHeader::createLog<MagAOX::logger::git_state>( buf,
+                                                                    flatlogs::timespecX( 1732170780, 0 ),
+                                                                    MagAOX::logger::git_state::messageT( "repo", "sha", false ),
+                                                                    flatlogs::logPrio::LOG_NOTICE );
+        flatlogs::logHeader::eventCode( buf, unknownCode );
+
+        std::ostringstream ossShort, ossMin, ossJson;
+        MagAOX::logger::logShortStdFormat( ossShort, "testapp", buf );
+        MagAOX::logger::logMinStdFormat( ossMin, buf );
+        MagAOX::logger::logJsonFormat( ossJson, buf );
+
+        REQUIRE( ossShort.str().find( "Unknown log type" ) != std::string::npos );
+        REQUIRE( ossMin.str().find( "Unknown log type" ) != std::string::npos );
+        REQUIRE( ossJson.str().find( "Unknown log type" ) != std::string::npos );
+    }
+
+    SECTION( "flatbuffer_log::msgJSON reports a genuinely invalid binary schema" )
+    {
+        flatlogs::bufferPtrT buf;
+        flatlogs::logHeader::createLog<MagAOX::logger::git_state>( buf,
+                                                                    flatlogs::timespecX( 1732170780, 0 ),
+                                                                    MagAOX::logger::git_state::messageT( "repo", "sha", false ),
+                                                                    flatlogs::logPrio::LOG_NOTICE );
+
+        // A few bytes of garbage is not a valid flatbuffers binary schema, so
+        // Parser::Deserialize() genuinely fails and the error branch runs, returning
+        // empty JSON rather than proceeding into GenText (which would crash).
+        const uint8_t notASchema[4] = { 0xde, 0xad, 0xbe, 0xef };
+        std::string out = MagAOX::logger::git_state::msgJSON( flatlogs::logHeader::messageBuffer( buf ),
+                                                              flatlogs::logHeader::msgLen( buf ),
+                                                              notASchema,
+                                                              sizeof( notASchema ) );
+        REQUIRE( out == "{}" );
+    }
+
     SECTION( "eventCode maps an unrecognized name to UNKNOWN" )
     {
         REQUIRE( MagAOX::logger::eventCode( "not_a_real_log_type" ) == MagAOX::logger::eventCodes::UNKNOWN );

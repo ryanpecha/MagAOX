@@ -100,7 +100,7 @@ struct telem_chrony_status : public flatbuffer_log
 
       return msg;
 
-   }
+   } // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
 
    static std::string sourceMAC(void * msgBuffer )
    {

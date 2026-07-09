@@ -66,7 +66,8 @@ else
 fi
 
 lcov --directory . --capture -j $(nproc) --output-file coverage.info \
-         --ignore-errors inconsistent,inconsistent
+         --ignore-errors inconsistent,inconsistent \
+         --ignore-errors path
 
 lcov --remove coverage.info "*/tests/*" "/usr/*" \
          --ignore-errors unused,unused \

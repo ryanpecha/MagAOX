@@ -43,6 +43,9 @@ ifeq ($(notdir $(TESTNAME)),cursesINDI_test)
 	LDLIBS += -lncurses
 else ifeq ($(notdir $(TESTNAME)),logdump_test)
 	LDLIBS = -lmxlib -lflatbuffers
+else ifeq ($(notdir $(TESTNAME)),logTypes_test)
+	# exercises logJsonFormat/msgJSON, whose schema reflection lives in libflatbuffers
+	LDLIBS += -lflatbuffers
 else ifeq ($(notdir $(TESTNAME)),logstream_test)
 	LDLIBS = -lmxlib -lflatbuffers
 else ifeq ($(notdir $(TESTNAME)),logsurgeon_test)

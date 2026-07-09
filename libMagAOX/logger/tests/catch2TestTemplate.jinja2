@@ -229,6 +229,14 @@ public:
     std::ostringstream oss;
     MagAOX::logger::logStdFormat(oss, logBuffer);
 
+    // The other three code-generated formatting dispatchers, each also a switch over
+    // every real event code: short (used by logdump), min (used by MagAOXApp's INDI
+    // log forwarding), and json (used by logdump's json output; also runtime-initializes
+    // the per-type flatbuffer binary schemas from binarySchemata.inc).
+    MagAOX::logger::logShortStdFormat(oss, "testapp", logBuffer);
+    MagAOX::logger::logMinStdFormat(oss, logBuffer);
+    MagAOX::logger::logJsonFormat(oss, logBuffer);
+
     // Round-trip this type's event code through the code<->name lookup tables (rather
     // than hand-enumerating the expected name string here) to exercise both of their
     // per-code branches.

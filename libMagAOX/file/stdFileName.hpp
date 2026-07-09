@@ -203,7 +203,7 @@ template <class verboseT>
 stdFileName<verboseT>::stdFileName()
 {
     return;
-}
+} // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
 
 template <class verboseT>
 stdFileName<verboseT>::stdFileName( const std::string &fn )

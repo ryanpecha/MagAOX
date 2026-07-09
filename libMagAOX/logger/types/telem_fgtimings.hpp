@@ -97,7 +97,7 @@ struct telem_fgtimings : public flatbuffer_log
 
       return msg;
 
-   }
+   } // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
 
    static double atime( void * msgBuffer )
    {

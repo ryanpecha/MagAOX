@@ -109,7 +109,7 @@ struct telem_sparkleclock : public flatbuffer_log
 
       return msg;
 
-   }
+   } // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
 
    static bool modulating( void * msgBuffer )
    {
@@ -141,7 +141,7 @@ struct telem_sparkleclock : public flatbuffer_log
       }
 
       return v;
-   }
+   } // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
 
    static float angleOffset( void * msgBuffer )
    {

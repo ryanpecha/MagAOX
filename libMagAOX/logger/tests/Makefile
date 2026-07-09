@@ -46,8 +46,10 @@ generated_tests: $(GEN_TEST_FILES)
 $(GEN_TEST_FILES) :
 	$(AT)$(PYTHON) generateTemplatedCatch2Tests.py
 
+# -lflatbuffers: the generated tests exercise logJsonFormat, whose schema reflection
+# (flatbuffers::Parser::Deserialize/GenText) lives in the flatbuffers library.
 catch2_tests: ../generated/binarySchemata.inc $(GEN_TEST_FILES) catch2_tests.cpp
-	$(AT)g++ $(CXXFLAGS) -I. -I./../types $(GEN_TEST_FILES) catch2_tests.cpp ../../app/stateCodes.cpp -o $@
+	$(AT)g++ $(CXXFLAGS) -I. -I./../types $(GEN_TEST_FILES) catch2_tests.cpp ../../app/stateCodes.cpp -o $@ -lflatbuffers
 
 do_catch2_test: catch2_tests
 	$(AT)./catch2_tests
@@ -56,7 +58,7 @@ do_catch2_test: catch2_tests
 ### Build and run Catch2 Entropy tests
 entropy_test: ../generated/binarySchemata.inc catch2_tests.cpp
 	$(AT)$(PYTHON) generateEntropyTests.py -e $(e) -n $(n) -s $(s) -f $(f)
-	$(AT)g++ $(CXXFLAGS) -I. -I.. -I./../types -I./generated_tests gen_entropy_tests/generated_test_e$(e)_n$(n).cpp catch2_tests.cpp ../../app/stateCodes.cpp -o generated_entropy_test_e$(e)_n$(n)
+	$(AT)g++ $(CXXFLAGS) -I. -I.. -I./../types -I./generated_tests gen_entropy_tests/generated_test_e$(e)_n$(n).cpp catch2_tests.cpp ../../app/stateCodes.cpp -o generated_entropy_test_e$(e)_n$(n) -lflatbuffers
 
 do_entropy_test: entropy_test
 	$(AT)./generated_entropy_test_e$(e)_n$(n) "Scenario: test_e$(e)_n$(n)"

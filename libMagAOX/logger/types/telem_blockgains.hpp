@@ -195,7 +195,7 @@ struct telem_blockgains : public flatbuffer_log
         // LCOV_EXCL_STOP
 
         return msg;
-    }
+    } // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
 
     static std::vector<float> gains( void *msgBuffer /**< [in] Buffer containing the flatbuffer serialized message.*/ )
     {
@@ -211,7 +211,7 @@ struct telem_blockgains : public flatbuffer_log
             }
         }
         return p;
-    }
+    } // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
 
     static std::vector<bool>
     gains_constant( void *msgBuffer /**< [in] Buffer containing the flatbuffer serialized message.*/ )
@@ -228,7 +228,7 @@ struct telem_blockgains : public flatbuffer_log
             }
         }
         return p;
-    }
+    } // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
 
     static std::vector<float> mcs( void *msgBuffer /**< [in] Buffer containing the flatbuffer serialized message.*/ )
     {
@@ -244,7 +244,7 @@ struct telem_blockgains : public flatbuffer_log
             }
         }
         return p;
-    }
+    } // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
 
     static std::vector<bool>
     mcs_constant( void *msgBuffer /**< [in] Buffer containing the flatbuffer serialized message.*/ )
@@ -261,7 +261,7 @@ struct telem_blockgains : public flatbuffer_log
             }
         }
         return p;
-    }
+    } // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
 
     static std::vector<float> lims( void *msgBuffer /**< [in] Buffer containing the flatbuffer serialized message.*/ )
     {
@@ -277,7 +277,7 @@ struct telem_blockgains : public flatbuffer_log
             }
         }
         return p;
-    }
+    } // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
 
     static std::vector<bool>
     lims_constant( void *msgBuffer /**< [in] Buffer containing the flatbuffer serialized message.*/ )
@@ -294,7 +294,7 @@ struct telem_blockgains : public flatbuffer_log
             }
         }
         return p;
-    }
+    } // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
 
     /// Get the logMetaDetail for a member by name
     /**

@@ -70,7 +70,7 @@ struct telem_flowrpm : public flatbuffer_log
         msg += ( fbs->valid() ? "true" : "false" );
 
         return msg;
-    }
+    } // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
 
     /// Recover the flow rate from a serialized message.
     static double flowRate( void *msgBuffer )

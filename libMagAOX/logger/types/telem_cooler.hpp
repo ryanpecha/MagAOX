@@ -94,7 +94,7 @@ struct telem_cooler : public flatbuffer_log
 
       return msg;
 
-   }
+   } // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
 
    static double getDouble( flatlogs::bufferPtrT & buffer,
                             member m

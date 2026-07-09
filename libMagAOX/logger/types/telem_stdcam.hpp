@@ -245,7 +245,7 @@ struct telem_stdcam : public flatbuffer_log
             msg += "OFF";
 
         return msg;
-    }
+    } // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
 
     static std::string mode( void *msgBuffer )
     {

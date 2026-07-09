@@ -72,7 +72,7 @@ struct telem_w2tcsoffloader : public flatbuffer_log
         }
 
         return msg;
-    }
+    } // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
 
     /// Recover the coefficient vector from a serialized message.
     static std::vector<float> coeffs( void *msgBuffer )
@@ -90,7 +90,7 @@ struct telem_w2tcsoffloader : public flatbuffer_log
         }
 
         return coeffVec;
-    }
+    } // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
 
     /// Get the logMetaDetail for a member by name.
     /**

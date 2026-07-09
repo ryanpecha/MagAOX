@@ -3,7 +3,9 @@
 
 #include <mx/sys/timeUtils.hpp>
 
-#define OUTLET_CTRL_TEST_NOINDI
+// OUTLET_CTRL_TEST_NOINDI deliberately NOT defined: the indi::updateIfChanged() calls it
+// would compile out are null-driver safe (indiUtils' updateIfChanged returns immediately
+// when the driver pointer is null), so they can run under these tests as-is.
 //#define OUTLET_CTRL_TEST_NOLOG
 #include "../../MagAOXApp.hpp"
 #include "../outletController.hpp"
@@ -49,9 +51,60 @@ struct outletControllerTest : public MagAOXApp<false>, dev::outletController<out
       return dev::outletController<outletControllerTest>::loadConfig(config);
    }
 
+   // -- register-call fault injection, used to hit every registration failure branch in appStartup() --
+   int m_regCallCount{ 0 };
+   int m_regFailAt{ -1 };
+
+   int registerIndiPropertyReadOnly( pcf::IndiProperty &prop )
+   {
+      ++m_regCallCount;
+      if( m_regCallCount == m_regFailAt )
+      {
+         return -1;
+      }
+      return MagAOXApp<false>::registerIndiPropertyReadOnly( prop );
+   }
+
+   int registerIndiPropertyNew( pcf::IndiProperty &prop, int ( *cb )( void *, const pcf::IndiProperty & ) )
+   {
+      ++m_regCallCount;
+      if( m_regCallCount == m_regFailAt )
+      {
+         return -1;
+      }
+      return MagAOXApp<false>::registerIndiPropertyNew( prop, cb );
+   }
+
    int appStartup()
    {
-      return 0;
+      return dev::outletController<outletControllerTest>::appStartup();
+   }
+
+   int setupINDI()
+   {
+      return dev::outletController<outletControllerTest>::setupINDI();
+   }
+
+   int callUpdateINDI()
+   {
+      return dev::outletController<outletControllerTest>::updateINDI();
+   }
+
+   int callNewCallBack_channels( const pcf::IndiProperty &ipRecv )
+   {
+      return dev::outletController<outletControllerTest>::newCallBack_channels( ipRecv );
+   }
+
+   // Calls the static wrapper that registerIndiPropertyNew() actually installs as the
+   // callback, distinct from calling newCallBack_channels() directly above.
+   int callStaticNewCallBack_channels( const pcf::IndiProperty &ipRecv )
+   {
+      return dev::outletController<outletControllerTest>::st_newCallBack_channels( this, ipRecv );
+   }
+
+   void setupRealDriver()
+   {
+      m_indiDriver = new MagAOX::app::indiDriver<MagAOX::app::MagAOXApp<false>>( this, m_configName, "0", "0" );
    }
 
    int appLogic()
@@ -2050,6 +2103,140 @@ SCENARIO( "outletController stateIntToString", "[outletController]" )
       {
          REQUIRE( dev::stateIntToString(OUTLET_STATE_UNKNOWN) == "Unk" );
          REQUIRE( dev::stateIntToString(42) == "Unk" );
+      }
+   }
+}
+
+/// outletController appStartup, setupINDI, newCallBack_channels, updateINDI
+/**
+ * \ingroup outletController_tests
+ *
+ * The test harness's appStartup() previously just returned 0 without ever calling the
+ * real dev::outletController<>::appStartup(), so none of the INDI property registration,
+ * newCallBack_channels() dispatch, or updateINDI() logic was ever exercised.
+ */
+SCENARIO( "outletController appStartup, setupINDI, newCallBack_channels, updateINDI", "[outletController]" )
+{
+   GIVEN("a config file with 4 channels for 4 outlets")
+   {
+      mx::app::writeConfigFile( "/tmp/outletController_test_startup.conf", {"channel1", "channel2", "channel3", "channel4"},
+                                                     {"outlet",   "outlet",   "outlet",   "outlet"},
+                                                     {"0",         "1",        "2",         "3"} );
+
+      WHEN("appStartup succeeds")
+      {
+         mx::app::appConfigurator config;
+         config.readConfig("/tmp/outletController_test_startup.conf");
+
+         {
+            outletControllerTest pdt;
+            REQUIRE( pdt.setupConfig(config) == 0 );
+            REQUIRE( pdt.loadConfig(config) == 0 );
+
+            REQUIRE( pdt.appStartup() == 0 );
+         }
+
+         // setupINDI() just delegates to appStartup() -- a fresh instance is needed since
+         // MagAOXApp forbids a 2nd live instance, and registerIndiPropertyNew would also
+         // reject re-registering the same properties on the same instance. The above
+         // instance must go out of scope first (see its closing brace).
+         outletControllerTest pdt2;
+         REQUIRE( pdt2.setupConfig(config) == 0 );
+         REQUIRE( pdt2.loadConfig(config) == 0 );
+         REQUIRE( pdt2.setupINDI() == 0 );
+      }
+
+      WHEN("every registration failure is propagated")
+      {
+         int totalCalls = 0;
+         {
+            mx::app::appConfigurator config;
+            config.readConfig("/tmp/outletController_test_startup.conf");
+            outletControllerTest pdt;
+            REQUIRE( pdt.setupConfig(config) == 0 );
+            REQUIRE( pdt.loadConfig(config) == 0 );
+            REQUIRE( pdt.appStartup() == 0 );
+            totalCalls = pdt.m_regCallCount;
+         }
+         REQUIRE( totalCalls > 0 );
+
+         for( int failAt = 1; failAt <= totalCalls; ++failAt )
+         {
+            mx::app::appConfigurator config;
+            config.readConfig("/tmp/outletController_test_startup.conf");
+
+            outletControllerTest pdt;
+            REQUIRE( pdt.setupConfig(config) == 0 );
+            REQUIRE( pdt.loadConfig(config) == 0 );
+            pdt.m_regFailAt = failAt;
+
+            REQUIRE( pdt.appStartup() == -1 );
+         }
+      }
+
+      WHEN("newCallBack_channels dispatches based on state/target")
+      {
+         mx::app::appConfigurator config;
+         config.readConfig("/tmp/outletController_test_startup.conf");
+
+         outletControllerTest pdt;
+         REQUIRE( pdt.setupConfig(config) == 0 );
+         REQUIRE( pdt.loadConfig(config) == 0 );
+         REQUIRE( pdt.appStartup() == 0 );
+
+         // Not READY: rejected regardless of ipRecv content.
+         pcf::IndiProperty notReady( pcf::IndiProperty::Text );
+         notReady.setDevice( pdt.configName() );
+         notReady.setName( "channel1" );
+         REQUIRE( pdt.callNewCallBack_channels( notReady ) == -1 );
+
+         pdt.state( MagAOX::app::stateCodes::READY );
+
+         pcf::IndiProperty onReq( pcf::IndiProperty::Text );
+         onReq.setDevice( pdt.configName() );
+         onReq.setName( "channel1" );
+         onReq.add( pcf::IndiElement( "target" ) );
+         onReq["target"].setValue( "on" );
+         REQUIRE( pdt.callNewCallBack_channels( onReq ) == 0 );
+         REQUIRE( pdt.updateOutletState( 0 ) == OUTLET_STATE_ON );
+
+         pcf::IndiProperty offReq( pcf::IndiProperty::Text );
+         offReq.setDevice( pdt.configName() );
+         offReq.setName( "channel1" );
+         offReq.add( pcf::IndiElement( "state" ) );
+         offReq["state"].setValue( "off" );
+         REQUIRE( pdt.callNewCallBack_channels( offReq ) == 0 );
+         REQUIRE( pdt.updateOutletState( 0 ) == OUTLET_STATE_OFF );
+
+         // Neither "on" nor "off" -- falls through to 0 with no action.
+         pcf::IndiProperty neither( pcf::IndiProperty::Text );
+         neither.setDevice( pdt.configName() );
+         neither.setName( "channel1" );
+         neither.add( pcf::IndiElement( "state" ) );
+         neither["state"].setValue( "sideways" );
+         REQUIRE( pdt.callNewCallBack_channels( neither ) == 0 );
+
+         // The static wrapper registerIndiPropertyNew() actually installs as the callback.
+         REQUIRE( pdt.callStaticNewCallBack_channels( onReq ) == 0 );
+      }
+
+      WHEN("updateINDI publishes outlet and channel states with a real driver")
+      {
+         mx::app::appConfigurator config;
+         config.readConfig("/tmp/outletController_test_startup.conf");
+
+         outletControllerTest pdt;
+         REQUIRE( pdt.setupConfig(config) == 0 );
+         REQUIRE( pdt.loadConfig(config) == 0 );
+         REQUIRE( pdt.appStartup() == 0 );
+
+         REQUIRE( pdt.callUpdateINDI() == 0 ); // no driver yet -- early return
+
+         pdt.setupRealDriver();
+         REQUIRE( pdt.callUpdateINDI() == 0 );
+
+         pdt.turnOutletOn(0);
+         REQUIRE( pdt.callUpdateINDI() == 0 );
       }
    }
 }

@@ -458,7 +458,7 @@ std::string logMeta::valueString( logMap<verboseT> & lm,
       std::cerr << "String type specified as something other than state\n";
    }
    return val;
-}
+} // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
 
 mx::fits::fitsHeaderCard<logMeta::verboseT> logMeta::card( logMap<verboseT> &lm,
                                           const flatlogs::timespecX & stime,

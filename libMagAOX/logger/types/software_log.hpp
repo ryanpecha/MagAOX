@@ -300,7 +300,7 @@ struct software_log : public flatbuffer_log
             ret += rgs->explanation()->c_str();
         }
         return ret;
-    }
+    } // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
 
     /// Get an empty logMetaDetail because meta data doesn't make sense for this log
     /**

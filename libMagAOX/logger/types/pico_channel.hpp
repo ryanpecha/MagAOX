@@ -75,7 +75,7 @@ struct pico_channel : public flatbuffer_log
       s += std::to_string(rgs->channel());
 
       return s;
-   }
+   } // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
 
    /// Get an empty logMetaDetail because meta data doesn't make sense for this log
    /**

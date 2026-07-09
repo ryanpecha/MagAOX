@@ -64,7 +64,7 @@ struct telem_tcsi_labmode : public flatbuffer_log
         msg += std::to_string( fbs->labMode() );
 
         return msg;
-    }
+    } // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
 
     /// Access the lab-mode state.
     static bool labMode( void *msgBuffer /**< [in] Buffer containing the flatbuffer serialized message.*/ )

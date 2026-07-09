@@ -147,8 +147,8 @@ int ttyUSBDevName( std::string & devName,       // [out] the /dev/ttyUSBX device
       udev_unref(udev);
 
       return TTY_E_NOERROR;
-      // LCOV_EXCL_STOP
    }
+      // LCOV_EXCL_STOP
 
    devName = "";
 
@@ -233,8 +233,8 @@ int ttyUSBDevNames( std::vector<std::string> & devNames, // [out] the /dev/ttyUS
       devNames.push_back( "/dev/" + p.filename().string());
 
       udev_device_unref(dev0);
-      // LCOV_EXCL_STOP
    }
+      // LCOV_EXCL_STOP
 
    udev_unref(udev);
 

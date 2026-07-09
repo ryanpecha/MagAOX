@@ -71,7 +71,7 @@ struct telem_psfacq : public flatbuffer_log
       msg += "seeing: " + std::to_string( fbs->seeing() ) + " ";
 
       return msg;
-   }
+   } // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
 
    /// Get the one-based star index.
    static int star_no( void *msgBuffer )

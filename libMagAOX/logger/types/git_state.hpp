@@ -79,7 +79,7 @@ struct git_state : public flatbuffer_log
       if(rgs->modified() > 0) str+= " MODIFIED";
 
       return str;
-   }
+   } // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
 
    /// Access the repo name field
    static std::string repoName( void * msgBuffer /**< [in] Buffer containing the flatbuffer serialized message.*/ )

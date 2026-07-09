@@ -548,6 +548,9 @@ TEST_CASE( "Test dm flat file management", "[dev::dm]" )
 {
     setenv( "MILK_SHM_DIR", "/tmp/dmtest/shm", 1 );
     mx::ioutils::createDirectories( "/tmp/dmtest/shm" );
+    // Remove any leftovers from a previous run first -- this test creates more flat
+    // files as it goes, and checkFlats() counts whatever is on disk.
+    std::filesystem::remove_all( "/tmp/dmtest_calibs/flattest" );
     mx::ioutils::createDirectories( "/tmp/dmtest_calibs/flattest/flats" );
 
     // Write some flat fits files, one of which is size-mismatched.
@@ -803,6 +806,7 @@ TEST_CASE( "Test dm setFlat channel size mismatch", "[dev::dm]" )
 {
     setenv( "MILK_SHM_DIR", "/tmp/dmtest/shm", 1 );
     mx::ioutils::createDirectories( "/tmp/dmtest/shm" );
+    std::filesystem::remove_all( "/tmp/dmtest_calibs/flattest2" );
     mx::ioutils::createDirectories( "/tmp/dmtest_calibs/flattest2/flats" );
 
     mx::improc::eigenImage<float> flatOK( 6, 6 );
@@ -855,6 +859,9 @@ TEST_CASE( "Test dm test pattern file management", "[dev::dm]" )
 {
     setenv( "MILK_SHM_DIR", "/tmp/dmtest/shm", 1 );
     mx::ioutils::createDirectories( "/tmp/dmtest/shm" );
+    // Remove any leftovers from a previous run first -- this test creates more test
+    // pattern files as it goes, and checkTests() counts whatever is on disk.
+    std::filesystem::remove_all( "/tmp/dmtest_calibs/testtest" );
     mx::ioutils::createDirectories( "/tmp/dmtest_calibs/testtest/tests" );
 
     mx::improc::eigenImage<float> testA( 6, 6 ), testB( 6, 6 );
@@ -1096,6 +1103,7 @@ TEST_CASE( "Test dm setTest and zeroTest channel size mismatch", "[dev::dm]" )
 {
     setenv( "MILK_SHM_DIR", "/tmp/dmtest/shm", 1 );
     mx::ioutils::createDirectories( "/tmp/dmtest/shm" );
+    std::filesystem::remove_all( "/tmp/dmtest_calibs/testmm" );
     mx::ioutils::createDirectories( "/tmp/dmtest_calibs/testmm/tests" );
 
     mx::improc::eigenImage<float> testOK( 6, 6 );
@@ -1597,6 +1605,7 @@ TEST_CASE( "Test dm INDI static callback trampolines and edge branches", "[dev::
 {
     setenv( "MILK_SHM_DIR", "/tmp/dmtest/shm", 1 );
     mx::ioutils::createDirectories( "/tmp/dmtest/shm" );
+    std::filesystem::remove_all( "/tmp/dmtest_calibs/xc" );
     mx::ioutils::createDirectories( "/tmp/dmtest_calibs/xc/flats" );
     mx::ioutils::createDirectories( "/tmp/dmtest_calibs/xc/tests" );
 
@@ -1875,6 +1884,7 @@ TEST_CASE( "Test dm setFlat internal auto-load", "[dev::dm]" )
 {
     setenv( "MILK_SHM_DIR", "/tmp/dmtest/shm", 1 );
     mx::ioutils::createDirectories( "/tmp/dmtest/shm" );
+    std::filesystem::remove_all( "/tmp/dmtest_calibs/autoload" );
     mx::ioutils::createDirectories( "/tmp/dmtest_calibs/autoload/flats" );
 
     mx::improc::eigenImage<float> flatY( 5, 5 );
@@ -1930,6 +1940,7 @@ TEST_CASE( "Test dm setFlat internal auto-load failure", "[dev::dm]" )
 {
     setenv( "MILK_SHM_DIR", "/tmp/dmtest/shm", 1 );
     mx::ioutils::createDirectories( "/tmp/dmtest/shm" );
+    std::filesystem::remove_all( "/tmp/dmtest_calibs/autoloadfail" );
     mx::ioutils::createDirectories( "/tmp/dmtest_calibs/autoloadfail/flats" );
 
     std::vector<std::string> s, k, v;

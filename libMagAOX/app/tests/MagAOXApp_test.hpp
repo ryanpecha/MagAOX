@@ -371,6 +371,24 @@ struct MagAOXApp_test : public APP_XWCTEST_BASE
         APP_XWCTEST_BASE::updateIfChanged( p, el, newVal );
     }
 
+    template <typename T>
+    void updatesIfChanged( pcf::IndiProperty &p,
+                           const std::vector<const char *> &els,
+                           const std::vector<T> &newVals,
+                           pcf::IndiProperty::PropertyStateType newState = pcf::IndiProperty::Ok )
+    {
+        APP_XWCTEST_BASE::updatesIfChanged( p, els, newVals, newState );
+    }
+
+    template <typename T>
+    void updateIfChanged( pcf::IndiProperty &p,
+                          const std::vector<std::string> &els,
+                          const std::vector<T> &newVals,
+                          pcf::IndiProperty::PropertyStateType newState = pcf::IndiProperty::Ok )
+    {
+        APP_XWCTEST_BASE::updateIfChanged( p, els, newVals, newState );
+    }
+
     void updateSwitchIfChanged( pcf::IndiProperty &p,
                                 const std::string &el,
                                 const pcf::IndiElement::SwitchStateType &newVal,

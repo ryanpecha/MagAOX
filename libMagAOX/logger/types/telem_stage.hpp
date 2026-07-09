@@ -86,7 +86,7 @@ struct telem_stage : public flatbuffer_log
 
       return msg;
 
-   }
+   } // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
 
    static int moving( void * msgBuffer )
    {
