@@ -119,7 +119,7 @@ string IndiMessage::convertTypeToString( const IndiMessage::Type &tType )
   }
 
   return szType;
-}
+} // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Returns the enumerated type given the tag.

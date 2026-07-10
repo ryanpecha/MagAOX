@@ -43,12 +43,15 @@ IndiDriver::IndiDriver( const string &szName,
 /// Copy constructor.
 /// \param idRhs Another version of the driver.
 
+// Private and never called anywhere -- uncallable outside the class.
+// LCOV_EXCL_START
 IndiDriver::IndiDriver(const IndiDriver &idRhs ) : IndiConnection()
 //  : IndiConnection( idRhs )  // can't invoke - private
 {
   static_cast<void>(idRhs);
   // Empty because this is private.
 }
+// LCOV_EXCL_STOP
 
 ////////////////////////////////////////////////////////////////////////////////
 /// \brief IndiDriver::operator =
@@ -56,6 +59,8 @@ IndiDriver::IndiDriver(const IndiDriver &idRhs ) : IndiConnection()
 /// \param idRhs The right-hand side of the operation.
 /// \return This object.
 
+// Private and never called anywhere -- uncallable outside the class.
+// LCOV_EXCL_START
 const IndiDriver &IndiDriver::operator= ( const IndiDriver &idRhs )
 //  : IndiConnection::operator= ( idRhs )  // can't invoke - private
 {
@@ -63,6 +68,7 @@ const IndiDriver &IndiDriver::operator= ( const IndiDriver &idRhs )
   // Empty because this is private.
   return *this;
 }
+// LCOV_EXCL_STOP
 
 ////////////////////////////////////////////////////////////////////////////////
 /// \brief IndiDriver::~IndiDriver

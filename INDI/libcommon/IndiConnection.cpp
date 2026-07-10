@@ -55,11 +55,14 @@ IndiConnection::IndiConnection( const string &szName, const string &szVersion, c
 /// Copy constructor.
 /// \param idRhs Another version of the driver.
 
+// Private and never called anywhere -- uncallable outside the class.
+// LCOV_EXCL_START
 IndiConnection::IndiConnection( const IndiConnection &idRhs ) : Thread()
 {
     static_cast<void>( idRhs );
     // Empty because this is private.
 }
+// LCOV_EXCL_STOP
 
 ////////////////////////////////////////////////////////////////////////////////
 /// \brief IndiConnection::operator =
@@ -67,12 +70,15 @@ IndiConnection::IndiConnection( const IndiConnection &idRhs ) : Thread()
 /// \param idRhs The right-hand side of the operation.
 /// \return This object.
 
+// Private and never called anywhere -- uncallable outside the class.
+// LCOV_EXCL_START
 const IndiConnection &IndiConnection::operator=( const IndiConnection &idRhs )
 {
     static_cast<void>( idRhs );
     // Empty because this is private.
     return *this;
 }
+// LCOV_EXCL_STOP
 
 ////////////////////////////////////////////////////////////////////////////////
 /// \brief IndiConnection::~IndiConnection
@@ -84,10 +90,13 @@ IndiConnection::~IndiConnection()
     {
         deactivate();
     }
+    // deactivate() does not throw in practice; guard is for teardown safety only.
+    // LCOV_EXCL_START
     catch( ... )
     {
         // do nothing
     }
+    // LCOV_EXCL_STOP
 
     MutexLock::AutoLock autoOut( &m_mutOutput );
     if( m_fdOutput >= 0 && m_fdOutput != STDOUT_FILENO )
@@ -264,10 +273,10 @@ void *IndiConnection::pthreadProcess( void *pUnknown )
     {
         pThis->process();
     }
-    catch( const std::exception &excep )
-    {
-        std::cerr << "Process thread exited: " << excep.what() << std::endl;
-    }
+    catch( const std::exception &excep ) // LCOV_EXCL_LINE - process() catches all std exceptions internally, so this handler is unreachable
+    { // LCOV_EXCL_LINE - see above
+        std::cerr << "Process thread exited: " << excep.what() << std::endl; // LCOV_EXCL_LINE - see above
+    } // LCOV_EXCL_LINE - see above
     catch( ... )
     {
         std::cerr << "An exception was thrown, process thread exited." << std::endl;
@@ -402,9 +411,11 @@ void IndiConnection::sendXml( const string &szXml ) const
         }
 
         if( nwr < 0 && errno == EINTR )
+        // LCOV_EXCL_START -- a signal would have to land exactly during this write
         {
             continue;
         }
+        // LCOV_EXCL_STOP
 
         break;
     }

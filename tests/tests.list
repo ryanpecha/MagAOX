@@ -117,6 +117,15 @@
 ../flatlogs/tests/flatlogcodes_test
 
 ../INDI/tests/INDI_test
+../INDI/tests/IndiElement_test
+../INDI/tests/IndiMessage_test
+../INDI/tests/IndiProperty_test
+../INDI/tests/TimeStamp_test
+../INDI/tests/Thread_test
+../INDI/tests/SystemSocket_test
+../INDI/tests/IndiXmlParser_test
+../INDI/tests/IndiConnection_test
+../INDI/tests/IndiDriverClient_test
 
 
 ../libMagAOX/common/tests/common_test

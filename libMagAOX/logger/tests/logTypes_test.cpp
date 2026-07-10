@@ -102,6 +102,24 @@ TEST_CASE( "logCodeValid, logVerify, logStdFormat, eventCode, and eventCodeName 
         REQUIRE( ossJson.str().find( "Unknown log type" ) != std::string::npos );
     }
 
+    SECTION( "logShortStdFormat truncates application names longer than 15 characters" )
+    {
+        flatlogs::bufferPtrT buf;
+        flatlogs::logHeader::createLog<MagAOX::logger::git_state>( buf,
+                                                                    flatlogs::timespecX( 1732170780, 0 ),
+                                                                    MagAOX::logger::git_state::messageT( "repo", "sha", false ),
+                                                                    flatlogs::logPrio::LOG_NOTICE );
+
+        std::ostringstream oss;
+        MagAOX::logger::logShortStdFormat( oss, "a_very_long_application_name", buf );
+        REQUIRE( !oss.str().empty() );
+
+        // A name of exactly 16 characters exercises the truncation loop's early-exit.
+        std::ostringstream oss2;
+        MagAOX::logger::logShortStdFormat( oss2, "sixteen_chars_ab", buf );
+        REQUIRE( !oss2.str().empty() );
+    }
+
     SECTION( "flatbuffer_log::msgJSON reports a genuinely invalid binary schema" )
     {
         flatlogs::bufferPtrT buf;
