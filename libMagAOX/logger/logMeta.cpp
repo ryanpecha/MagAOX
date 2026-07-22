@@ -114,7 +114,7 @@ int logMeta::setLog( const logMetaSpec & lms )
          case valTypes::UInt:
             m_spec.format = "%u";
             break;
-         // LCOV_EXCL_START
+         // LCOV_EXCL_START -- Long/ULong half of the never-produced value types listed above
          case valTypes::Long:
             m_spec.format = "%ld";
             break;

@@ -449,7 +449,7 @@ int dmPokeWFS<derivedT>::setupConfig(mx::app::appConfigurator & config)
     config.add("wfscam.loopSemWait", "", "wfscam.loopSemWait", argType::Required, "wfscam", "loopSemWait", false, "float", "The semaphore wait time for the wfs loop start signal");
     config.add("wfscam.imageSemWait", "", "wfscam.imageSemWait", argType::Required, "wfscam", "imageSemWait", false, "float", "The semaphore wait time for the image availability signal");
 
-    // LCOV_EXCL_START
+    // LCOV_EXCL_START -- see the setupConfig() rationale just above (same always-0 callee)
     if(derived().darkShmimMonitor().setupConfig(config) < 0)
     {
         derivedT::template log<software_error>({__FILE__, __LINE__, "darkShmimMonitorT::setupConfig"});
@@ -495,7 +495,7 @@ int dmPokeWFS<derivedT>::loadConfig( mx::app::appConfigurator & config)
     m_imageSemWait_sec = floor(m_imageSemWait);
     m_imageSemWait_nsec = (m_imageSemWait - m_imageSemWait_sec) * 1e9;
 
-    // LCOV_EXCL_START
+    // LCOV_EXCL_START -- see the loadConfig() rationale just above (same always-0 callee)
     if(derived().darkShmimMonitor().loadConfig(config) < 0)
     {
         return derivedT::template log<software_error, -1>({__FILE__, __LINE__, "darkShmimMonitorT::loadConfig"});
@@ -1040,7 +1040,7 @@ int dmPokeWFS<derivedT>::basicRunSensor()
 
         rv = basicTimedPoke(-1);
 
-        // LCOV_EXCL_START
+        // LCOV_EXCL_START -- see the identical rationale on the positive poke above
         if(rv < 0)
         {
             derivedT::template log<software_error>({__FILE__, __LINE__});

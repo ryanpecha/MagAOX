@@ -133,6 +133,9 @@ mx::error_t logMap<verboseT>::addFileListToFileMap( const std::string           
             throw xwcException("std::bad_alloc"); // LCOV_EXCL_LINE
         #endif
 
+        // Test-only fault hooks (XWCTEST_*): a test TU compiles this header with one
+        // of these defined to force this one site to fail, so the real handler below
+        // it runs. Production builds never define them.
         #ifdef XWCTEST_LOGMAP_AFLTFM_BADALL
             throw std::bad_alloc(); // LCOV_EXCL_LINE
         #endif

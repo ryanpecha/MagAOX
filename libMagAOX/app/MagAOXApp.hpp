@@ -1813,6 +1813,8 @@ int MagAOXApp<_useINDI>::execute() // virtual
         return -1;
     }
 
+    // Test hook: shut down the log thread right now (and wait for it to actually die)
+    // so the log-thread-death check inside the main loop below genuinely fires.
     // clang-format off
     #ifdef XWCTEST_MAGAOXAPP_EXEC_LOG_DEATH
     m_log.logShutdown(true); // LCOV_EXCL_LINE
@@ -3127,7 +3129,7 @@ int MagAOXApp<_useINDI>::registerIndiPropertyReadOnly( pcf::IndiProperty &prop,
 
         return 0;
     }
-    // LCOV_EXCL_START
+    // LCOV_EXCL_START -- see the rationale on registerIndiPropertyReadOnly()'s first catch above
     catch( std::exception &e )
     {
         return log<software_error, -1>( { __FILE__, __LINE__, std::string( "Exception caught: " ) + e.what() } );
@@ -3161,7 +3163,7 @@ int MagAOXApp<_useINDI>::registerIndiPropertyNew( pcf::IndiProperty &prop,
 
         return 0;
     }
-    // LCOV_EXCL_START
+    // LCOV_EXCL_START -- see the rationale on registerIndiPropertyReadOnly()'s first catch above
     catch( std::exception &e )
     {
         return log<software_error, -1>( { __FILE__, __LINE__, std::string( "Exception caught: " ) + e.what() } );
@@ -3241,7 +3243,7 @@ int MagAOXApp<_useINDI>::registerIndiPropertySet( pcf::IndiProperty &prop,
                 { __FILE__, __LINE__, "failed to insert INDI property: " + prop.createUniqueKey() + ". Possible duplicate." } );
         }
     }
-    // LCOV_EXCL_START
+    // LCOV_EXCL_START -- see the rationale on registerIndiPropertyReadOnly()'s first catch above
     catch( std::exception &e )
     {
         return log<software_error, -1>( { __FILE__, __LINE__, std::string( "Exception caught: " ) + e.what() } );

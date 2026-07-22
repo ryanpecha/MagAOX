@@ -2,6 +2,9 @@
 ### Hide commands
 AT=@
 GEN_TEST_FILES = ./generated_tests/*_generated_tests.cpp
+# common.mk supplies the repo-standard CXXFLAGS (including the COVERAGE=1 flags,
+# previously duplicated here). python.mk supplies $(PYTHON): the test generator
+# uses syntax that needs Python >= 3.10, which the system python3 may not be.
 include ../../../Make/common.mk
 include ../../../Make/python.mk
 ### default entropy test settings
@@ -48,6 +51,8 @@ $(GEN_TEST_FILES) :
 
 # -lflatbuffers: the generated tests exercise logJsonFormat, whose schema reflection
 # (flatbuffers::Parser::Deserialize/GenText) lives in the flatbuffers library.
+# stateCodes.cpp: the generated per-type tests round-trip state_change logs, whose
+# formatters call stateCodes::codeText().
 catch2_tests: ../generated/binarySchemata.inc $(GEN_TEST_FILES) catch2_tests.cpp
 	$(AT)g++ $(CXXFLAGS) -I. -I./../types $(GEN_TEST_FILES) catch2_tests.cpp ../../app/stateCodes.cpp -o $@ -lflatbuffers
 

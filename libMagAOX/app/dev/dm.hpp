@@ -1462,7 +1462,7 @@ int dm<derivedT, realT>::appStartup()
     m_indiP_testShmim.add( pcf::IndiElement( "channel" ) );
     m_indiP_testShmim["channel"] = m_shmimTest;
     derived().createStandardIndiToggleSw( m_indiP_setTest, "test_shmim" );
-    // LCOV_EXCL_START
+    // LCOV_EXCL_START -- see the registration-failure rationale at the top of appStartup()
     if( derived().registerIndiPropertyReadOnly( m_indiP_testShmim ) < 0 )
     {
 #ifndef DM_TEST_NOLOG

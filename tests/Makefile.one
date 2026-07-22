@@ -113,6 +113,8 @@ pcommand:
 	@echo "Command to run test: " $(TESTNAME)
 
 .PHONY: magaox_git_version.h
+# Generate to a unique temp file and mv atomically: parallel per-test builds each
+# regenerate this header and previously raced, corrupting it mid-compile.
 magaox_git_version.h:
 	@gengithead.sh $(abspath $(SELF_DIR)/../) $(SELF_DIR)/../magaox_git_version.h.tmp.$$$$ MAGAOX && mv -f $(SELF_DIR)/../magaox_git_version.h.tmp.$$$$ $(SELF_DIR)/../magaox_git_version.h
 

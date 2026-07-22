@@ -25,6 +25,8 @@ namespace logger
 struct telem_sparkleclock : public flatbuffer_log
 {
    ///The event code
+   // (Previously TELEM_DMSPECK -- a copy-paste error that made every sparkle-clock
+   // log identify itself as a DM-speck log in the binary stream.)
    static const flatlogs::eventCodeT eventCode = eventCodes::TELEM_SPARKLECLOCK;
 
    ///The default level
@@ -94,6 +96,8 @@ struct telem_sparkleclock : public flatbuffer_log
       }
 
       msg += "seps: ";
+      // separations is not a required field, so a deserialized message can lack it
+      // entirely -- iterating without this null check dereferences NULL.
       if(fbs->separations() != nullptr)
       {
          for(flatbuffers::Vector<float>::const_iterator it = fbs->separations()->begin(); it != fbs->separations()->end(); ++it)

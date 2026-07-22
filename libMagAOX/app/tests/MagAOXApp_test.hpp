@@ -1,3 +1,13 @@
+/** \file MagAOXApp_test.hpp
+  * \brief Shared harness for the MagAOXApp Catch2 tests (MagAOXApp_test.cpp,
+  *        MagAOXAppExecute_test.cpp, and the per-fault translation units).
+  *
+  * APP_XWCTEST_BASE selects which MagAOXApp<true> the concrete test app derives from:
+  * the production class, or -- when a fault TU defines XWCTEST_NAMESPACE before
+  * including MagAOXApp.hpp -- the re-included copy inside that namespace with one
+  * XWCTEST_* fault macro enabled. The namespace nesting below mirrors that so each
+  * fault TU gets its own distinct harness types without ODR collisions.
+  */
 #ifndef app_tests_MagAOXApp_test_hpp
 #define app_tests_MagAOXApp_test_hpp
 

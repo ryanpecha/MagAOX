@@ -35,6 +35,10 @@ namespace MagAOX
 namespace logger
 {
 
+// Test-only: when XWCTEST_NAMESPACE is defined, a test translation unit compiles a second
+// copy of this file inside that namespace with one of the XWCTEST_* fault macros below
+// enabled, so real error-handling branches execute and are counted against these same
+// source lines. Production builds never define these macros.
 #ifdef XWCTEST_NAMESPACE
 namespace XWCTEST_NAMESPACE
 {
@@ -439,6 +443,8 @@ int logManager<parentT, logFileT>::logThreadStart()
           throw 42; // LCOV_EXCL_LINE
       #endif
 
+      // NOT_JOINABLE skips the construction entirely, leaving the default-constructed
+      // (non-joinable) thread so the joinable() check below genuinely fails.
       #ifndef XWCTEST_LOGMANAGER_LOGTHREADSTART_NOT_JOINABLE
           m_logThread = std::thread( _logThreadStart, this);
       #endif

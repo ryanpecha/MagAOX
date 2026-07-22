@@ -1,3 +1,11 @@
+/** \file dmPokeWFS_test.cpp
+  * \brief Catch2 tests for the dev::dmPokeWFS CRTP mixin (libMagAOX/app/dev/dmPokeWFS.hpp).
+  *
+  * Drives the real poke sensor state machine under the harness in dmPokeWFS_test.hpp:
+  * real shmim streams, real semaphores, and a real WFS-frame-producing thread stand in
+  * for the camera, so the measurement loop (basicTimedPoke/basicRunSensor), its INDI
+  * callbacks, and its error paths all execute for real.
+  */
 #include "../../../../tests/catch2/catch.hpp"
 
 #include <mx/sys/timeUtils.hpp>

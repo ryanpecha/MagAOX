@@ -1,3 +1,9 @@
+/** \file ttyIOUtils_test.cpp
+  * \brief Catch2 tests for the tty I/O helpers (libMagAOX/tty/ttyIOUtils.cpp).
+  *
+  * Uses real pty pairs (openpty) as the serial device, so open/read/write/timeout and
+  * error paths run against genuine terminal file descriptors -- no mocks.
+  */
 #include "../../../tests/catch2/catch.hpp"
 
 #include <pty.h>

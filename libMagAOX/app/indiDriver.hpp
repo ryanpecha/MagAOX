@@ -292,7 +292,7 @@ int  indiDriver<parentT>::sendNewProperty( const pcf::IndiProperty &ipRecv )
       #ifdef XWCTEST_INDIDRIVER_HOOKS
       if(xwcTestHooks.forceOutGoingNull)
       {
-         // LCOV_EXCL_START
+         // LCOV_EXCL_START -- runs only in the XWCTEST_INDIDRIVER_HOOKS test TU, whose gcno is separate
          m_outGoing->deactivate();
          delete m_outGoing;
          m_outGoing = nullptr;
