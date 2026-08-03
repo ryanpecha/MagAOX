@@ -1361,6 +1361,319 @@ TEST_CASE( "logInMemory::loadFile detects filesystem and framing errors", "[libM
     }
 }
 
+
+/// The free helper functions the scan/resync machinery is built from, called directly.
+/**
+ * \ingroup logMap_unit_test
+ */
+TEST_CASE( "logMap free helpers: debug formatting, extent validation, resync", "[libMagAOX::logger::logMap]" )
+{
+    SECTION( "logMapDebugTime formats a timestamp (normally only used by DEBUG_CRUMB)" )
+    {
+        std::string out = MagAOX::logger::logMapDebugTime( flatlogs::timespecX( 1732170780, 5 ) );
+        REQUIRE( out.find( "1732170780.5" ) != std::string::npos );
+    }
+
+    SECTION( "logMapEntryExtentValid rejects null/too-short/lying-header buffers" )
+    {
+        size_t totalSize = 99;
+        REQUIRE( !MagAOX::logger::logMapEntryExtentValid( totalSize, nullptr, nullptr ) );
+        REQUIRE( totalSize == 0 );
+
+        // A real entry, but viewed through a window shorter than minHeadSize.
+        flatlogs::bufferPtrT buf;
+        flatlogs::logHeader::createLog<dummyLogA>(
+            buf, flatlogs::timespecX( 1732170780, 0 ), "A", flatlogs::logPrio::LOG_NOTICE );
+        REQUIRE( !MagAOX::logger::logMapEntryExtentValid( totalSize, buf.get(), buf.get() + 1 ) );
+
+        // An entry whose (extended) header itself is longer than the window: the
+        // big-declared type's msgLen needs the extended header form.
+        flatlogs::bufferPtrT big;
+        flatlogs::logHeader::createLog<dummyLogBigDeclared>(
+            big, flatlogs::timespecX( 1732170780, 0 ), 0, flatlogs::logPrio::LOG_NOTICE );
+        REQUIRE( flatlogs::logHeader::headerSize( big.get() ) >
+                 static_cast<size_t>( flatlogs::logHeader::minHeadSize ) );
+        REQUIRE( !MagAOX::logger::logMapEntryExtentValid(
+            totalSize, big.get(), big.get() + flatlogs::logHeader::minHeadSize ) );
+    }
+
+    SECTION( "logMapResync rejects null buffers and finds a valid chain past garbage" )
+    {
+        REQUIRE( MagAOX::logger::logMapResync( nullptr, nullptr ) == nullptr );
+
+        // Buffer = 8 garbage bytes, then 3 valid consecutive entries: resync from the
+        // garbage must land exactly on the first valid entry (a 3-link chain).
+        std::vector<char>    mem( 8, '\xff' );
+        flatlogs::bufferPtrT buf;
+        for( int i = 0; i < 3; ++i )
+        {
+            flatlogs::logHeader::createLog<dummyLogA>(
+                buf, flatlogs::timespecX( 1732170780 + 10 * i, 0 ), "A", flatlogs::logPrio::LOG_NOTICE );
+            mem.insert( mem.end(), buf.get(), buf.get() + flatlogs::logHeader::totalSize( buf.get() ) );
+        }
+        char *found = MagAOX::logger::logMapResync( mem.data(), mem.data() + mem.size() );
+        REQUIRE( found == mem.data() + 8 );
+
+        // Garbage then exactly TWO valid entries reaching the buffer end: fewer than a
+        // full 3-link chain, but a chain that ends exactly at bufferEnd also counts.
+        std::vector<char> mem2( 8, '\xff' );
+        for( int i = 0; i < 2; ++i )
+        {
+            flatlogs::logHeader::createLog<dummyLogA>(
+                buf, flatlogs::timespecX( 1732170780 + 10 * i, 0 ), "A", flatlogs::logPrio::LOG_NOTICE );
+            mem2.insert( mem2.end(), buf.get(), buf.get() + flatlogs::logHeader::totalSize( buf.get() ) );
+        }
+        REQUIRE( MagAOX::logger::logMapResync( mem2.data(), mem2.data() + mem2.size() ) == mem2.data() + 8 );
+
+        // All-garbage: no chain to find.
+        std::vector<char> junk( 64, '\xff' );
+        REQUIRE( MagAOX::logger::logMapResync( junk.data(), junk.data() + junk.size() ) == nullptr );
+    }
+
+    SECTION( "recordRecoverableError / recoverableErrors accumulate across apps" )
+    {
+        MagAOX::logger::logMap<XWC_DEFAULT_VERBOSITY> lm;
+        REQUIRE( lm.recoverableErrors() == 0 );
+        lm.recordRecoverableError( "devA" );
+        lm.recordRecoverableError( "devA" );
+        lm.recordRecoverableError( "devB" );
+        REQUIRE( lm.recoverableErrors() == 3 );
+    }
+}
+
+/// loadFile's corruption tolerance and the source-attribution accessors.
+/**
+ * \ingroup logMap_unit_test
+ */
+TEST_CASE( "logInMemory corruption recovery and source attribution", "[libMagAOX::logger::logMap]" )
+{
+    const time_t base = 1732170780;
+
+    SECTION( "an empty file is rejected" )
+    {
+        std::filesystem::remove_all( "/tmp/logMap_test_empty" );
+        std::string fileName, relPath;
+        MagAOX::file::fileTimeRelPath( fileName, relPath, "dev1", "xlog", base, 0 );
+        std::filesystem::create_directories( "/tmp/logMap_test_empty/" + relPath );
+        std::ofstream( "/tmp/logMap_test_empty/" + relPath + '/' + fileName ).close();
+
+        MagAOX::file::stdFileName<XWC_DEFAULT_VERBOSITY> sfn( "/tmp/logMap_test_empty/" + relPath + '/' + fileName );
+        REQUIRE( sfn.valid() );
+
+        MagAOX::logger::logInMemory lim;
+        REQUIRE( lim.loadFile( sfn ) == -1 );
+    }
+
+    SECTION( "garbage in the middle of a file is skipped by a real resync" )
+    {
+        auto sfn = writeSingleLogFile( "/tmp/logMap_test_midcorrupt", "dev1", { base, base + 10 } );
+
+        // Append garbage, then three more valid entries, so the resync scan has a
+        // 3-link chain to land on.
+        std::ofstream fout( sfn.fullName(), std::ios::binary | std::ios::app );
+        std::vector<char> junk( 16, '\xff' );
+        fout.write( junk.data(), junk.size() );
+        flatlogs::bufferPtrT buf;
+        for( int i = 2; i < 5; ++i )
+        {
+            flatlogs::logHeader::createLog<dummyLogA>(
+                buf, flatlogs::timespecX( base + 10 * i, 0 ), "A", flatlogs::logPrio::LOG_NOTICE );
+            fout.write( buf.get(), flatlogs::logHeader::totalSize( buf.get() ) );
+        }
+        fout.close();
+
+        MagAOX::logger::logInMemory lim;
+        REQUIRE( lim.loadFile( sfn ) == 0 );
+        REQUIRE( lim.m_recoverableErrors > 0 );
+        REQUIRE( lim.m_endTime.time_s == base + 40 ); // the entries after the garbage were kept
+    }
+
+    SECTION( "a file of pure garbage is rejected" )
+    {
+        std::filesystem::remove_all( "/tmp/logMap_test_garbage" );
+        std::string fileName, relPath;
+        MagAOX::file::fileTimeRelPath( fileName, relPath, "dev1", "xlog", base, 0 );
+        std::filesystem::create_directories( "/tmp/logMap_test_garbage/" + relPath );
+        {
+            std::ofstream fout( "/tmp/logMap_test_garbage/" + relPath + '/' + fileName, std::ios::binary );
+            std::vector<char> junk( 64, '\xff' );
+            fout.write( junk.data(), junk.size() );
+        }
+
+        MagAOX::file::stdFileName<XWC_DEFAULT_VERBOSITY> sfn( "/tmp/logMap_test_garbage/" + relPath + '/' + fileName );
+        REQUIRE( sfn.valid() );
+
+        MagAOX::logger::logInMemory lim;
+        REQUIRE( lim.loadFile( sfn ) == -1 );
+    }
+
+    SECTION( "sourceFile and sourceOffset attribute entries to their on-disk file" )
+    {
+        auto sfn = writeSingleLogFile( "/tmp/logMap_test_source", "dev1", { base, base + 10 } );
+
+        MagAOX::logger::logInMemory lim;
+        REQUIRE( lim.loadFile( sfn ) == 0 );
+
+        char *p0 = lim.m_memory.data();
+        char *p1 = p0 + flatlogs::logHeader::totalSize( p0 );
+
+        REQUIRE( lim.sourceFile( p0 ) == sfn.fullName() );
+        REQUIRE( lim.sourceFile( p1 ) == sfn.fullName() );
+        REQUIRE( lim.sourceOffset( p0 ) == 0 );
+        REQUIRE( lim.sourceOffset( p1 ) == static_cast<size_t>( p1 - p0 ) );
+
+        // Error forms: null, empty buffer, out-of-range pointer.
+        REQUIRE( lim.sourceFile( nullptr ) == "<unknown>" );
+        REQUIRE( lim.sourceOffset( nullptr ) == std::numeric_limits<size_t>::max() );
+
+        char *past = lim.m_memory.data() + lim.m_memory.size();
+        REQUIRE( lim.sourceFile( past ) == "<outside-loaded-buffer>" );
+        REQUIRE( lim.sourceOffset( past ) == std::numeric_limits<size_t>::max() );
+
+        MagAOX::logger::logInMemory empty;
+        REQUIRE( empty.sourceFile( p0 ) == "<unknown>" );
+        REQUIRE( empty.sourceOffset( p0 ) == std::numeric_limits<size_t>::max() );
+
+        // A buffer with bytes but no recorded loaded-file ranges (only constructible by
+        // hand -- loadFile always records contiguous ranges): the in-range-but-unknown
+        // returns.
+        MagAOX::logger::logInMemory bare;
+        bare.m_memory.resize( 32, 0 );
+        REQUIRE( bare.sourceFile( bare.m_memory.data() ) == "<unknown-loaded-file>" );
+        REQUIRE( bare.sourceOffset( bare.m_memory.data() ) == std::numeric_limits<size_t>::max() );
+    }
+}
+
+/// getNextLog/getPriorLog guard and recovery paths over real (and really corrupted) buffers.
+/**
+ * \ingroup logMap_unit_test
+ */
+TEST_CASE( "getNextLog and getPriorLog guard and resync paths", "[libMagAOX::logger::logMap]" )
+{
+    const time_t base = 1732170780;
+
+    auto sfn = writeSingleLogFile( "/tmp/logMap_test_guards", "dev1", { base, base + 10, base + 20, base + 30, base + 40 } );
+
+    MagAOX::logger::logMap<XWC_DEFAULT_VERBOSITY> lm;
+    lm.m_appToFileMap["dev1"].insert( sfn );
+
+
+    SECTION( "a lastFile whose day-directory vanished falls back to the previous boundary" )
+    {
+        createTestPaths( "/tmp/logMap_test" );
+
+        // lastFile claims a day far past every real directory. The forward scan finds
+        // nothing within m_searchDaySpan days, then the fallback walk back from that day
+        // also finds nothing within the span -- so follLogSubDir falls back to
+        // prevLogSubDir and the search proceeds from there.
+        MagAOX::file::stdFileName firstFile( "cam1/2024_11_19/cam1_20241119030000000000000.xrif" );
+        MagAOX::file::stdFileName lastFile( "cam1/2025_06_01/cam1_20250601000000000000000.xrif" );
+
+        MagAOX::logger::logMap lm;
+        lm.m_searchDaySpan = 5;
+
+        mx::error_t errc = lm.loadAppToFileMap( "/tmp/logMap_test", "dev1", ".xlog", firstFile, lastFile );
+        REQUIRE( errc == mx::error_t::noerror );
+        REQUIRE( lm.m_appToFileMap["dev1"].size() > 0 );
+    }
+
+    SECTION( "getPriorLog with no file strictly before the requested time fails to load" )
+    {
+        // The single file's timestamp equals base, so there is no file strictly before
+        // ts=base: the initial loadFiles finds no prior file and getPriorLog reports it.
+        char *logBefore = nullptr;
+        REQUIRE( lm.getPriorLog( logBefore, "dev1", dummyLogA::eventCode, flatlogs::timespecX( base, 0 ) ) == -1 );
+    }
+
+    SECTION( "getNextLog rejects a null current entry and an unloaded buffer" )
+    {
+        char *logAfter = nullptr;
+        REQUIRE( lm.getNextLog( logAfter, nullptr, "dev1" ) == -1 );
+    }
+
+    SECTION( "getNextLog rejects a pointer outside the loaded buffer" )
+    {
+        char *logBefore = nullptr;
+        REQUIRE( lm.getPriorLog( logBefore, "dev1", dummyLogA::eventCode, flatlogs::timespecX( base + 5, 0 ) ) == 0 );
+
+        char *past     = lm.m_appToBufferMap["dev1"].m_memory.data() + lm.m_appToBufferMap["dev1"].m_memory.size();
+        char *logAfter = nullptr;
+        REQUIRE( lm.getNextLog( logAfter, past, "dev1" ) == -1 );
+    }
+
+    SECTION( "getNextLog rejects a current entry whose header overshoots the buffer" )
+    {
+        char *logBefore = nullptr;
+        REQUIRE( lm.getPriorLog( logBefore, "dev1", dummyLogA::eventCode, flatlogs::timespecX( base + 5, 0 ) ) == 0 );
+
+        std::vector<char> &mem = lm.m_appToBufferMap["dev1"].m_memory;
+        char              *p   = mem.data();
+        for( int i = 0; i < 4; ++i )
+        {
+            p += flatlogs::logHeader::totalSize( p );
+        }
+        p[flatlogs::logHeader::headerSize( p ) - 1] += 50; // inflate the LAST entry's length
+
+        char *logAfter = nullptr;
+        REQUIRE( lm.getNextLog( logAfter, p, "dev1" ) == -1 );
+    }
+
+    SECTION( "getNextLog resyncs past a corrupted middle entry" )
+    {
+        char *logBefore = nullptr;
+        REQUIRE( lm.getPriorLog( logBefore, "dev1", dummyLogA::eventCode, flatlogs::timespecX( base + 5, 0 ) ) == 0 );
+
+        std::vector<char> &mem = lm.m_appToBufferMap["dev1"].m_memory;
+        char              *p0  = mem.data();
+        char              *p1  = p0 + flatlogs::logHeader::totalSize( p0 );
+
+        // Corrupt entry 1's priority byte (the header's first field): 30 is not a valid
+        // on-disk priority (0-8 or 64), making the entry insane without changing any
+        // size fields -- so entries 2-4 still chain and resync can land on entry 2.
+        char *p2 = p1 + flatlogs::logHeader::totalSize( p1 );
+        p1[0]    = 30;
+
+        char *logAfter = nullptr;
+        int   rv       = lm.getNextLog( logAfter, p0, "dev1" );
+        REQUIRE( rv == 0 );
+        REQUIRE( logAfter == p2 ); // resynced past the corrupt entry to the next A
+    }
+
+    SECTION( "getPriorLog resyncs past a corrupted middle entry during its scan" )
+    {
+        char *logBefore = nullptr;
+        REQUIRE( lm.getPriorLog( logBefore, "dev1", dummyLogA::eventCode, flatlogs::timespecX( base + 5, 0 ) ) == 0 );
+
+        std::vector<char> &mem = lm.m_appToBufferMap["dev1"].m_memory;
+        char              *p0  = mem.data();
+        char              *p1  = p0 + flatlogs::logHeader::totalSize( p0 );
+        p1[0]                  = 30; // invalid priority: entry 1 is insane, sizes intact
+
+        char *logBefore2 = nullptr;
+        int   rv = lm.getPriorLog( logBefore2, "dev1", dummyLogA::eventCode, flatlogs::timespecX( base + 100, 0 ) );
+        REQUIRE( rv == 0 );
+        REQUIRE( flatlogs::logHeader::timespec( logBefore2 ).time_s == base + 40 );
+    }
+
+    SECTION( "getNextLog gives up when a corrupt tail cannot be resynced" )
+    {
+        char *logBefore = nullptr;
+        REQUIRE( lm.getPriorLog( logBefore, "dev1", dummyLogA::eventCode, flatlogs::timespecX( base + 5, 0 ) ) == 0 );
+
+        std::vector<char> &mem = lm.m_appToBufferMap["dev1"].m_memory;
+        char              *p   = mem.data();
+        for( int i = 0; i < 3; ++i )
+        {
+            p += flatlogs::logHeader::totalSize( p );
+        }
+        char *p4 = p + flatlogs::logHeader::totalSize( p );
+        p4[0]    = 30; // corrupt the LAST entry: nothing valid follows, resync must fail
+
+        char *logAfter = nullptr;
+        REQUIRE( lm.getNextLog( logAfter, p, "dev1" ) == 1 ); // scan ends without a match
+    }
+}
+
 } // namespace logMapTest
 } // namespace loggerTest
 } // namespace libXWCTest

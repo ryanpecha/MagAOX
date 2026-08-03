@@ -121,65 +121,47 @@ double getDoubleVal( void *buf )
 
 char getCharVal( void *buf )
 {
-    char v;
-    memcpy( &v, buf, sizeof( v ) );
-    return v;
+    return (char)MagAOX::logger::GetState_change_fb( buf )->to();
 }
 
 unsigned char getUCharVal( void *buf )
 {
-    unsigned char v;
-    memcpy( &v, buf, sizeof( v ) );
-    return v;
+    return (unsigned char)MagAOX::logger::GetState_change_fb( buf )->to();
 }
 
 short getShortVal( void *buf )
 {
-    short v;
-    memcpy( &v, buf, sizeof( v ) );
-    return v;
+    return (short)MagAOX::logger::GetState_change_fb( buf )->to();
 }
 
 unsigned short getUShortVal( void *buf )
 {
-    unsigned short v;
-    memcpy( &v, buf, sizeof( v ) );
-    return v;
+    return (unsigned short)MagAOX::logger::GetState_change_fb( buf )->to();
 }
 
 long getLongVal( void *buf )
 {
-    long v;
-    memcpy( &v, buf, sizeof( v ) );
-    return v;
+    return (long)MagAOX::logger::GetState_change_fb( buf )->to();
 }
 
 unsigned long getULongVal( void *buf )
 {
-    unsigned long v;
-    memcpy( &v, buf, sizeof( v ) );
-    return v;
+    return (unsigned long)MagAOX::logger::GetState_change_fb( buf )->to();
 }
 
 long long getLongLongVal( void *buf )
 {
-    long long v;
-    memcpy( &v, buf, sizeof( v ) );
-    return v;
+    return (long long)MagAOX::logger::GetState_change_fb( buf )->to();
 }
 
 unsigned int getUIntVal( void *buf )
 {
-    unsigned int v;
-    memcpy( &v, buf, sizeof( v ) );
-    return v;
+    return (unsigned int)MagAOX::logger::GetState_change_fb( buf )->to();
 }
 
 unsigned long long getULongLongVal( void *buf )
 {
-    unsigned long long v;
-    memcpy( &v, buf, sizeof( v ) );
-    return v;
+    return (unsigned long long)MagAOX::logger::GetState_change_fb( buf )->to();
 }
 
 // Exposes logMeta's protected m_detail so a test can drive valueNumber()/valueString() with
@@ -615,6 +597,10 @@ TEST_CASE( "logMeta reads String/State and Bool/Continuous members from a real g
         std::string val = lmeta.value( lm, flatlogs::timespecX( base, 0 ), flatlogs::timespecX( base + 5, 0 ) );
         REQUIRE( val == "repoA" );
 
+        // stime past the data: this member's failure return.
+        REQUIRE( lmeta.value( lm, flatlogs::timespecX( base + 11, 0 ), flatlogs::timespecX( base + 1000, 0 ) ) ==
+                 "NOT AVAILABLE" );
+
         auto card = lmeta.card( lm, flatlogs::timespecX( base, 0 ), flatlogs::timespecX( base + 5, 0 ) );
         REQUIRE( card.keyword() == "REPO" ); // hierarch is false for repoName, so no device prefix/padding
         REQUIRE( card.comment() == "custom comment" );
@@ -695,6 +681,14 @@ TEST_CASE( "logMeta reads Bool/Float/Vector members from a real telem_dmspeck lo
         std::string val = lmeta.value( lm, flatlogs::timespecX( base, 0 ), flatlogs::timespecX( base + 5, 0 ) );
         REQUIRE( val == "1" );
 
+        // stime past the data: this member's failure return.
+        REQUIRE( lmeta.value( lm, flatlogs::timespecX( base + 11, 0 ), flatlogs::timespecX( base + 1000, 0 ) ) ==
+                 "NOT AVAILABLE" );
+
+        // stime past the data: this member's failure return.
+        REQUIRE( lmeta.value( lm, flatlogs::timespecX( base + 11, 0 ), flatlogs::timespecX( base + 1000, 0 ) ) ==
+                 "NOT AVAILABLE" );
+
         auto card = lmeta.card( lm, flatlogs::timespecX( base, 0 ), flatlogs::timespecX( base + 5, 0 ) );
         REQUIRE( card.keyword() == "cameraOne MODULATING" ); // already >= 9 chars, no padding needed
     }
@@ -718,6 +712,10 @@ TEST_CASE( "logMeta reads Bool/Float/Vector members from a real telem_dmspeck lo
 
         std::string val = lmeta.value( lm, flatlogs::timespecX( base, 0 ), flatlogs::timespecX( base + 5, 0 ) );
         REQUIRE( val == "1,0" );
+
+        // stime past the data: this member's failure return.
+        REQUIRE( lmeta.value( lm, flatlogs::timespecX( base + 11, 0 ), flatlogs::timespecX( base + 1000, 0 ) ) ==
+                 "NOT AVAILABLE" );
     }
 
     SECTION( "Vector_Float/State: separations" )
@@ -728,6 +726,10 @@ TEST_CASE( "logMeta reads Bool/Float/Vector members from a real telem_dmspeck lo
         std::string val = lmeta.value( lm, flatlogs::timespecX( base, 0 ), flatlogs::timespecX( base + 5, 0 ) );
         REQUIRE( val != "invalid" );
         REQUIRE( val.find( ',' ) != std::string::npos );
+
+        // stime past the data: this member's failure return.
+        REQUIRE( lmeta.value( lm, flatlogs::timespecX( base + 11, 0 ), flatlogs::timespecX( base + 1000, 0 ) ) ==
+                 "NOT AVAILABLE" );
     }
 }
 
@@ -807,6 +809,10 @@ TEST_CASE( "logMeta reads UInt/State and Double/State members from a real telem_
 
         std::string val = lmeta.value( lm, flatlogs::timespecX( base, 0 ), flatlogs::timespecX( base + 5, 0 ) );
         REQUIRE( val == "1000" );
+
+        // stime past the data: this member's failure return.
+        REQUIRE( lmeta.value( lm, flatlogs::timespecX( base + 11, 0 ), flatlogs::timespecX( base + 1000, 0 ) ) ==
+                 "NOT AVAILABLE" );
     }
 
     SECTION( "Double/State: encode_sate" )
@@ -894,6 +900,10 @@ TEST_CASE( "logMeta reads a ULongLong/State member from a real telem_pokeloop lo
 
         std::string val = lmeta.value( lm, flatlogs::timespecX( base, 0 ), flatlogs::timespecX( base + 5, 0 ) );
         REQUIRE( val == "12345" );
+
+        // stime past the data: this member's failure return.
+        REQUIRE( lmeta.value( lm, flatlogs::timespecX( base + 11, 0 ), flatlogs::timespecX( base + 1000, 0 ) ) ==
+                 "NOT AVAILABLE" );
     }
 }
 
@@ -934,26 +944,31 @@ TEST_CASE( "logMeta falls back to the invalid sentinel for a valType unhandled b
     REQUIRE( card.valueStr() == "NOT AVAILABLE" );
 }
 
-// Raw (non-flatbuffer) dummy log types, one per C++ type needed to reach a valType/metaType
-// combination that no real MagAO-X log type uses (verified by grepping every types/*.hpp
-// getAccessor()). Event codes are reserved (60001+), well above any real event code.
+// Dummy log types, one per C++ type needed to reach a valType/metaType combination that
+// no real MagAO-X log type uses (verified by grepping every types/*.hpp getAccessor()).
+// Each writes a REAL state_change flatbuffer with the value in its 'to' field: the
+// merged logMeta verifies every scanned entry against its event code's schema
+// (verifyLogEntry), so the payload must genuinely verify -- the per-type accessors
+// below then read 'to' back as each C++ type. (EVCODE is retained in the signature for
+// the call sites but unused: all of these are state_change entries now.)
 #define DEFINE_DUMMY_RAW_LOG( NAME, TYPE, EVCODE )                                                                    \
     struct NAME                                                                                                       \
     {                                                                                                                 \
         static const flatlogs::eventCodeT eventCode;                                                                  \
         static const flatlogs::logPrioT   defaultLevel = flatlogs::logPrio::LOG_NOTICE;                               \
         typedef TYPE                      messageT;                                                                   \
-        static flatlogs::msgLenT          length( const messageT & )                                                  \
+        static flatlogs::msgLenT          length( const messageT &msg )                                               \
         {                                                                                                             \
-            return sizeof( messageT );                                                                               \
+            MagAOX::logger::state_change::messageT m( 0, (int16_t)msg );                                              \
+            return MagAOX::logger::state_change::length( m );                                                         \
         }                                                                                                             \
         static int format( void *msgBuffer, const messageT &msg )                                                     \
         {                                                                                                             \
-            memcpy( msgBuffer, &msg, sizeof( msg ) );                                                                 \
-            return 0;                                                                                                 \
+            MagAOX::logger::state_change::messageT m( 0, (int16_t)msg );                                              \
+            return MagAOX::logger::state_change::format( msgBuffer, m );                                              \
         }                                                                                                             \
     };                                                                                                                \
-    const flatlogs::eventCodeT NAME::eventCode = EVCODE;
+    const flatlogs::eventCodeT NAME::eventCode = MagAOX::logger::eventCodes::STATE_CHANGE;
 
 DEFINE_DUMMY_RAW_LOG( dummyLogChar, char, 60001 )
 DEFINE_DUMMY_RAW_LOG( dummyLogUChar, unsigned char, 60002 )
@@ -968,14 +983,11 @@ DEFINE_DUMMY_RAW_LOG( dummyLogULongLongCont, unsigned long long, 60010 )
 
 #undef DEFINE_DUMMY_RAW_LOG
 
-/// logMeta's handling of valType/metaType combinations no real log type uses, driven by
-/// overwriting the protected m_detail (via logMetaExposed) with a hand-built accessor.
-/// The merged logMeta flatbuffer-verifies every entry it reads from a log file
-/// (verifyLogEntry), and these sections' raw payloads under invented event codes cannot
-/// pass that gate -- so the file-driven lookups now uniformly yield the
-/// "NOT AVAILABLE" sentinel instead of reaching the per-valType read branches the old
-/// implementation exposed. The sections document that gate; whether the now-unreachable
-/// branches need exclusions is for the next coverage pass over the merged code.
+/// logMeta covers valType/metaType combinations no real log type uses, by constructing
+/// logMeta normally and then using logMetaExposed to overwrite the protected m_detail
+/// with a hand-built accessor of the target C++ type. The entries themselves are real,
+/// verifiable state_change flatbuffers (see DEFINE_DUMMY_RAW_LOG) so they pass the
+/// merged verifyLogEntry gate, and the accessors read the 'to' field back as each type.
 /**
  * \ingroup logMeta_unit_test
  */
@@ -1003,13 +1015,19 @@ TEST_CASE( "logMeta reaches valType/metaType branches unreachable via any real l
         MagAOX::logger::logMetaSpec lmsState( "devChar", dummyLogChar::eventCode, "state" );
         logMetaExposed               lmetaState( lmsState );
         lmetaState.setDetail( { "", logMeta::valTypes::Char, logMeta::metaTypes::State, reinterpret_cast<void *>( &getCharVal ) } );
-        REQUIRE( lmetaState.value( lm, flatlogs::timespecX( base, 0 ), flatlogs::timespecX( base + 5, 0 ) ) ==
-                 "NOT AVAILABLE" ); // raw payload rejected by the merged verifyLogEntry gate (see the test case doc)
+        REQUIRE( lmetaState.value( lm, flatlogs::timespecX( base, 0 ), flatlogs::timespecX( base + 5, 0 ) ) == "5" );
+        // stime past the data: this valType's State failure return.
+        REQUIRE( lmetaState.value( lm, flatlogs::timespecX( base + 11, 0 ), flatlogs::timespecX( base + 1000, 0 ) ) ==
+                 "NOT AVAILABLE" );
 
         MagAOX::logger::logMetaSpec lmsCont( "devChar", dummyLogChar::eventCode, "cont", "", "%d", "" );
         logMetaExposed               lmetaCont( lmsCont );
         lmetaCont.setDetail( { "", logMeta::valTypes::Char, logMeta::metaTypes::Continuous, reinterpret_cast<void *>( &getCharVal ) } );
         REQUIRE( lmetaCont.value( lm, flatlogs::timespecX( base, 0 ), flatlogs::timespecX( base + 10, 0 ) ) != "invalid" );
+        // The same lookup with stime past the data fails, exercising this valType's
+        // Continuous failure return.
+        REQUIRE( lmetaCont.value( lm, flatlogs::timespecX( base + 11, 0 ), flatlogs::timespecX( base + 1000, 0 ) ) ==
+                 "NOT AVAILABLE" );
 
         // Char/State has its own verbose (braced) error-reporting form, unlike the other
         // scalar cases. A stime past the buffer's last entry makes the internal getPriorLog()
@@ -1041,13 +1059,19 @@ TEST_CASE( "logMeta reaches valType/metaType branches unreachable via any real l
         MagAOX::logger::logMetaSpec lmsState( "devUChar", dummyLogUChar::eventCode, "state" );
         logMetaExposed               lmetaState( lmsState );
         lmetaState.setDetail( { "", logMeta::valTypes::UChar, logMeta::metaTypes::State, reinterpret_cast<void *>( &getUCharVal ) } );
-        REQUIRE( lmetaState.value( lm, flatlogs::timespecX( base, 0 ), flatlogs::timespecX( base + 5, 0 ) ) ==
-                 "NOT AVAILABLE" ); // raw payload rejected by the merged verifyLogEntry gate (see the test case doc)
+        REQUIRE( lmetaState.value( lm, flatlogs::timespecX( base, 0 ), flatlogs::timespecX( base + 5, 0 ) ) == "5" );
+        // stime past the data: this valType's State failure return.
+        REQUIRE( lmetaState.value( lm, flatlogs::timespecX( base + 11, 0 ), flatlogs::timespecX( base + 1000, 0 ) ) ==
+                 "NOT AVAILABLE" );
 
         MagAOX::logger::logMetaSpec lmsCont( "devUChar", dummyLogUChar::eventCode, "cont", "", "%u", "" );
         logMetaExposed               lmetaCont( lmsCont );
         lmetaCont.setDetail( { "", logMeta::valTypes::UChar, logMeta::metaTypes::Continuous, reinterpret_cast<void *>( &getUCharVal ) } );
         REQUIRE( lmetaCont.value( lm, flatlogs::timespecX( base, 0 ), flatlogs::timespecX( base + 10, 0 ) ) != "invalid" );
+        // The same lookup with stime past the data fails, exercising this valType's
+        // Continuous failure return.
+        REQUIRE( lmetaCont.value( lm, flatlogs::timespecX( base + 11, 0 ), flatlogs::timespecX( base + 1000, 0 ) ) ==
+                 "NOT AVAILABLE" );
     }
 
     SECTION( "Short/State and Short/Continuous" )
@@ -1069,13 +1093,19 @@ TEST_CASE( "logMeta reaches valType/metaType branches unreachable via any real l
         MagAOX::logger::logMetaSpec lmsState( "devShort", dummyLogShort::eventCode, "state" );
         logMetaExposed               lmetaState( lmsState );
         lmetaState.setDetail( { "", logMeta::valTypes::Short, logMeta::metaTypes::State, reinterpret_cast<void *>( &getShortVal ) } );
-        REQUIRE( lmetaState.value( lm, flatlogs::timespecX( base, 0 ), flatlogs::timespecX( base + 5, 0 ) ) ==
-                 "NOT AVAILABLE" ); // raw payload rejected by the merged verifyLogEntry gate (see the test case doc)
+        REQUIRE( lmetaState.value( lm, flatlogs::timespecX( base, 0 ), flatlogs::timespecX( base + 5, 0 ) ) == "5" );
+        // stime past the data: this valType's State failure return.
+        REQUIRE( lmetaState.value( lm, flatlogs::timespecX( base + 11, 0 ), flatlogs::timespecX( base + 1000, 0 ) ) ==
+                 "NOT AVAILABLE" );
 
         MagAOX::logger::logMetaSpec lmsCont( "devShort", dummyLogShort::eventCode, "cont", "", "%d", "" );
         logMetaExposed               lmetaCont( lmsCont );
         lmetaCont.setDetail( { "", logMeta::valTypes::Short, logMeta::metaTypes::Continuous, reinterpret_cast<void *>( &getShortVal ) } );
         REQUIRE( lmetaCont.value( lm, flatlogs::timespecX( base, 0 ), flatlogs::timespecX( base + 10, 0 ) ) != "invalid" );
+        // The same lookup with stime past the data fails, exercising this valType's
+        // Continuous failure return.
+        REQUIRE( lmetaCont.value( lm, flatlogs::timespecX( base + 11, 0 ), flatlogs::timespecX( base + 1000, 0 ) ) ==
+                 "NOT AVAILABLE" );
     }
 
     SECTION( "UShort/State and UShort/Continuous" )
@@ -1097,13 +1127,19 @@ TEST_CASE( "logMeta reaches valType/metaType branches unreachable via any real l
         MagAOX::logger::logMetaSpec lmsState( "devUShort", dummyLogUShort::eventCode, "state" );
         logMetaExposed               lmetaState( lmsState );
         lmetaState.setDetail( { "", logMeta::valTypes::UShort, logMeta::metaTypes::State, reinterpret_cast<void *>( &getUShortVal ) } );
-        REQUIRE( lmetaState.value( lm, flatlogs::timespecX( base, 0 ), flatlogs::timespecX( base + 5, 0 ) ) ==
-                 "NOT AVAILABLE" ); // raw payload rejected by the merged verifyLogEntry gate (see the test case doc)
+        REQUIRE( lmetaState.value( lm, flatlogs::timespecX( base, 0 ), flatlogs::timespecX( base + 5, 0 ) ) == "5" );
+        // stime past the data: this valType's State failure return.
+        REQUIRE( lmetaState.value( lm, flatlogs::timespecX( base + 11, 0 ), flatlogs::timespecX( base + 1000, 0 ) ) ==
+                 "NOT AVAILABLE" );
 
         MagAOX::logger::logMetaSpec lmsCont( "devUShort", dummyLogUShort::eventCode, "cont", "", "%u", "" );
         logMetaExposed               lmetaCont( lmsCont );
         lmetaCont.setDetail( { "", logMeta::valTypes::UShort, logMeta::metaTypes::Continuous, reinterpret_cast<void *>( &getUShortVal ) } );
         REQUIRE( lmetaCont.value( lm, flatlogs::timespecX( base, 0 ), flatlogs::timespecX( base + 10, 0 ) ) != "invalid" );
+        // The same lookup with stime past the data fails, exercising this valType's
+        // Continuous failure return.
+        REQUIRE( lmetaCont.value( lm, flatlogs::timespecX( base + 11, 0 ), flatlogs::timespecX( base + 1000, 0 ) ) ==
+                 "NOT AVAILABLE" );
     }
 
     SECTION( "Long/State and Long/Continuous" )
@@ -1125,13 +1161,19 @@ TEST_CASE( "logMeta reaches valType/metaType branches unreachable via any real l
         MagAOX::logger::logMetaSpec lmsState( "devLong", dummyLogLong::eventCode, "state" );
         logMetaExposed               lmetaState( lmsState );
         lmetaState.setDetail( { "", logMeta::valTypes::Long, logMeta::metaTypes::State, reinterpret_cast<void *>( &getLongVal ) } );
-        REQUIRE( lmetaState.value( lm, flatlogs::timespecX( base, 0 ), flatlogs::timespecX( base + 5, 0 ) ) ==
-                 "NOT AVAILABLE" ); // raw payload rejected by the merged verifyLogEntry gate (see the test case doc)
+        REQUIRE( lmetaState.value( lm, flatlogs::timespecX( base, 0 ), flatlogs::timespecX( base + 5, 0 ) ) == "5" );
+        // stime past the data: this valType's State failure return.
+        REQUIRE( lmetaState.value( lm, flatlogs::timespecX( base + 11, 0 ), flatlogs::timespecX( base + 1000, 0 ) ) ==
+                 "NOT AVAILABLE" );
 
         MagAOX::logger::logMetaSpec lmsCont( "devLong", dummyLogLong::eventCode, "cont", "", "%ld", "" );
         logMetaExposed               lmetaCont( lmsCont );
         lmetaCont.setDetail( { "", logMeta::valTypes::Long, logMeta::metaTypes::Continuous, reinterpret_cast<void *>( &getLongVal ) } );
         REQUIRE( lmetaCont.value( lm, flatlogs::timespecX( base, 0 ), flatlogs::timespecX( base + 10, 0 ) ) != "invalid" );
+        // The same lookup with stime past the data fails, exercising this valType's
+        // Continuous failure return.
+        REQUIRE( lmetaCont.value( lm, flatlogs::timespecX( base + 11, 0 ), flatlogs::timespecX( base + 1000, 0 ) ) ==
+                 "NOT AVAILABLE" );
     }
 
     SECTION( "ULong/State and ULong/Continuous" )
@@ -1153,13 +1195,19 @@ TEST_CASE( "logMeta reaches valType/metaType branches unreachable via any real l
         MagAOX::logger::logMetaSpec lmsState( "devULong", dummyLogULong::eventCode, "state" );
         logMetaExposed               lmetaState( lmsState );
         lmetaState.setDetail( { "", logMeta::valTypes::ULong, logMeta::metaTypes::State, reinterpret_cast<void *>( &getULongVal ) } );
-        REQUIRE( lmetaState.value( lm, flatlogs::timespecX( base, 0 ), flatlogs::timespecX( base + 5, 0 ) ) ==
-                 "NOT AVAILABLE" ); // raw payload rejected by the merged verifyLogEntry gate (see the test case doc)
+        REQUIRE( lmetaState.value( lm, flatlogs::timespecX( base, 0 ), flatlogs::timespecX( base + 5, 0 ) ) == "5" );
+        // stime past the data: this valType's State failure return.
+        REQUIRE( lmetaState.value( lm, flatlogs::timespecX( base + 11, 0 ), flatlogs::timespecX( base + 1000, 0 ) ) ==
+                 "NOT AVAILABLE" );
 
         MagAOX::logger::logMetaSpec lmsCont( "devULong", dummyLogULong::eventCode, "cont", "", "%lu", "" );
         logMetaExposed               lmetaCont( lmsCont );
         lmetaCont.setDetail( { "", logMeta::valTypes::ULong, logMeta::metaTypes::Continuous, reinterpret_cast<void *>( &getULongVal ) } );
         REQUIRE( lmetaCont.value( lm, flatlogs::timespecX( base, 0 ), flatlogs::timespecX( base + 10, 0 ) ) != "invalid" );
+        // The same lookup with stime past the data fails, exercising this valType's
+        // Continuous failure return.
+        REQUIRE( lmetaCont.value( lm, flatlogs::timespecX( base + 11, 0 ), flatlogs::timespecX( base + 1000, 0 ) ) ==
+                 "NOT AVAILABLE" );
     }
 
     SECTION( "LongLong/State and LongLong/Continuous" )
@@ -1181,13 +1229,19 @@ TEST_CASE( "logMeta reaches valType/metaType branches unreachable via any real l
         MagAOX::logger::logMetaSpec lmsState( "devLongLong", dummyLogLongLong::eventCode, "state", "", "%lld", "" );
         logMetaExposed               lmetaState( lmsState );
         lmetaState.setDetail( { "", logMeta::valTypes::LongLong, logMeta::metaTypes::State, reinterpret_cast<void *>( &getLongLongVal ) } );
-        REQUIRE( lmetaState.value( lm, flatlogs::timespecX( base, 0 ), flatlogs::timespecX( base + 5, 0 ) ) ==
-                 "NOT AVAILABLE" ); // raw payload rejected by the merged verifyLogEntry gate (see the test case doc)
+        REQUIRE( lmetaState.value( lm, flatlogs::timespecX( base, 0 ), flatlogs::timespecX( base + 5, 0 ) ) == "5" );
+        // stime past the data: this valType's State failure return.
+        REQUIRE( lmetaState.value( lm, flatlogs::timespecX( base + 11, 0 ), flatlogs::timespecX( base + 1000, 0 ) ) ==
+                 "NOT AVAILABLE" );
 
         MagAOX::logger::logMetaSpec lmsCont( "devLongLong", dummyLogLongLong::eventCode, "cont", "", "%lld", "" );
         logMetaExposed               lmetaCont( lmsCont );
         lmetaCont.setDetail( { "", logMeta::valTypes::LongLong, logMeta::metaTypes::Continuous, reinterpret_cast<void *>( &getLongLongVal ) } );
         REQUIRE( lmetaCont.value( lm, flatlogs::timespecX( base, 0 ), flatlogs::timespecX( base + 10, 0 ) ) != "invalid" );
+        // The same lookup with stime past the data fails, exercising this valType's
+        // Continuous failure return.
+        REQUIRE( lmetaCont.value( lm, flatlogs::timespecX( base + 11, 0 ), flatlogs::timespecX( base + 1000, 0 ) ) ==
+                 "NOT AVAILABLE" );
     }
 
     SECTION( "Int/Continuous (State is already covered by real telem_psfacq/telem_teldata)" )
@@ -1209,6 +1263,9 @@ TEST_CASE( "logMeta reaches valType/metaType branches unreachable via any real l
         logMetaExposed               lmeta( lms );
         lmeta.setDetail( { "", logMeta::valTypes::Int, logMeta::metaTypes::Continuous, reinterpret_cast<void *>( &getIntVal ) } );
         REQUIRE( lmeta.value( lm, flatlogs::timespecX( base, 0 ), flatlogs::timespecX( base + 10, 0 ) ) != "invalid" );
+        // stime past the data: this valType's Continuous failure return.
+        REQUIRE( lmeta.value( lm, flatlogs::timespecX( base + 11, 0 ), flatlogs::timespecX( base + 1000, 0 ) ) ==
+                 "NOT AVAILABLE" );
     }
 
     SECTION( "UInt/Continuous (State is already covered by real telem_saving)" )
@@ -1231,6 +1288,9 @@ TEST_CASE( "logMeta reaches valType/metaType branches unreachable via any real l
         logMetaExposed               lmeta( lms );
         lmeta.setDetail( { "", logMeta::valTypes::UInt, logMeta::metaTypes::Continuous, reinterpret_cast<void *>( &getUIntVal ) } );
         REQUIRE( lmeta.value( lm, flatlogs::timespecX( base, 0 ), flatlogs::timespecX( base + 10, 0 ) ) != "invalid" );
+        // stime past the data: this valType's Continuous failure return.
+        REQUIRE( lmeta.value( lm, flatlogs::timespecX( base + 11, 0 ), flatlogs::timespecX( base + 1000, 0 ) ) ==
+                 "NOT AVAILABLE" );
     }
 
     SECTION( "ULongLong/Continuous (State is already covered by real telem_pokeloop)" )
@@ -1257,6 +1317,9 @@ TEST_CASE( "logMeta reaches valType/metaType branches unreachable via any real l
         logMetaExposed               lmeta( lms );
         lmeta.setDetail( { "", logMeta::valTypes::ULongLong, logMeta::metaTypes::Continuous, reinterpret_cast<void *>( &getULongLongVal ) } );
         REQUIRE( lmeta.value( lm, flatlogs::timespecX( base, 0 ), flatlogs::timespecX( base + 10, 0 ) ) != "invalid" );
+        // stime past the data: this valType's Continuous failure return.
+        REQUIRE( lmeta.value( lm, flatlogs::timespecX( base + 11, 0 ), flatlogs::timespecX( base + 1000, 0 ) ) ==
+                 "NOT AVAILABLE" );
     }
 
     SECTION( "String + Continuous: valueString()'s not-state fallback returns empty" )
@@ -1375,6 +1438,650 @@ TEST_CASE( "telem_teldata parallactic angle accessor is continuous angle metadat
     REQUIRE( lmd.keyword == "PARANG" );
     REQUIRE( lmd.valType == MagAOX::logger::logMeta::valTypes::Double );
     REQUIRE( lmd.metaType == MagAOX::logger::logMeta::metaTypes::Continuous_Angle );
+}
+
+
+/// verifyLogEntry's per-type dispatch: one real, minimally-populated log entry of every
+/// event code in the switch, each of which must verify against its own schema. Also the
+/// null-entry, unknown-code, and corrupt-payload failure paths.
+/**
+ * \ingroup logMeta_unit_test
+ */
+TEST_CASE( "verifyLogEntry verifies a real entry of every dispatched log type", "[libMagAOX::logger::logMeta]" )
+{
+    flatlogs::timespecX ts( 1732170780, 0 );
+
+    // Several messageT constructors take vectors by non-const reference; give them
+    // lvalues.
+    std::vector<float>       vf;
+    std::vector<int64_t>     vi64;
+    std::vector<std::string> vs;
+
+// Build one real entry and check it verifies against its own event code.
+#define CHECK_VERIFY( TYPE, CODE, MSG )                                                                               \
+    {                                                                                                                 \
+        flatlogs::bufferPtrT buf;                                                                                     \
+        flatlogs::logHeader::createLog<MagAOX::logger::TYPE>( buf, ts, MSG, flatlogs::logPrio::LOG_NOTICE );          \
+        REQUIRE( MagAOX::logger::verifyLogEntry( MagAOX::logger::eventCodes::CODE, buf.get() ) );                     \
+    }
+
+// empty_log-derived types take an empty messageT.
+#define CHECK_VERIFY_EMPTY( TYPE, CODE ) CHECK_VERIFY( TYPE, CODE, MagAOX::logger::TYPE::messageT() )
+
+    CHECK_VERIFY( git_state, GIT_STATE, MagAOX::logger::git_state::messageT( "", "", true ) );
+    CHECK_VERIFY( text_log, TEXT_LOG, MagAOX::logger::text_log::messageT( "t" ) );
+    CHECK_VERIFY( user_log, USER_LOG, MagAOX::logger::user_log::messageT( "", "" ) );
+    CHECK_VERIFY( state_change, STATE_CHANGE, MagAOX::logger::state_change::messageT( (int16_t)1, (int16_t)1 ) );
+    // software_log itself has no defaultLevel (it's the abstract base); software_error
+    // is a concrete subtype with the same event code and schema.
+    CHECK_VERIFY( software_error, SOFTWARE_LOG,
+                  MagAOX::logger::software_error::messageT( __FILE__, (uint32_t)1, (int32_t)1, (int32_t)1, "m" ) );
+    CHECK_VERIFY( config_log, CONFIG_LOG, MagAOX::logger::config_log::messageT( "", (int)1, "", "" ) );
+    CHECK_VERIFY_EMPTY( indidriver_start, INDIDRIVER_START );
+    CHECK_VERIFY_EMPTY( indidriver_stop, INDIDRIVER_STOP );
+    CHECK_VERIFY_EMPTY( loop_closed, LOOP_CLOSED );
+    CHECK_VERIFY_EMPTY( loop_paused, LOOP_PAUSED );
+    CHECK_VERIFY_EMPTY( loop_open, LOOP_OPEN );
+    CHECK_VERIFY( observer, OBSERVER, MagAOX::logger::observer::messageT( "", "", "", "" ) );
+    CHECK_VERIFY( ao_operator, AO_OPERATOR, MagAOX::logger::ao_operator::messageT( "", "", "", "" ) );
+    CHECK_VERIFY( pico_channel, PICO_CHANNEL, MagAOX::logger::pico_channel::messageT( "", (uint8_t)1 ) );
+    CHECK_VERIFY( outlet_state, OUTLET_STATE, MagAOX::logger::outlet_state::messageT( (uint8_t)1, (uint8_t)1 ) );
+    CHECK_VERIFY( outlet_channel_state, OUTLET_CHANNEL_STATE,
+                  MagAOX::logger::outlet_channel_state::messageT( "", (uint8_t)1 ) );
+    CHECK_VERIFY( telem_saving_state, TELEM_SAVING_STATE,
+                  MagAOX::logger::telem_saving_state::messageT( (int16_t)1, (uint64_t)1 ) );
+    CHECK_VERIFY( telem_fxngen, TELEM_FXNGEN,
+                  MagAOX::logger::telem_fxngen::messageT( (uint8_t)1, 1.0, 1.0, 1.0, 1.0, (uint8_t)1, (uint8_t)1, 1.0,
+                                                          1.0, 1.0, 1.0, (uint8_t)1, (uint8_t)1, (uint8_t)1, 1.0, 1.0 ) );
+    CHECK_VERIFY( ttmmod_params, TTMMOD_PARAMS,
+                  MagAOX::logger::ttmmod_params::messageT( (uint8_t)1, 1.0, 1.0, 1.0, 1.0 ) );
+    CHECK_VERIFY( ocam_temps, OCAM_TEMPS,
+                  MagAOX::logger::ocam_temps::messageT( 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f ) );
+    CHECK_VERIFY( cred2_temps, CRED2_TEMPS,
+                  MagAOX::logger::cred2_temps::messageT( 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f ) );
+    CHECK_VERIFY( saving_start, SAVING_START, MagAOX::logger::saving_start::messageT( (int16_t)1, (uint64_t)1 ) );
+    CHECK_VERIFY( saving_stop, SAVING_STOP, MagAOX::logger::saving_stop::messageT( (int16_t)1, (uint64_t)1 ) );
+    CHECK_VERIFY( telem_saving, TELEM_SAVING,
+                  MagAOX::logger::telem_saving::messageT( (uint32_t)1, (uint32_t)1, 1.0f, 1.0f, 1.0f, 1.0f ) );
+    CHECK_VERIFY( telem_telpos, TELEM_TELPOS,
+                  MagAOX::logger::telem_telpos::messageT( 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0 ) );
+    CHECK_VERIFY( telem_teldata, TELEM_TELDATA,
+                  MagAOX::logger::telem_teldata::messageT( 1, 1, 1, 1, 1, 1.0, 1.0, 1.0, 1.0, 1 ) );
+    CHECK_VERIFY( telem_telvane, TELEM_TELVANE,
+                  MagAOX::logger::telem_telvane::messageT( 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0 ) );
+    CHECK_VERIFY( telem_telenv, TELEM_TELENV,
+                  MagAOX::logger::telem_telenv::messageT( 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0 ) );
+    CHECK_VERIFY( telem_telcat, TELEM_TELCAT,
+                  MagAOX::logger::telem_telcat::messageT( "", "", 1.0, 1.0, 1.0, 1.0 ) );
+    CHECK_VERIFY( telem_telsee, TELEM_TELSEE, MagAOX::logger::telem_telsee::messageT( 1, 1.0, 1, 1.0, 1, 1.0 ) );
+    CHECK_VERIFY( telem_tcsi_tiptilt, TELEM_TCSI_TIPTILT,
+                  MagAOX::logger::telem_tcsi_tiptilt::messageT( true, 1.0f, 1.0f, 1.0f ) );
+    CHECK_VERIFY( telem_tcsi_focus, TELEM_TCSI_FOCUS,
+                  MagAOX::logger::telem_tcsi_focus::messageT( true, 1.0f, 1.0f, 1.0f ) );
+    CHECK_VERIFY( telem_tcsi_labmode, TELEM_TCSI_LABMODE, MagAOX::logger::telem_tcsi_labmode::messageT( true ) );
+    CHECK_VERIFY( telem_stage, TELEM_STAGE, MagAOX::logger::telem_stage::messageT( (int8_t)1, 1.0f, "" ) );
+    CHECK_VERIFY( telem_zaber, TELEM_ZABER, MagAOX::logger::telem_zaber::messageT( 1.0f, 1.0f, 1.0f ) );
+    CHECK_VERIFY( telem_pico, TELEM_PICO, MagAOX::logger::telem_pico::messageT( vi64 ) );
+    CHECK_VERIFY( telem_position, TELEM_POSITION, MagAOX::logger::telem_position::messageT( 1.0f ) );
+    CHECK_VERIFY( telem_psfacq, TELEM_PSFACQ,
+                  MagAOX::logger::telem_psfacq::messageT( 1, 1, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f ) );
+    CHECK_VERIFY( telem_pokecenter, TELEM_POKECENTER,
+                  MagAOX::logger::telem_pokecenter::messageT( (uint8_t)1, 1.0f, 1.0f, std::vector<float>(),
+                                                              std::vector<float>() ) );
+    CHECK_VERIFY( telem_pokeloop, TELEM_POKELOOP,
+                  MagAOX::logger::telem_pokeloop::messageT( (uint8_t)1, 1.0f, 1.0f, (uint64_t)1 ) );
+    CHECK_VERIFY( telem_observer, TELEM_OBSERVER,
+                  MagAOX::logger::telem_observer::messageT( "", "", true, "", "" ) );
+    CHECK_VERIFY( telem_rhusb, TELEM_RHUSB, MagAOX::logger::telem_rhusb::messageT( 1.0f, 1.0f ) );
+    CHECK_VERIFY( telem_temps, TELEM_TEMPS, MagAOX::logger::telem_temps::messageT( std::vector<float>() ) );
+    CHECK_VERIFY( telem_stdcam, TELEM_STDCAM,
+                  MagAOX::logger::telem_stdcam::messageT( "", 1.0f, 1.0f, 1, 1, 1, 1, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f,
+                                                          1.0f, (uint8_t)1, (uint8_t)1, "", "", (int8_t)1, (uint8_t)1,
+                                                          1.0f, (uint8_t)1, "", "", "", (int8_t)1 ) );
+    CHECK_VERIFY( telem_coretemps, TELEM_CORETEMPS,
+                  MagAOX::logger::telem_coretemps::messageT( vf ) );
+    CHECK_VERIFY( telem_coreloads, TELEM_CORELOADS,
+                  MagAOX::logger::telem_coreloads::messageT( vf ) );
+    CHECK_VERIFY( telem_drivetemps, TELEM_DRIVETEMPS,
+                  MagAOX::logger::telem_drivetemps::messageT( vs, vf ) );
+    CHECK_VERIFY( telem_usage, TELEM_USAGE, MagAOX::logger::telem_usage::messageT( 1.0f, 1.0f, 1.0f, 1.0f ) );
+    CHECK_VERIFY( telem_cooler, TELEM_COOLER,
+                  MagAOX::logger::telem_cooler::messageT( 1.0f, 1.0f, (uint8_t)1, (uint16_t)1, (uint8_t)1,
+                                                          (uint16_t)1 ) );
+    CHECK_VERIFY( telem_chrony_status, TELEM_CHRONY_STATUS,
+                  MagAOX::logger::telem_chrony_status::messageT( "", "", "", "" ) );
+    CHECK_VERIFY( telem_chrony_stats, TELEM_CHRONY_STATS,
+                  MagAOX::logger::telem_chrony_stats::messageT( 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0 ) );
+    CHECK_VERIFY( telem_dmspeck, TELEM_DMSPECK,
+                  MagAOX::logger::telem_dmspeck::messageT( true, true, 1.0f, std::vector<float>(),
+                                                           std::vector<float>(), std::vector<float>(),
+                                                           std::vector<bool>() ) );
+    CHECK_VERIFY( telem_fgtimings, TELEM_FGTIMINGS,
+                  MagAOX::logger::telem_fgtimings::messageT( 1.0, 1.0, 1.0, 1.0, 1.0, 1.0 ) );
+    CHECK_VERIFY( telem_dmmodes, TELEM_DMMODES, MagAOX::logger::telem_dmmodes::messageT( vf ) );
+    CHECK_VERIFY( telem_loopgain, TELEM_LOOPGAIN,
+                  MagAOX::logger::telem_loopgain::messageT( (uint8_t)1, 1.0f, 1.0f, 1.0f ) );
+    CHECK_VERIFY( telem_modalgainopt, TELEM_MODALGAINOPT,
+                  MagAOX::logger::telem_modalgainopt::messageT( true, true, 1.0f, 1.0f, 1.0f ) );
+    CHECK_VERIFY( telem_blockgains, TELEM_BLOCKGAINS,
+                  MagAOX::logger::telem_blockgains::messageT( std::vector<float>(), std::vector<uint8_t>(),
+                                                              std::vector<float>(), std::vector<uint8_t>(),
+                                                              std::vector<float>(), std::vector<uint8_t>() ) );
+    CHECK_VERIFY( telem_offloading, TELEM_OFFLOADING,
+                  MagAOX::logger::telem_offloading::messageT( (uint32_t)1, (uint32_t)1, 1.0f ) );
+    CHECK_VERIFY( telem_w2tcsoffloader, TELEM_W2TCSOFFLOADER,
+                  MagAOX::logger::telem_w2tcsoffloader::messageT( vf ) );
+    CHECK_VERIFY( telem_flowrpm, TELEM_FLOWRPM, MagAOX::logger::telem_flowrpm::messageT( 1.0, 1.0, true ) );
+    CHECK_VERIFY( telem_pi335, TELEM_PI335,
+                  MagAOX::logger::telem_pi335::messageT( 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f ) );
+    CHECK_VERIFY( telem_sparkleclock, TELEM_SPARKLECLOCK,
+                  MagAOX::logger::telem_sparkleclock::messageT( true, true, 1.0f, 1.0f, std::vector<float>(), 1.0f,
+                                                                1.0f ) );
+    CHECK_VERIFY( telem_poltrack, TELEM_POLTRACK,
+                  MagAOX::logger::telem_poltrack::messageT( 1.0f, 1.0f, "", true ) );
+    CHECK_VERIFY( telem_adctrack, TELEM_ADCTRACK,
+                  MagAOX::logger::telem_adctrack::messageT( true, 1.0f, 1.0f, 1.0f, 1.0f ) );
+
+#undef CHECK_VERIFY
+#undef CHECK_VERIFY_EMPTY
+
+    SECTION( "a null entry, an unknown event code, and a corrupt payload all fail" )
+    {
+        REQUIRE( !MagAOX::logger::verifyLogEntry( MagAOX::logger::eventCodes::GIT_STATE, nullptr ) );
+
+        flatlogs::bufferPtrT buf;
+        flatlogs::logHeader::createLog<MagAOX::logger::git_state>(
+            buf, ts, MagAOX::logger::git_state::messageT( "r", "s", true ), flatlogs::logPrio::LOG_NOTICE );
+
+        // Unknown code: not a case in the dispatch switch.
+        REQUIRE( !MagAOX::logger::verifyLogEntry( 59999, buf.get() ) );
+
+        // Corrupt payload: overwrite the message bytes with garbage so the schema
+        // verifier genuinely fails for a known code.
+        char  *msg = buf.get() + flatlogs::logHeader::headerSize( buf.get() );
+        size_t len = flatlogs::logHeader::msgLen( buf.get() );
+        memset( msg, 0xFF, len );
+        REQUIRE( !MagAOX::logger::verifyLogEntry( MagAOX::logger::eventCodes::GIT_STATE, buf.get() ) );
+    }
+}
+
+
+/// The verification-failure, gap, and failure-reason branches of getLogStateVal and
+/// getLogContVal, driven by corrupting specific entries' message bytes in the loaded
+/// buffer (headers stay sane, so scanning works while schema verification fails).
+/**
+ * \ingroup logMeta_unit_test
+ */
+TEST_CASE( "getLogStateVal/getLogContVal skip unverifiable entries and honor maxGap", "[libMagAOX::logger::logMeta]" )
+{
+    const time_t base = 1732170780;
+
+    // Corrupt the message payload of the n-th entry (0-based) in the loaded buffer.
+    auto corruptEntry = []( MagAOX::logger::logMap<XWC_DEFAULT_VERBOSITY> &lm, const std::string &dev, int n ) {
+        char *p = lm.m_appToBufferMap[dev].m_memory.data();
+        for( int i = 0; i < n; ++i )
+        {
+            p += flatlogs::logHeader::totalSize( p );
+        }
+        memset( p + flatlogs::logHeader::headerSize( p ), 0xFF, flatlogs::logHeader::msgLen( p ) );
+    };
+
+    SECTION( "an unverifiable prior entry falls back to an earlier verified one" )
+    {
+        const std::string dev = "devVprior";
+        writeLogFile<dummyLogInt, int>( "/tmp/logMeta_vprior", dev, base, { { 0, 1 }, { 10, 2 }, { 20, 3 } } );
+        MagAOX::logger::logMap<XWC_DEFAULT_VERBOSITY> lm;
+        insertLogFile( lm, "/tmp/logMeta_vprior", dev, base );
+
+        // Load the buffer, then corrupt entry@base+10 (index 2: after the lead-in text_log).
+        int  val;
+        REQUIRE( MagAOX::logger::getLogStateVal( val, lm, dev, dummyLogInt::eventCode, flatlogs::timespecX( base + 15, 0 ),
+                                                 flatlogs::timespecX( base + 16, 0 ), getIntVal ) == 0 );
+        corruptEntry( lm, dev, 2 );
+
+        std::string reason;
+        REQUIRE( MagAOX::logger::getLogStateVal( val, lm, dev, dummyLogInt::eventCode, flatlogs::timespecX( base + 15, 0 ),
+                                                 flatlogs::timespecX( base + 16, 0 ), getIntVal, nullptr, -1, &reason ) == 0 );
+        REQUIRE( val == 1 ); // fell back to the verified entry at base+0
+
+        // Corrupt the earlier one too: no verified prior remains.
+        corruptEntry( lm, dev, 1 );
+        REQUIRE( MagAOX::logger::getLogStateVal( val, lm, dev, dummyLogInt::eventCode, flatlogs::timespecX( base + 15, 0 ),
+                                                 flatlogs::timespecX( base + 16, 0 ), getIntVal, nullptr, -1, &reason ) != 0 );
+        REQUIRE( reason == "due to unverifiable prior telemetry" );
+    }
+
+    SECTION( "an unverifiable following entry is skipped to a later verified one" )
+    {
+        const std::string dev = "devVnext";
+        writeLogFile<dummyLogInt, int>( "/tmp/logMeta_vnext", dev, base,
+                                        { { 0, 1 }, { 10, 1 }, { 20, 1 }, { 30, 2 } } );
+        MagAOX::logger::logMap<XWC_DEFAULT_VERBOSITY> lm;
+        insertLogFile( lm, "/tmp/logMeta_vnext", dev, base );
+
+        int val;
+        REQUIRE( MagAOX::logger::getLogStateVal( val, lm, dev, dummyLogInt::eventCode, flatlogs::timespecX( base + 5, 0 ),
+                                                 flatlogs::timespecX( base + 35, 0 ), getIntVal ) == 0 );
+        corruptEntry( lm, dev, 2 ); // the entry at base+10, i.e. the first "following"
+
+        std::string reason;
+        REQUIRE( MagAOX::logger::getLogStateVal( val, lm, dev, dummyLogInt::eventCode, flatlogs::timespecX( base + 5, 0 ),
+                                                 flatlogs::timespecX( base + 35, 0 ), getIntVal, nullptr, -1, &reason ) == 0 );
+        REQUIRE( val == 2 ); // the state change at base+30 is still found
+
+        // Repeat: the second pass reports the same corrupt entry again, exercising the
+        // report dedupe (it only prints once per unique entry).
+        REQUIRE( MagAOX::logger::getLogStateVal( val, lm, dev, dummyLogInt::eventCode, flatlogs::timespecX( base + 5, 0 ),
+                                                 flatlogs::timespecX( base + 35, 0 ), getIntVal ) == 0 );
+
+        // Corrupt everything after the prior: no verified following entry remains.
+        corruptEntry( lm, dev, 3 );
+        corruptEntry( lm, dev, 4 );
+        REQUIRE( MagAOX::logger::getLogStateVal( val, lm, dev, dummyLogInt::eventCode, flatlogs::timespecX( base + 5, 0 ),
+                                                 flatlogs::timespecX( base + 35, 0 ), getIntVal, nullptr, -1, &reason ) != 0 );
+        REQUIRE( reason == "due to unverifiable following telemetry" );
+    }
+
+    SECTION( "maxGap rejects lookups across telemetry gaps, with the gap reason recorded" )
+    {
+        const std::string dev = "devGap";
+        writeLogFile<dummyLogInt, int>( "/tmp/logMeta_gap", dev, base, { { 0, 1 }, { 100, 1 } } );
+        MagAOX::logger::logMap<XWC_DEFAULT_VERBOSITY> lm;
+        insertLogFile( lm, "/tmp/logMeta_gap", dev, base );
+
+        int         val;
+        std::string reason;
+
+        // Gap between the prior entry (base+0) and stime (base+50) exceeds 10 s.
+        REQUIRE( MagAOX::logger::getLogStateVal( val, lm, dev, dummyLogInt::eventCode, flatlogs::timespecX( base + 50, 0 ),
+                                                 flatlogs::timespecX( base + 60, 0 ), getIntVal, nullptr, 10.0,
+                                                 &reason ) != 0 );
+        REQUIRE( reason.find( "due to gap in telemetry exceeding" ) != std::string::npos );
+
+        // Wide-open gap allowance succeeds across the same data.
+        REQUIRE( MagAOX::logger::getLogStateVal( val, lm, dev, dummyLogInt::eventCode, flatlogs::timespecX( base + 50, 0 ),
+                                                 flatlogs::timespecX( base + 60, 0 ), getIntVal, nullptr, 1000.0,
+                                                 &reason ) == 0 );
+        REQUIRE( val == 1 );
+
+        // Gap between the last entry (base+100) and atime (base+300) exceeds 50 s: the
+        // in-scan end-of-data gap check fires.
+        REQUIRE( MagAOX::logger::getLogStateVal( val, lm, dev, dummyLogInt::eventCode, flatlogs::timespecX( base + 99, 0 ),
+                                                 flatlogs::timespecX( base + 300, 0 ), getIntVal, nullptr, 50.0,
+                                                 &reason ) != 0 );
+        REQUIRE( reason.find( "due to gap in telemetry exceeding" ) != std::string::npos );
+
+        // atime before the following entry, but the prior-to-atime gap exceeds maxGap:
+        // the final gap check after the scan loop fires.
+        REQUIRE( MagAOX::logger::getLogStateVal( val, lm, dev, dummyLogInt::eventCode, flatlogs::timespecX( base + 5, 0 ),
+                                                 flatlogs::timespecX( base + 95, 0 ), getIntVal, nullptr, 60.0,
+                                                 &reason ) != 0 );
+        REQUIRE( reason.find( "due to gap in telemetry exceeding" ) != std::string::npos );
+    }
+
+    SECTION( "getLogContVal skips unverifiable entries and honors maxGap" )
+    {
+        const std::string dev = "devCgap";
+        writeLogFile<dummyLogDouble, double>( "/tmp/logMeta_cgap", dev, base, { { 0, 10.0 }, { 10, 20.0 }, { 20, 30.0 } } );
+        MagAOX::logger::logMap<XWC_DEFAULT_VERBOSITY> lm;
+        insertLogFile( lm, "/tmp/logMeta_cgap", dev, base );
+
+        double      val;
+        std::string reason;
+
+        // Normal interpolation first (loads the buffer).
+        REQUIRE( MagAOX::logger::getLogContVal( val, lm, dev, dummyLogDouble::eventCode, flatlogs::timespecX( base, 0 ),
+                                                flatlogs::timespecX( base + 10, 0 ), getDoubleVal ) == 0 );
+        REQUIRE( val > 10.0 );
+        REQUIRE( val < 20.0 );
+
+        // Unverifiable prior: midpoint's prior is entry@base+0 (index 1); corrupt it --
+        // there is no earlier verified entry of this code, so the lookup fails.
+        corruptEntry( lm, dev, 1 );
+        REQUIRE( MagAOX::logger::getLogContVal( val, lm, dev, dummyLogDouble::eventCode, flatlogs::timespecX( base, 0 ),
+                                                flatlogs::timespecX( base + 10, 0 ), getDoubleVal, nullptr, -1,
+                                                &reason ) != 0 );
+        REQUIRE( reason == "due to unverifiable prior telemetry" );
+
+        // Unverifiable following: fresh load, corrupt the entry after the midpoint's
+        // prior; the later verified entry (base+20) is used instead.
+        MagAOX::logger::logMap<XWC_DEFAULT_VERBOSITY> lm2;
+        insertLogFile( lm2, "/tmp/logMeta_cgap", dev, base );
+        REQUIRE( MagAOX::logger::getLogContVal( val, lm2, dev, dummyLogDouble::eventCode, flatlogs::timespecX( base, 0 ),
+                                                flatlogs::timespecX( base + 10, 0 ), getDoubleVal ) == 0 );
+        corruptEntry( lm2, dev, 2 );
+        REQUIRE( MagAOX::logger::getLogContVal( val, lm2, dev, dummyLogDouble::eventCode, flatlogs::timespecX( base, 0 ),
+                                                flatlogs::timespecX( base + 10, 0 ), getDoubleVal, nullptr, -1,
+                                                &reason ) == 0 );
+
+        // ...and with the tail corrupted too, no verified following entry remains.
+        corruptEntry( lm2, dev, 3 );
+        REQUIRE( MagAOX::logger::getLogContVal( val, lm2, dev, dummyLogDouble::eventCode, flatlogs::timespecX( base, 0 ),
+                                                flatlogs::timespecX( base + 10, 0 ), getDoubleVal, nullptr, -1,
+                                                &reason ) != 0 );
+        REQUIRE( reason == "due to unverifiable following telemetry" );
+
+        // maxGap: midexp lands at base+9, whose prior entry is base+0 -- a 9 s gap
+        // against a 0.5 s allowance.
+        MagAOX::logger::logMap<XWC_DEFAULT_VERBOSITY> lm3;
+        insertLogFile( lm3, "/tmp/logMeta_cgap", dev, base );
+        REQUIRE( MagAOX::logger::getLogContVal( val, lm3, dev, dummyLogDouble::eventCode, flatlogs::timespecX( base + 8, 0 ),
+                                                flatlogs::timespecX( base + 10, 0 ), getDoubleVal, nullptr, 0.5,
+                                                &reason ) != 0 );
+        REQUIRE( reason.find( "due to gap in telemetry exceeding" ) != std::string::npos );
+    }
+
+    SECTION( "a Continuous_Angle member interpolates with wrap-aware angle math" )
+    {
+        // Real telem_teldata entries with pa on both sides of the +/-180 wrap: linear
+        // interpolation would give ~0, the wrap-aware midpoint is +/-180.
+        const std::string dev = "devPa";
+        auto sfn = writeRealLogFile( "/tmp/logMeta_pa", dev, base, [&]( MagAOX::logger::logFileRaw<XWC_DEFAULT_VERBOSITY> &writer ) {
+            flatlogs::bufferPtrT buf;
+            flatlogs::logHeader::createLog<MagAOX::logger::telem_teldata>(
+                buf, flatlogs::timespecX( base, 0 ),
+                MagAOX::logger::telem_teldata::messageT( 1, 1, 1, 0, 0, 10.0, 45.0, -179.0, 90.0, 0 ),
+                flatlogs::logPrio::LOG_NOTICE );
+            writer.writeLog( buf );
+            flatlogs::logHeader::createLog<MagAOX::logger::telem_teldata>(
+                buf, flatlogs::timespecX( base + 10, 0 ),
+                MagAOX::logger::telem_teldata::messageT( 1, 1, 1, 0, 0, 20.0, 45.0, 179.0, 90.0, 0 ),
+                flatlogs::logPrio::LOG_NOTICE );
+            writer.writeLog( buf );
+        } );
+
+        MagAOX::logger::logMap<XWC_DEFAULT_VERBOSITY> lm;
+        lm.m_appToFileMap[dev].insert( sfn );
+
+        MagAOX::logger::logMetaSpec lms( dev, MagAOX::logger::telem_teldata::eventCode, "pa" );
+        MagAOX::logger::logMeta     lmeta( lms );
+
+        std::string val = lmeta.value( lm, flatlogs::timespecX( base, 0 ), flatlogs::timespecX( base + 10, 0 ) );
+        REQUIRE( val != "NOT AVAILABLE" );
+        REQUIRE( std::fabs( std::fabs( std::stod( val ) ) - 180.0 ) < 2.0 ); // wrapped midpoint, not ~0
+    }
+
+    SECTION( "logMeta's small accessors and the unavailable card" )
+    {
+        MagAOX::logger::logMetaSpec lms( "devX", MagAOX::logger::git_state::eventCode, "repoName", "KEYW", "%s", "cmt" );
+        MagAOX::logger::logMeta     lmeta( lms );
+        REQUIRE( lmeta.comment() == "cmt" );
+        REQUIRE( lmeta.unavailableReason() == "" );
+
+        MagAOX::logger::logMap<XWC_DEFAULT_VERBOSITY> lm; // empty: lookup fails
+        auto card = lmeta.card( lm, flatlogs::timespecX( base, 0 ), flatlogs::timespecX( base + 5, 0 ) );
+        REQUIRE( card.valueStr() == "NOT AVAILABLE" );
+        REQUIRE( lmeta.unavailableReason() != "" );
+    }
+}
+
+
+/// Remaining branches of the verified-lookup helpers, called directly, plus the gap and
+/// end-of-data variants not reachable through the sections above.
+/**
+ * \ingroup logMeta_unit_test
+ */
+TEST_CASE( "verified-lookup helper branches and end-of-data gap variants", "[libMagAOX::logger::logMeta]" )
+{
+    const time_t base = 1732170780;
+
+    auto corruptPayload = []( char *p ) {
+        memset( p + flatlogs::logHeader::headerSize( p ), 0xFF, flatlogs::logHeader::msgLen( p ) );
+    };
+
+    SECTION( "logMetaNormalizeAngle360 wraps a tiny negative to exactly 360" )
+    {
+        // fmod(-1e-20, 360) is -1e-20; adding 360 rounds to exactly 360.0 in doubles,
+        // which must normalize to 0.
+        REQUIRE( MagAOX::logger::logMetaNormalizeAngle360( -1e-20 ) == 0.0 );
+    }
+
+    SECTION( "reportUnverifiableLogEntry prints every optional-field variant" )
+    {
+        flatlogs::bufferPtrT buf;
+        flatlogs::logHeader::createLog<dummyLogInt>( buf, flatlogs::timespecX( base, 0 ), 1,
+                                                     flatlogs::logPrio::LOG_NOTICE );
+
+        // No failure entry at all: skips the dedupe bookkeeping, prints failureTs=<none>.
+        MagAOX::logger::reportUnverifiableLogEntry( "devR", 20, nullptr, nullptr, nullptr, "src", 0, "test" );
+
+        // Unknown source byte, no before/after entries.
+        MagAOX::logger::reportUnverifiableLogEntry(
+            "devR", 20, nullptr, buf.get(), nullptr, "src", std::numeric_limits<size_t>::max(), "test" );
+
+        // Full form: before/after present, known byte.
+        MagAOX::logger::reportUnverifiableLogEntry( "devR", 20, buf.get(), buf.get(), buf.get(), "src", 5, "test2" );
+        REQUIRE( true ); // output-only helper; reaching here without aborting is the test
+    }
+
+    SECTION( "getPriorVerifiedLog and getNextVerifiedLog reject missing inputs" )
+    {
+        MagAOX::logger::logMap<XWC_DEFAULT_VERBOSITY> lm;
+        REQUIRE( MagAOX::logger::getPriorVerifiedLog( lm, "no-such-app", 20, flatlogs::timespecX( base, 0 ) ) ==
+                 nullptr );
+        REQUIRE( MagAOX::logger::getNextVerifiedLog( lm, nullptr, "no-such-app" ) == nullptr );
+    }
+
+    SECTION( "getPriorVerifiedLog resyncs past a header-corrupt entry and stops at the query time" )
+    {
+        const std::string dev = "devPVL";
+        writeLogFile<dummyLogInt, int>( "/tmp/logMeta_pvl", dev, base, { { 0, 1 }, { 10, 2 }, { 20, 3 }, { 30, 4 } } );
+        MagAOX::logger::logMap<XWC_DEFAULT_VERBOSITY> lm;
+        insertLogFile( lm, "/tmp/logMeta_pvl", dev, base );
+
+        int val;
+        REQUIRE( MagAOX::logger::getLogStateVal( val, lm, dev, dummyLogInt::eventCode, flatlogs::timespecX( base + 25, 0 ),
+                                                 flatlogs::timespecX( base + 26, 0 ), getIntVal ) == 0 );
+
+        // Entry layout: [0]=lead-in text, [1]=@0, [2]=@10, [3]=@20, [4]=@30.
+        std::vector<char> &mem = lm.m_appToBufferMap[dev].m_memory;
+        char *p = mem.data();
+        std::vector<char *> e;
+        while( p < mem.data() + mem.size() )
+        {
+            e.push_back( p );
+            p += flatlogs::logHeader::totalSize( p );
+        }
+
+        corruptPayload( e[3] );  // @20: the prior for ts=25 becomes unverifiable
+        e[2][0] = 30;            // @10: header-corrupt (invalid priority), forcing a resync
+        // in getPriorVerifiedLog's own scan; @30 is beyond the query
+        // time, exercising the early return with the found prior.
+
+        std::string reason;
+        REQUIRE( MagAOX::logger::getLogStateVal( val, lm, dev, dummyLogInt::eventCode, flatlogs::timespecX( base + 25, 0 ),
+                                                 flatlogs::timespecX( base + 26, 0 ), getIntVal, nullptr, -1,
+                                                 &reason ) == 0 );
+        REQUIRE( val == 1 ); // fell back to the entry at base+0
+    }
+
+    SECTION( "getPriorVerifiedLog gives up when a corrupt tail cannot be resynced" )
+    {
+        const std::string dev = "devPVL2";
+        writeLogFile<dummyLogInt, int>( "/tmp/logMeta_pvl2", dev, base, { { 0, 1 }, { 10, 2 }, { 20, 3 } } );
+        MagAOX::logger::logMap<XWC_DEFAULT_VERBOSITY> lm;
+        insertLogFile( lm, "/tmp/logMeta_pvl2", dev, base );
+
+        int val;
+        REQUIRE( MagAOX::logger::getLogStateVal( val, lm, dev, dummyLogInt::eventCode, flatlogs::timespecX( base + 15, 0 ),
+                                                 flatlogs::timespecX( base + 16, 0 ), getIntVal ) == 0 );
+
+        // Entry layout: [0]=lead-in text, [1]=@0, [2]=@10, [3]=@20.
+        std::vector<char> &mem = lm.m_appToBufferMap[dev].m_memory;
+        char *p = mem.data();
+        std::vector<char *> e;
+        while( p < mem.data() + mem.size() )
+        {
+            e.push_back( p );
+            p += flatlogs::logHeader::totalSize( p );
+        }
+        corruptPayload( e[2] ); // @10: the prior for ts=15 becomes unverifiable
+        e[3][0] = 30;           // @20: header-corrupt LAST entry -- the fallback scan's
+                                // resync has nothing valid after it and gives up,
+                                // returning the best verified prior found so far.
+
+        // The fallback scan runs (and gives up mid-resync, returning the verified
+        // prior at base+0), but the lookup as a whole still fails afterwards: with
+        // @10 unverifiable and @20 corrupt there is no verified FOLLOWING entry.
+        std::string reason;
+        REQUIRE( MagAOX::logger::getLogStateVal( val, lm, dev, dummyLogInt::eventCode, flatlogs::timespecX( base + 15, 0 ),
+                                                 flatlogs::timespecX( base + 16, 0 ), getIntVal, nullptr, -1,
+                                                 &reason ) != 0 );
+        REQUIRE( reason == "due to unverifiable following telemetry" );
+    }
+
+    SECTION( "gap checks at the end of the data" )
+    {
+        const std::string dev = "devEGap";
+        writeLogFile<dummyLogInt, int>( "/tmp/logMeta_egap", dev, base, { { 0, 1 }, { 100, 1 } } );
+        MagAOX::logger::logMap<XWC_DEFAULT_VERBOSITY> lm;
+        insertLogFile( lm, "/tmp/logMeta_egap", dev, base );
+
+        int         val;
+        std::string reason;
+
+        // Prior is the LAST entry: the very first getNextLog hits end-of-data and the
+        // prior-to-atime gap check fires.
+        REQUIRE( MagAOX::logger::getLogStateVal( val, lm, dev, dummyLogInt::eventCode, flatlogs::timespecX( base + 105, 0 ),
+                                                 flatlogs::timespecX( base + 300, 0 ), getIntVal, nullptr, 10.0,
+                                                 &reason ) != 0 );
+        REQUIRE( reason.find( "due to gap in telemetry exceeding" ) != std::string::npos );
+
+        // Loop entered (following entry within atime), and the gap between consecutive
+        // entries exceeds the allowance.
+        REQUIRE( MagAOX::logger::getLogStateVal( val, lm, dev, dummyLogInt::eventCode, flatlogs::timespecX( base + 5, 0 ),
+                                                 flatlogs::timespecX( base + 300, 0 ), getIntVal, nullptr, 10.0,
+                                                 &reason ) != 0 );
+        REQUIRE( reason.find( "due to gap in telemetry exceeding" ) != std::string::npos );
+
+        // Loop walks to the last entry (same value), then end-of-data with a gap to
+        // atime.
+        REQUIRE( MagAOX::logger::getLogStateVal( val, lm, dev, dummyLogInt::eventCode, flatlogs::timespecX( base + 5, 0 ),
+                                                 flatlogs::timespecX( base + 300, 0 ), getIntVal, nullptr, 150.0,
+                                                 &reason ) != 0 );
+        REQUIRE( reason.find( "due to gap in telemetry exceeding" ) != std::string::npos );
+    }
+
+    SECTION( "an unverifiable entry found mid-walk fails when nothing verified follows" )
+    {
+        const std::string dev = "devMWalk";
+        writeLogFile<dummyLogInt, int>( "/tmp/logMeta_mwalk", dev, base, { { 0, 1 }, { 10, 1 }, { 20, 1 } } );
+        MagAOX::logger::logMap<XWC_DEFAULT_VERBOSITY> lm;
+        insertLogFile( lm, "/tmp/logMeta_mwalk", dev, base );
+
+        int val;
+        REQUIRE( MagAOX::logger::getLogStateVal( val, lm, dev, dummyLogInt::eventCode, flatlogs::timespecX( base + 5, 0 ),
+                                                 flatlogs::timespecX( base + 300, 0 ), getIntVal ) != 0 );
+
+        // Corrupt the LAST entry: the walk advances @0 -> @10 (same value), then the
+        // in-loop verify of @20 fails with nothing verified after it.
+        std::vector<char> &mem = lm.m_appToBufferMap[dev].m_memory;
+        char *p = mem.data();
+        for( int i = 0; i < 3; ++i )
+        {
+            p += flatlogs::logHeader::totalSize( p );
+        }
+        corruptPayload( p );
+
+        std::string reason;
+        REQUIRE( MagAOX::logger::getLogStateVal( val, lm, dev, dummyLogInt::eventCode, flatlogs::timespecX( base + 5, 0 ),
+                                                 flatlogs::timespecX( base + 300, 0 ), getIntVal, nullptr, -1,
+                                                 &reason ) != 0 );
+        REQUIRE( reason == "due to unverifiable following telemetry" );
+    }
+
+    SECTION( "getLogContVal end-of-data and midpoint-to-following gap failures" )
+    {
+        const std::string dev = "devCEnd";
+        writeLogFile<dummyLogDouble, double>( "/tmp/logMeta_cend", dev, base, { { 0, 10.0 }, { 100, 20.0 } } );
+        MagAOX::logger::logMap<XWC_DEFAULT_VERBOSITY> lm;
+        insertLogFile( lm, "/tmp/logMeta_cend", dev, base );
+
+        double      val;
+        std::string reason;
+
+        // Midpoint's prior is the LAST entry: no following entry exists.
+        REQUIRE( MagAOX::logger::getLogContVal( val, lm, dev, dummyLogDouble::eventCode, flatlogs::timespecX( base + 105, 0 ),
+                                                flatlogs::timespecX( base + 115, 0 ), getDoubleVal, nullptr, -1,
+                                                &reason ) != 0 );
+        REQUIRE( reason == "due to missing following telemetry" );
+
+        // The midpoint-to-following gap exceeds the allowance (prior-to-midpoint is
+        // fine).
+        REQUIRE( MagAOX::logger::getLogContVal( val, lm, dev, dummyLogDouble::eventCode, flatlogs::timespecX( base + 1, 0 ),
+                                                flatlogs::timespecX( base + 3, 0 ), getDoubleVal, nullptr, 5.0,
+                                                &reason ) != 0 );
+        REQUIRE( reason.find( "due to gap in telemetry exceeding" ) != std::string::npos );
+    }
+}
+
+
+/// Vector members whose stored vectors are empty format as the empty string.
+/**
+ * \ingroup logMeta_unit_test
+ */
+TEST_CASE( "empty vector members format as an empty value", "[libMagAOX::logger::logMeta]" )
+{
+    const std::string dev  = "devEmptyVec";
+    const time_t      base = 1732170780;
+
+    auto sfn = writeRealLogFile( "/tmp/logMeta_emptyvec", dev, base, [&]( MagAOX::logger::logFileRaw<XWC_DEFAULT_VERBOSITY> &writer ) {
+        flatlogs::bufferPtrT buf;
+        for( int i = 0; i < 2; ++i )
+        {
+            flatlogs::logHeader::createLog<MagAOX::logger::telem_dmspeck>(
+                buf, flatlogs::timespecX( base + 10 * i, 0 ),
+                MagAOX::logger::telem_dmspeck::messageT( true, false, 1.0f, std::vector<float>(),
+                                                         std::vector<float>(), std::vector<float>(),
+                                                         std::vector<bool>() ),
+                flatlogs::logPrio::LOG_NOTICE );
+            writer.writeLog( buf );
+        }
+    } );
+
+    MagAOX::logger::logMap<XWC_DEFAULT_VERBOSITY> lm;
+    lm.m_appToFileMap[dev].insert( sfn );
+
+    MagAOX::logger::logMetaSpec lmsB( dev, MagAOX::logger::telem_dmspeck::eventCode, "crosses" );
+    MagAOX::logger::logMeta     lmB( lmsB );
+    REQUIRE( lmB.value( lm, flatlogs::timespecX( base, 0 ), flatlogs::timespecX( base + 5, 0 ) ) == "" );
+
+    MagAOX::logger::logMetaSpec lmsF( dev, MagAOX::logger::telem_dmspeck::eventCode, "separations" );
+    MagAOX::logger::logMeta     lmF( lmsF );
+    REQUIRE( lmF.value( lm, flatlogs::timespecX( base, 0 ), flatlogs::timespecX( base + 5, 0 ) ) == "" );
+}
+
+
+/// The failure returns of the remaining valType cases (their success paths are covered
+/// by the real-type tests above; a lookup past the end of the data fails identically
+/// regardless of valType, so one shared file drives each case's failure return).
+/**
+ * \ingroup logMeta_unit_test
+ */
+TEST_CASE( "remaining valType failure returns", "[libMagAOX::logger::logMeta]" )
+{
+    using MagAOX::logger::logMeta;
+    const time_t      base = 1732170780;
+    const std::string dev  = "devVFail";
+
+    writeLogFile<dummyLogInt, int>( "/tmp/logMeta_vfail", dev, base, { { 0, 5 }, { 10, 5 } } );
+    MagAOX::logger::logMap<XWC_DEFAULT_VERBOSITY> lm;
+    insertLogFile( lm, "/tmp/logMeta_vfail", dev, base );
+
+    auto checkFail = [&]( int valType, int metaType ) {
+        MagAOX::logger::logMetaSpec lms( dev, dummyLogInt::eventCode, "m", "", "%d", "" );
+        logMetaExposed               lmeta( lms );
+        lmeta.setDetail( { "", valType, metaType, reinterpret_cast<void *>( &getIntVal ) } );
+        REQUIRE( lmeta.value( lm, flatlogs::timespecX( base + 11, 0 ), flatlogs::timespecX( base + 1000, 0 ) ) ==
+                 "NOT AVAILABLE" );
+    };
+
+    checkFail( logMeta::valTypes::Int, logMeta::metaTypes::State );
+    checkFail( logMeta::valTypes::Float, logMeta::metaTypes::State );
+    checkFail( logMeta::valTypes::Double, logMeta::metaTypes::State );
+    checkFail( logMeta::valTypes::Bool, logMeta::metaTypes::Continuous );
+    checkFail( logMeta::valTypes::Float, logMeta::metaTypes::Continuous );
+    checkFail( logMeta::valTypes::Double, logMeta::metaTypes::Continuous );
 }
 
 } // namespace logMetaTest

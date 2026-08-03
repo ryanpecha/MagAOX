@@ -520,7 +520,7 @@ mx::error_t logMap<verboseT>::loadAppToFileMap( const std::string               
 
             if( errc != mx::error_t::noerror )
             {
-                return mx::error_report<verboseT>( errc, "error from std::filesystem" );
+                return mx::error_report<verboseT>( errc, "error from std::filesystem" ); // LCOV_EXCL_LINE -- dir_exists_is on a just-enumerated subdirectory only fails via exotic filesystem faults; the identical guard earlier in this function is exercised via its XWCTEST fault hook
             }
 
             if( !isdir ) // this subdir doesn't exist so go around
