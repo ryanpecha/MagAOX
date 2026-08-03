@@ -37,7 +37,10 @@ namespace loggerTest
 namespace logMetaTest
 {
 
-// A dummy log type whose message is a raw int, used to exercise getLogStateVal.
+// An int-valued "state variable" log used to exercise getLogStateVal. The merged
+// logMeta flatbuffer-verifies every scanned entry against the schema of its event code
+// (verifyLogEntry), so raw-int payloads under an invented code are no longer accepted:
+// this now wraps a real state_change log and carries the value in its 'to' field.
 struct dummyLogInt
 {
     static const flatlogs::eventCodeT eventCode;
@@ -45,20 +48,23 @@ struct dummyLogInt
 
     typedef int messageT;
 
-    static flatlogs::msgLenT length( const messageT & )
+    static flatlogs::msgLenT length( const messageT &msg )
     {
-        return sizeof( messageT );
+        MagAOX::logger::state_change::messageT m( 0, msg );
+        return MagAOX::logger::state_change::length( m );
     }
 
     static int format( void *msgBuffer, const messageT &msg )
     {
-        memcpy( msgBuffer, &msg, sizeof( msg ) );
-        return 0;
+        MagAOX::logger::state_change::messageT m( 0, msg );
+        return MagAOX::logger::state_change::format( msgBuffer, m );
     }
 };
-const flatlogs::eventCodeT dummyLogInt::eventCode = 101;
+const flatlogs::eventCodeT dummyLogInt::eventCode = MagAOX::logger::eventCodes::STATE_CHANGE;
 
-// A second dummy int log type, used for the state event code that never changes value.
+// A second int "state" log, used for the state event code that never changes value.
+// Same real-state_change wrapping as dummyLogInt (tests use separate devices/dirs, so
+// sharing the STATE_CHANGE event code is fine).
 struct dummyLogIntConst
 {
     static const flatlogs::eventCodeT eventCode;
@@ -66,20 +72,22 @@ struct dummyLogIntConst
 
     typedef int messageT;
 
-    static flatlogs::msgLenT length( const messageT & )
+    static flatlogs::msgLenT length( const messageT &msg )
     {
-        return sizeof( messageT );
+        MagAOX::logger::state_change::messageT m( 0, msg );
+        return MagAOX::logger::state_change::length( m );
     }
 
     static int format( void *msgBuffer, const messageT &msg )
     {
-        memcpy( msgBuffer, &msg, sizeof( msg ) );
-        return 0;
+        MagAOX::logger::state_change::messageT m( 0, msg );
+        return MagAOX::logger::state_change::format( msgBuffer, m );
     }
 };
-const flatlogs::eventCodeT dummyLogIntConst::eventCode = 102;
+const flatlogs::eventCodeT dummyLogIntConst::eventCode = MagAOX::logger::eventCodes::STATE_CHANGE;
 
-// A dummy log type whose message is a raw double, used to exercise getLogContVal.
+// A double-valued "continuous variable" log used to exercise getLogContVal. Wraps a
+// real telem_teldata log (see dummyLogInt for why) and carries the value in 'az'.
 struct dummyLogDouble
 {
     static const flatlogs::eventCodeT eventCode;
@@ -87,31 +95,28 @@ struct dummyLogDouble
 
     typedef double messageT;
 
-    static flatlogs::msgLenT length( const messageT & )
+    static flatlogs::msgLenT length( const messageT &msg )
     {
-        return sizeof( messageT );
+        MagAOX::logger::telem_teldata::messageT m( 1, 1, 1, 0, 0, msg, 45.0, 5.0, 90.0, 0 );
+        return MagAOX::logger::telem_teldata::length( m );
     }
 
     static int format( void *msgBuffer, const messageT &msg )
     {
-        memcpy( msgBuffer, &msg, sizeof( msg ) );
-        return 0;
+        MagAOX::logger::telem_teldata::messageT m( 1, 1, 1, 0, 0, msg, 45.0, 5.0, 90.0, 0 );
+        return MagAOX::logger::telem_teldata::format( msgBuffer, m );
     }
 };
-const flatlogs::eventCodeT dummyLogDouble::eventCode = 103;
+const flatlogs::eventCodeT dummyLogDouble::eventCode = MagAOX::logger::eventCodes::TELEM_TELDATA;
 
 int getIntVal( void *buf )
 {
-    int v;
-    memcpy( &v, buf, sizeof( v ) );
-    return v;
+    return MagAOX::logger::GetState_change_fb( buf )->to();
 }
 
 double getDoubleVal( void *buf )
 {
-    double v;
-    memcpy( &v, buf, sizeof( v ) );
-    return v;
+    return MagAOX::logger::GetTelem_teldata_fb( buf )->az();
 }
 
 char getCharVal( void *buf )
@@ -209,7 +214,15 @@ void writeLogFile( const std::string                             &dir,
     writer.logExt( "xlog" );
     writer.maxLogSize( 1000000 ); // large enough that all entries land in one file
 
+    // Lead with a text_log entry 10 s before base: it sets the on-disk file's
+    // timestamp, which the merged loadFiles requires to be strictly *before* any
+    // queried instant (a file starting exactly at the query time is not loaded).
+    // No test in this file queries TEXT_LOG, so it never affects a result.
     flatlogs::bufferPtrT buf;
+    flatlogs::logHeader::createLog<MagAOX::logger::text_log>(
+        buf, flatlogs::timespecX( base - 10, 0 ), "lead-in", flatlogs::logPrio::LOG_NOTICE );
+    writer.writeLog( buf );
+
     for( auto &e : entries )
     {
         flatlogs::logHeader::createLog<dummyLogT>(
@@ -225,7 +238,9 @@ template <class verboseT>
 void insertLogFile( MagAOX::logger::logMap<verboseT> &lm, const std::string &dir, const std::string &dev, time_t base )
 {
     std::string fileName, relPath;
-    MagAOX::file::fileTimeRelPath( fileName, relPath, dev, "xlog", base, 0 );
+    // base-10: the file is named for its first entry, the lead-in text_log (see
+    // writeLogFile/writeRealLogFile).
+    MagAOX::file::fileTimeRelPath( fileName, relPath, dev, "xlog", base - 10, 0 );
 
     MagAOX::file::stdFileName<verboseT> sfn( dir + '/' + relPath + '/' + fileName );
     REQUIRE( sfn.valid() );
@@ -541,12 +556,19 @@ writeRealLogFile( const std::string                                             
     writer.logExt( "xlog" );
     writer.maxLogSize( 1000000 );
 
+    // Same lead-in as writeLogFile: gives the file a timestamp strictly before
+    // firstTime, which the merged loadFiles requires.
+    flatlogs::bufferPtrT leadBuf;
+    flatlogs::logHeader::createLog<MagAOX::logger::text_log>(
+        leadBuf, flatlogs::timespecX( firstTime - 10, 0 ), "lead-in", flatlogs::logPrio::LOG_NOTICE );
+    writer.writeLog( leadBuf );
+
     writeEntries( writer );
 
     writer.close();
 
     std::string fileName, relPath;
-    MagAOX::file::fileTimeRelPath( fileName, relPath, dev, "xlog", firstTime, 0 );
+    MagAOX::file::fileTimeRelPath( fileName, relPath, dev, "xlog", firstTime - 10, 0 );
 
     MagAOX::file::stdFileName<XWC_DEFAULT_VERBOSITY> sfn( dir + '/' + relPath + '/' + fileName );
     REQUIRE( sfn.valid() );
@@ -615,7 +637,7 @@ TEST_CASE( "logMeta reads String/State and Bool/Continuous members from a real g
         MagAOX::logger::logMeta     lmeta( lms );
 
         std::string val = lmeta.value( lm, flatlogs::timespecX( base, 0 ), flatlogs::timespecX( base + 5, 0 ) );
-        REQUIRE( val == "" );
+        REQUIRE( val == "NOT AVAILABLE" ); // the merged logMeta's unavailableValue() sentinel (was "")
     }
 
     SECTION( "a failed lookup (unknown device) produces the invalid-value sentinel via card()" )
@@ -624,7 +646,7 @@ TEST_CASE( "logMeta reads String/State and Bool/Continuous members from a real g
         MagAOX::logger::logMeta     lmeta( lms );
 
         auto card = lmeta.card( lm, flatlogs::timespecX( base, 0 ), flatlogs::timespecX( base + 5, 0 ) );
-        REQUIRE( card.valueStr() == "invalid" );
+        REQUIRE( card.valueStr() == "NOT AVAILABLE" ); // merged unavailableValue() sentinel (was "invalid")
     }
 }
 
@@ -906,10 +928,10 @@ TEST_CASE( "logMeta falls back to the invalid sentinel for a valType unhandled b
     MagAOX::logger::logMeta     lmeta( lms );
 
     std::string val = lmeta.value( lm, flatlogs::timespecX( base, 0 ), flatlogs::timespecX( base + 10, 0 ) );
-    REQUIRE( val == "invalid" );
+    REQUIRE( val == "NOT AVAILABLE" ); // merged unavailableValue() sentinel (was "invalid")
 
     auto card = lmeta.card( lm, flatlogs::timespecX( base, 0 ), flatlogs::timespecX( base + 10, 0 ) );
-    REQUIRE( card.valueStr() == "invalid" );
+    REQUIRE( card.valueStr() == "NOT AVAILABLE" );
 }
 
 // Raw (non-flatbuffer) dummy log types, one per C++ type needed to reach a valType/metaType
@@ -946,10 +968,14 @@ DEFINE_DUMMY_RAW_LOG( dummyLogULongLongCont, unsigned long long, 60010 )
 
 #undef DEFINE_DUMMY_RAW_LOG
 
-/// logMeta covers valType/metaType combinations no real log type uses, by constructing
-/// logMeta normally (through the real, generated logMemberAccessor) and then using
-/// logMetaExposed to overwrite the protected m_detail with a hand-built accessor -- no
-/// substitute logMemberAccessor or source changes needed.
+/// logMeta's handling of valType/metaType combinations no real log type uses, driven by
+/// overwriting the protected m_detail (via logMetaExposed) with a hand-built accessor.
+/// The merged logMeta flatbuffer-verifies every entry it reads from a log file
+/// (verifyLogEntry), and these sections' raw payloads under invented event codes cannot
+/// pass that gate -- so the file-driven lookups now uniformly yield the
+/// "NOT AVAILABLE" sentinel instead of reaching the per-valType read branches the old
+/// implementation exposed. The sections document that gate; whether the now-unreachable
+/// branches need exclusions is for the next coverage pass over the merged code.
 /**
  * \ingroup logMeta_unit_test
  */
@@ -977,7 +1003,8 @@ TEST_CASE( "logMeta reaches valType/metaType branches unreachable via any real l
         MagAOX::logger::logMetaSpec lmsState( "devChar", dummyLogChar::eventCode, "state" );
         logMetaExposed               lmetaState( lmsState );
         lmetaState.setDetail( { "", logMeta::valTypes::Char, logMeta::metaTypes::State, reinterpret_cast<void *>( &getCharVal ) } );
-        REQUIRE( lmetaState.value( lm, flatlogs::timespecX( base, 0 ), flatlogs::timespecX( base + 5, 0 ) ) == "5" );
+        REQUIRE( lmetaState.value( lm, flatlogs::timespecX( base, 0 ), flatlogs::timespecX( base + 5, 0 ) ) ==
+                 "NOT AVAILABLE" ); // raw payload rejected by the merged verifyLogEntry gate (see the test case doc)
 
         MagAOX::logger::logMetaSpec lmsCont( "devChar", dummyLogChar::eventCode, "cont", "", "%d", "" );
         logMetaExposed               lmetaCont( lmsCont );
@@ -991,7 +1018,8 @@ TEST_CASE( "logMeta reaches valType/metaType branches unreachable via any real l
         MagAOX::logger::logMetaSpec lmsFail( "devChar", dummyLogChar::eventCode, "state" );
         logMetaExposed               lmetaFail( lmsFail );
         lmetaFail.setDetail( { "", logMeta::valTypes::Char, logMeta::metaTypes::State, reinterpret_cast<void *>( &getCharVal ) } );
-        REQUIRE( lmetaFail.value( lm, flatlogs::timespecX( base + 11, 0 ), flatlogs::timespecX( base + 1000, 0 ) ) == "invalid" );
+        REQUIRE( lmetaFail.value( lm, flatlogs::timespecX( base + 11, 0 ), flatlogs::timespecX( base + 1000, 0 ) ) ==
+                 "NOT AVAILABLE" ); // merged unavailableValue() sentinel (was "invalid")
     }
 
     SECTION( "UChar/State and UChar/Continuous" )
@@ -1013,7 +1041,8 @@ TEST_CASE( "logMeta reaches valType/metaType branches unreachable via any real l
         MagAOX::logger::logMetaSpec lmsState( "devUChar", dummyLogUChar::eventCode, "state" );
         logMetaExposed               lmetaState( lmsState );
         lmetaState.setDetail( { "", logMeta::valTypes::UChar, logMeta::metaTypes::State, reinterpret_cast<void *>( &getUCharVal ) } );
-        REQUIRE( lmetaState.value( lm, flatlogs::timespecX( base, 0 ), flatlogs::timespecX( base + 5, 0 ) ) == "5" );
+        REQUIRE( lmetaState.value( lm, flatlogs::timespecX( base, 0 ), flatlogs::timespecX( base + 5, 0 ) ) ==
+                 "NOT AVAILABLE" ); // raw payload rejected by the merged verifyLogEntry gate (see the test case doc)
 
         MagAOX::logger::logMetaSpec lmsCont( "devUChar", dummyLogUChar::eventCode, "cont", "", "%u", "" );
         logMetaExposed               lmetaCont( lmsCont );
@@ -1040,7 +1069,8 @@ TEST_CASE( "logMeta reaches valType/metaType branches unreachable via any real l
         MagAOX::logger::logMetaSpec lmsState( "devShort", dummyLogShort::eventCode, "state" );
         logMetaExposed               lmetaState( lmsState );
         lmetaState.setDetail( { "", logMeta::valTypes::Short, logMeta::metaTypes::State, reinterpret_cast<void *>( &getShortVal ) } );
-        REQUIRE( lmetaState.value( lm, flatlogs::timespecX( base, 0 ), flatlogs::timespecX( base + 5, 0 ) ) == "5" );
+        REQUIRE( lmetaState.value( lm, flatlogs::timespecX( base, 0 ), flatlogs::timespecX( base + 5, 0 ) ) ==
+                 "NOT AVAILABLE" ); // raw payload rejected by the merged verifyLogEntry gate (see the test case doc)
 
         MagAOX::logger::logMetaSpec lmsCont( "devShort", dummyLogShort::eventCode, "cont", "", "%d", "" );
         logMetaExposed               lmetaCont( lmsCont );
@@ -1067,7 +1097,8 @@ TEST_CASE( "logMeta reaches valType/metaType branches unreachable via any real l
         MagAOX::logger::logMetaSpec lmsState( "devUShort", dummyLogUShort::eventCode, "state" );
         logMetaExposed               lmetaState( lmsState );
         lmetaState.setDetail( { "", logMeta::valTypes::UShort, logMeta::metaTypes::State, reinterpret_cast<void *>( &getUShortVal ) } );
-        REQUIRE( lmetaState.value( lm, flatlogs::timespecX( base, 0 ), flatlogs::timespecX( base + 5, 0 ) ) == "5" );
+        REQUIRE( lmetaState.value( lm, flatlogs::timespecX( base, 0 ), flatlogs::timespecX( base + 5, 0 ) ) ==
+                 "NOT AVAILABLE" ); // raw payload rejected by the merged verifyLogEntry gate (see the test case doc)
 
         MagAOX::logger::logMetaSpec lmsCont( "devUShort", dummyLogUShort::eventCode, "cont", "", "%u", "" );
         logMetaExposed               lmetaCont( lmsCont );
@@ -1094,7 +1125,8 @@ TEST_CASE( "logMeta reaches valType/metaType branches unreachable via any real l
         MagAOX::logger::logMetaSpec lmsState( "devLong", dummyLogLong::eventCode, "state" );
         logMetaExposed               lmetaState( lmsState );
         lmetaState.setDetail( { "", logMeta::valTypes::Long, logMeta::metaTypes::State, reinterpret_cast<void *>( &getLongVal ) } );
-        REQUIRE( lmetaState.value( lm, flatlogs::timespecX( base, 0 ), flatlogs::timespecX( base + 5, 0 ) ) == "5" );
+        REQUIRE( lmetaState.value( lm, flatlogs::timespecX( base, 0 ), flatlogs::timespecX( base + 5, 0 ) ) ==
+                 "NOT AVAILABLE" ); // raw payload rejected by the merged verifyLogEntry gate (see the test case doc)
 
         MagAOX::logger::logMetaSpec lmsCont( "devLong", dummyLogLong::eventCode, "cont", "", "%ld", "" );
         logMetaExposed               lmetaCont( lmsCont );
@@ -1121,7 +1153,8 @@ TEST_CASE( "logMeta reaches valType/metaType branches unreachable via any real l
         MagAOX::logger::logMetaSpec lmsState( "devULong", dummyLogULong::eventCode, "state" );
         logMetaExposed               lmetaState( lmsState );
         lmetaState.setDetail( { "", logMeta::valTypes::ULong, logMeta::metaTypes::State, reinterpret_cast<void *>( &getULongVal ) } );
-        REQUIRE( lmetaState.value( lm, flatlogs::timespecX( base, 0 ), flatlogs::timespecX( base + 5, 0 ) ) == "5" );
+        REQUIRE( lmetaState.value( lm, flatlogs::timespecX( base, 0 ), flatlogs::timespecX( base + 5, 0 ) ) ==
+                 "NOT AVAILABLE" ); // raw payload rejected by the merged verifyLogEntry gate (see the test case doc)
 
         MagAOX::logger::logMetaSpec lmsCont( "devULong", dummyLogULong::eventCode, "cont", "", "%lu", "" );
         logMetaExposed               lmetaCont( lmsCont );
@@ -1148,7 +1181,8 @@ TEST_CASE( "logMeta reaches valType/metaType branches unreachable via any real l
         MagAOX::logger::logMetaSpec lmsState( "devLongLong", dummyLogLongLong::eventCode, "state", "", "%lld", "" );
         logMetaExposed               lmetaState( lmsState );
         lmetaState.setDetail( { "", logMeta::valTypes::LongLong, logMeta::metaTypes::State, reinterpret_cast<void *>( &getLongLongVal ) } );
-        REQUIRE( lmetaState.value( lm, flatlogs::timespecX( base, 0 ), flatlogs::timespecX( base + 5, 0 ) ) == "5" );
+        REQUIRE( lmetaState.value( lm, flatlogs::timespecX( base, 0 ), flatlogs::timespecX( base + 5, 0 ) ) ==
+                 "NOT AVAILABLE" ); // raw payload rejected by the merged verifyLogEntry gate (see the test case doc)
 
         MagAOX::logger::logMetaSpec lmsCont( "devLongLong", dummyLogLongLong::eventCode, "cont", "", "%lld", "" );
         logMetaExposed               lmetaCont( lmsCont );
@@ -1245,7 +1279,8 @@ TEST_CASE( "logMeta reaches valType/metaType branches unreachable via any real l
         MagAOX::logger::logMetaSpec lms( "devAny", 60012, "bad" );
         logMetaExposed               lmeta( lms );
         lmeta.setDetail( { "", logMeta::valTypes::Int, 99, reinterpret_cast<void *>( &getIntVal ) } );
-        REQUIRE( lmeta.value( lm, flatlogs::timespecX( base, 0 ), flatlogs::timespecX( base + 10, 0 ) ) == "invalid" );
+        REQUIRE( lmeta.value( lm, flatlogs::timespecX( base, 0 ), flatlogs::timespecX( base + 10, 0 ) ) ==
+                 "NOT AVAILABLE" ); // merged unavailableValue() sentinel (was "invalid")
     }
 
     SECTION( "a valType unhandled by the State switch itself hits its own internal default" )
@@ -1258,7 +1293,8 @@ TEST_CASE( "logMeta reaches valType/metaType branches unreachable via any real l
         MagAOX::logger::logMetaSpec lms( "devAny", 60013, "whatever" );
         logMetaExposed               lmeta( lms );
         lmeta.setDetail( { "", logMeta::valTypes::Vector_String, logMeta::metaTypes::State, reinterpret_cast<void *>( &getIntVal ) } );
-        REQUIRE( lmeta.value( lm, flatlogs::timespecX( base, 0 ), flatlogs::timespecX( base + 10, 0 ) ) == "invalid" );
+        REQUIRE( lmeta.value( lm, flatlogs::timespecX( base, 0 ), flatlogs::timespecX( base + 10, 0 ) ) ==
+                 "NOT AVAILABLE" ); // merged unavailableValue() sentinel (was "invalid")
     }
 
     SECTION( "an unrecognized event code hits the real logMemberAccessor's own default" )
@@ -1267,6 +1303,78 @@ TEST_CASE( "logMeta reaches valType/metaType branches unreachable via any real l
         MagAOX::logger::logMeta     lmeta( lms );
         REQUIRE( lmeta.keyword() == "" );
     }
+}
+
+
+/// Validate shortest-path angle deltas across wrap boundaries.
+/**
+ * \ingroup logMeta_unit_test
+ */
+TEST_CASE( "Log metadata angle deltas wrap correctly", "[libMagAOX::logger::logMeta]" )
+{
+    using MagAOX::logger::logMetaAngleDelta;
+
+    REQUIRE( logMetaAngleDelta( 10.0, 20.0 ) == Approx( 10.0 ) );
+    REQUIRE( logMetaAngleDelta( 20.0, 10.0 ) == Approx( -10.0 ) );
+    REQUIRE( logMetaAngleDelta( -179.0, 179.0 ) == Approx( -2.0 ) );
+    REQUIRE( logMetaAngleDelta( 179.0, -179.0 ) == Approx( 2.0 ) );
+    REQUIRE( logMetaAngleDelta( 359.0, 1.0 ) == Approx( 2.0 ) );
+    REQUIRE( logMetaAngleDelta( 1.0, 359.0 ) == Approx( -2.0 ) );
+}
+
+/// Validate interpolated angle normalization across wrap boundaries.
+/**
+ * \ingroup logMeta_unit_test
+ */
+TEST_CASE( "Log metadata angle interpolation normalizes wrapped midpoints", "[libMagAOX::logger::logMeta]" )
+{
+    using MagAOX::logger::logMetaAngleDelta;
+    using MagAOX::logger::logMetaNormalizeInterpolatedAngle;
+
+    auto midpoint = []( double a0, double a1 )
+    {
+        double interp = a0 + 0.5 * logMetaAngleDelta( a0, a1 );
+        return logMetaNormalizeInterpolatedAngle( interp, a0, a1 );
+    };
+
+    REQUIRE( midpoint( -179.0, 179.0 ) == Approx( -180.0 ) );
+    REQUIRE( midpoint( 179.0, -179.0 ) == Approx( -180.0 ) );
+    REQUIRE( midpoint( 359.0, 1.0 ) == Approx( 0.0 ) );
+    REQUIRE( midpoint( 1.0, 359.0 ) == Approx( 0.0 ) );
+    REQUIRE( midpoint( 10.0, 20.0 ) == Approx( 15.0 ) );
+    REQUIRE( midpoint( 20.0, 10.0 ) == Approx( 15.0 ) );
+}
+
+/// Validate angle normalization edge cases.
+/**
+ * \ingroup logMeta_unit_test
+ */
+TEST_CASE( "Log metadata angle normalization handles exact and repeated wraps", "[libMagAOX::logger::logMeta]" )
+{
+    using MagAOX::logger::logMetaNormalizeAngle180;
+    using MagAOX::logger::logMetaNormalizeAngle360;
+
+    REQUIRE( logMetaNormalizeAngle360( 0.0 ) == Approx( 0.0 ) );
+    REQUIRE( logMetaNormalizeAngle360( 360.0 ) == Approx( 0.0 ) );
+    REQUIRE( logMetaNormalizeAngle360( 720.0 ) == Approx( 0.0 ) );
+    REQUIRE( logMetaNormalizeAngle360( -1.0 ) == Approx( 359.0 ) );
+
+    REQUIRE( logMetaNormalizeAngle180( 180.0 ) == Approx( -180.0 ) );
+    REQUIRE( logMetaNormalizeAngle180( 540.0 ) == Approx( -180.0 ) );
+    REQUIRE( logMetaNormalizeAngle180( -181.0 ) == Approx( 179.0 ) );
+}
+
+/// Validate that parallactic angle metadata uses wrapped interpolation.
+/**
+ * \ingroup logMeta_unit_test
+ */
+TEST_CASE( "telem_teldata parallactic angle accessor is continuous angle metadata", "[libMagAOX::logger::logMeta]" )
+{
+    MagAOX::logger::logMetaDetail lmd = MagAOX::logger::telem_teldata::getAccessor( "pa" );
+
+    REQUIRE( lmd.keyword == "PARANG" );
+    REQUIRE( lmd.valType == MagAOX::logger::logMeta::valTypes::Double );
+    REQUIRE( lmd.metaType == MagAOX::logger::logMeta::metaTypes::Continuous_Angle );
 }
 
 } // namespace logMetaTest

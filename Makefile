@@ -278,6 +278,7 @@ utils_to_build = \
 	logdump \
 	logsurgeon \
 	cursesINDI \
+	shmimDelta \
 	xrif2fits \
 	xrif2shmim
 

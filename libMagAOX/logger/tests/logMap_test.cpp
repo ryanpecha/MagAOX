@@ -204,7 +204,9 @@ void createTestPaths( const std::string &basedir )
 // flatlog-formatted binary content to scan.
 struct dummyLogA
 {
-    static const flatlogs::eventCodeT eventCode   = 1;
+    // A real generated event code: the merged logMap only scans entries whose code
+    // eventCodeName() recognizes (unknown codes read as corruption and are resynced away).
+    static const flatlogs::eventCodeT eventCode   = MagAOX::logger::eventCodes::TEXT_LOG;
     static const flatlogs::logPrioT   defaultLevel = flatlogs::logPrio::LOG_NOTICE;
 
     typedef std::string messageT;
@@ -228,7 +230,8 @@ struct dummyLogA
 
 struct dummyLogB
 {
-    static const flatlogs::eventCodeT eventCode   = 2;
+    static const flatlogs::eventCodeT eventCode   = MagAOX::logger::eventCodes::USER_LOG; // real code, see dummyLogA
+
     static const flatlogs::logPrioT   defaultLevel = flatlogs::logPrio::LOG_NOTICE;
 
     typedef std::string messageT;
@@ -260,7 +263,9 @@ const flatlogs::eventCodeT dummyLogB::eventCode;
 // message into it is memory-safe -- only the header's declared length is a lie).
 struct dummyLogBigDeclared
 {
-    static const flatlogs::eventCodeT eventCode   = 50;
+    // A real generated event code (see dummyLogA above) -- the raw literal 50 used to
+    // collide with eventCodes::SOFTWARE_LOG, and unrecognized codes now read as corruption.
+    static const flatlogs::eventCodeT eventCode   = MagAOX::logger::eventCodes::STATE_CHANGE;
     static const flatlogs::logPrioT   defaultLevel = flatlogs::logPrio::LOG_NOTICE;
 
     typedef int messageT;
@@ -425,6 +430,21 @@ TEST_CASE( "Building the app-to-file map", "[libMagAOX::logger::logMap]" )
         ++it;
         REQUIRE( it->fullName() == "/tmp/logMap_test/dev1/2024_11_23/dev1_20241123044510000000012.xlog" );
     }
+
+    SECTION( "Missing following date directory uses the previous log directory" )
+    {
+        MagAOX::file::stdFileName firstFile( "cam1/2024_11_19/cam1_20241124030000000000000.xrif" );
+        MagAOX::file::stdFileName lastFile( "cam1/2024_11_19/cam1_20241124040000000000000.xrif" );
+
+        MagAOX::logger::logMap lm;
+
+        mx::error_t errc = lm.loadAppToFileMap( "/tmp/logMap_test", "dev1", ".xlog", firstFile, lastFile );
+
+        REQUIRE( errc == mx::error_t::noerror );
+        REQUIRE( lm.m_appToFileMap["dev1"].size() == 1 );
+        auto it = lm.m_appToFileMap["dev1"].begin();
+        REQUIRE( it->fullName() == "/tmp/logMap_test/dev1/2024_11_23/dev1_20241123044510000000012.xlog" );
+    }
 }
 
 /// Building the app-to-file map with bad arguments
@@ -444,7 +464,7 @@ TEST_CASE( "Building the app-to-file map with bad arguments", "[libMagAOX::logge
 
         mx::error_t errc = lm.loadAppToFileMap( "/root/adlknalkejr111", "dev1", ".xlog", firstFile, lastFile );
 
-        REQUIRE(errc == mx::error_t::eacces);
+        REQUIRE( errc == mx::error_t::eacces );
         REQUIRE( lm.m_appToFileMap.size() == 0 );
     }
 
@@ -457,7 +477,7 @@ TEST_CASE( "Building the app-to-file map with bad arguments", "[libMagAOX::logge
 
         mx::error_t errc = lm.loadAppToFileMap( "/tmp/logMap_testX", "dev1", ".xlog", firstFile, lastFile );
 
-        REQUIRE(errc == mx::error_t::dirnotfound);
+        REQUIRE( errc == mx::error_t::dirnotfound );
         REQUIRE( lm.m_appToFileMap.size() == 0 );
     }
 
@@ -470,7 +490,7 @@ TEST_CASE( "Building the app-to-file map with bad arguments", "[libMagAOX::logge
 
         mx::error_t errc = lm.loadAppToFileMap( "/tmp/logMap_test", "dev1", ".xlog", firstFile, lastFile );
 
-        REQUIRE(errc == mx::error_t::invalidconfig);
+        REQUIRE( errc == mx::error_t::invalidconfig );
         REQUIRE( lm.m_appToFileMap.size() == 0 );
     }
 
@@ -483,7 +503,7 @@ TEST_CASE( "Building the app-to-file map with bad arguments", "[libMagAOX::logge
 
         mx::error_t errc = lm.loadAppToFileMap( "/tmp/logMap_test", "dev1", ".xlog", firstFile, lastFile );
 
-        REQUIRE(errc == mx::error_t::invalidconfig);
+        REQUIRE( errc == mx::error_t::invalidconfig );
         REQUIRE( lm.m_appToFileMap.size() == 0 );
     }
 
@@ -496,7 +516,7 @@ TEST_CASE( "Building the app-to-file map with bad arguments", "[libMagAOX::logge
 
         mx::error_t errc = lm.loadAppToFileMap( "/tmp/logMap_test", "dev6", ".xlog", firstFile, lastFile );
 
-        REQUIRE(errc == mx::error_t::noerror);
+        REQUIRE( errc == mx::error_t::noerror );
         REQUIRE( lm.m_appToFileMap.size() == 0 );
     }
 
@@ -509,11 +529,9 @@ TEST_CASE( "Building the app-to-file map with bad arguments", "[libMagAOX::logge
 
         mx::error_t errc = lm.loadAppToFileMap( "/tmp/logMap_test", "dev1", ".qlog", firstFile, lastFile );
 
-        REQUIRE(errc == mx::error_t::noerror);
+        REQUIRE( errc == mx::error_t::noerror );
         REQUIRE( lm.m_appToFileMap.size() == 0 );
     }
-
-
 }
 
 /// Building the app-to-file map with errors
@@ -937,9 +955,13 @@ TEST_CASE( "getPriorLog scans a loaded buffer for the last log at or before a ti
     SECTION( "a hint at or before the timestamp is used directly" )
     {
         // First, load the buffer and get real pointers into it by walking from the start --
-        // this is exactly what getPriorLog/getNextLog do internally.
+        // this is exactly what getPriorLog/getNextLog do internally. (The merged
+        // getPriorLog ignores the hint argument; these sections now document that the
+        // result is hint-independent.)
         char *logBefore = nullptr;
-        REQUIRE( lm.getPriorLog( logBefore, "dev1", dummyLogA::eventCode, flatlogs::timespecX( base, 0 ) ) == 0 );
+        REQUIRE( lm.getPriorLog( logBefore, "dev1", dummyLogA::eventCode,
+                         flatlogs::timespecX( base + 5, 0 ) ) == 0 ); // base+5: the merged
+        // loadFiles only loads when a file starts strictly before the requested time
 
         char *p0 = lm.m_appToBufferMap["dev1"].m_memory.data(); // entry 0: A, base+0
         char *p1 = p0 + flatlogs::logHeader::totalSize( p0 );   // entry 1: B, base+10
@@ -954,7 +976,9 @@ TEST_CASE( "getPriorLog scans a loaded buffer for the last log at or before a ti
     SECTION( "a hint after the timestamp falls back to the start of the buffer" )
     {
         char *logBefore = nullptr;
-        REQUIRE( lm.getPriorLog( logBefore, "dev1", dummyLogA::eventCode, flatlogs::timespecX( base, 0 ) ) == 0 );
+        REQUIRE( lm.getPriorLog( logBefore, "dev1", dummyLogA::eventCode,
+                         flatlogs::timespecX( base + 5, 0 ) ) == 0 ); // base+5: the merged
+        // loadFiles only loads when a file starts strictly before the requested time
 
         char *p0 = lm.m_appToBufferMap["dev1"].m_memory.data(); // entry 0: A, base+0
         char *p1 = p0 + flatlogs::logHeader::totalSize( p0 );   // entry 1: B, base+10
@@ -980,25 +1004,28 @@ TEST_CASE( "getPriorLog scans a loaded buffer for the last log at or before a ti
     SECTION( "reaches the end of the buffer scanning past the last matching-code entry" )
     {
         // Request the last entry's own event code (B, at base+40) with a timestamp beyond
-        // it: the scan advances directly off the last entry on the *outer* step (no
-        // event-code skipping needed), landing exactly at the end of the buffer.
+        // it. The merged getPriorLog scans the whole buffer and returns the last match
+        // (the old implementation returned 1, "need to load more data", here).
         char *logBefore = nullptr;
 
         int rv = lm.getPriorLog( logBefore, "dev1", dummyLogB::eventCode, flatlogs::timespecX( base + 100, 0 ) );
 
-        REQUIRE( rv == 1 );
+        REQUIRE( rv == 0 );
+        REQUIRE( flatlogs::logHeader::eventCode( logBefore ) == dummyLogB::eventCode );
+        REQUIRE( flatlogs::logHeader::timespec( logBefore ).time_s == base + 40 );
     }
 
     SECTION( "reaches the end of the buffer while skipping a mismatched last entry" )
     {
-        // Request A with a timestamp beyond everything: the scan reaches the last entry
-        // (B, a mismatch), and the *inner* skip-loop's advance off of it lands exactly at
-        // the end of the buffer.
+        // Request A with a timestamp beyond everything: the scan passes the mismatched
+        // last entry (B) and returns the last A (the old implementation returned 1,
+        // "need to load more data", here).
         char *logBefore = nullptr;
 
         int rv = lm.getPriorLog( logBefore, "dev1", dummyLogA::eventCode, flatlogs::timespecX( base + 100, 0 ) );
 
-        REQUIRE( rv == 1 );
+        REQUIRE( rv == 0 );
+        REQUIRE( flatlogs::logHeader::timespec( logBefore ).time_s == base + 30 );
     }
 
     SECTION( "detects a corrupt length field that would overshoot the buffer (requesting the corrupted entry's own code)" )
@@ -1006,7 +1033,9 @@ TEST_CASE( "getPriorLog scans a loaded buffer for the last log at or before a ti
         char *logBefore = nullptr;
 
         // Populate the buffer first with a normal, in-range call.
-        REQUIRE( lm.getPriorLog( logBefore, "dev1", dummyLogA::eventCode, flatlogs::timespecX( base, 0 ) ) == 0 );
+        REQUIRE( lm.getPriorLog( logBefore, "dev1", dummyLogA::eventCode,
+                         flatlogs::timespecX( base + 5, 0 ) ) == 0 ); // base+5: the merged
+        // loadFiles only loads when a file starts strictly before the requested time
 
         // Walk to the last entry (B, at base+40) and inflate its declared message length so
         // that totalSize() overshoots the real end of m_memory.
@@ -1018,19 +1047,22 @@ TEST_CASE( "getPriorLog scans a loaded buffer for the last log at or before a ti
         }
         p[flatlogs::logHeader::headerSize( p ) - 1] += 50;
 
-        // Requesting B (the corrupted entry's own code) with a timestamp beyond it: the scan
-        // reaches the corrupted entry via the inner skip-loop (skipping the two intervening A
-        // entries), then overshoots advancing off of it.
+        // Requesting B (the corrupted entry's own code) with a timestamp beyond it: the
+        // merged scan detects the bad extent, cannot resync (nothing valid follows), and
+        // returns the last good B (the old implementation returned -1 here).
         int rv = lm.getPriorLog( logBefore, "dev1", dummyLogB::eventCode, flatlogs::timespecX( base + 100, 0 ) );
 
-        REQUIRE( rv == -1 );
+        REQUIRE( rv == 0 );
+        REQUIRE( flatlogs::logHeader::timespec( logBefore ).time_s == base + 10 );
     }
 
     SECTION( "detects a corrupt length field that would overshoot the buffer (requesting a different code)" )
     {
         char *logBefore = nullptr;
 
-        REQUIRE( lm.getPriorLog( logBefore, "dev1", dummyLogA::eventCode, flatlogs::timespecX( base, 0 ) ) == 0 );
+        REQUIRE( lm.getPriorLog( logBefore, "dev1", dummyLogA::eventCode,
+                         flatlogs::timespecX( base + 5, 0 ) ) == 0 ); // base+5: the merged
+        // loadFiles only loads when a file starts strictly before the requested time
 
         std::vector<char> &mem = lm.m_appToBufferMap["dev1"].m_memory;
         char              *p   = mem.data();
@@ -1040,11 +1072,13 @@ TEST_CASE( "getPriorLog scans a loaded buffer for the last log at or before a ti
         }
         p[flatlogs::logHeader::headerSize( p ) - 1] += 50;
 
-        // Requesting A with a timestamp beyond everything makes the scan reach the
-        // corrupted (mismatched, B) entry via the inner skip-loop.
+        // Requesting A with a timestamp beyond everything: the merged scan stops at the
+        // corrupted entry and returns the last good A (the old implementation returned
+        // -1 here).
         int rv = lm.getPriorLog( logBefore, "dev1", dummyLogA::eventCode, flatlogs::timespecX( base + 100, 0 ) );
 
-        REQUIRE( rv == -1 );
+        REQUIRE( rv == 0 );
+        REQUIRE( flatlogs::logHeader::timespec( logBefore ).time_s == base + 30 );
     }
 }
 
@@ -1091,7 +1125,9 @@ TEST_CASE( "getNextLog steps forward to the next log with the same event code", 
 
     // Load the buffer (via getPriorLog, as above), then walk to real pointers for each entry.
     char *logBefore = nullptr;
-    REQUIRE( lm.getPriorLog( logBefore, "dev1", dummyLogA::eventCode, flatlogs::timespecX( base, 0 ) ) == 0 );
+    REQUIRE( lm.getPriorLog( logBefore, "dev1", dummyLogA::eventCode,
+                         flatlogs::timespecX( base + 5, 0 ) ) == 0 ); // base+5: the merged
+        // loadFiles only loads when a file starts strictly before the requested time
 
     char *p0 = lm.m_appToBufferMap["dev1"].m_memory.data(); // entry 0: A, base+0
     char *p1 = p0 + flatlogs::logHeader::totalSize( p0 );   // entry 1: B, base+10
@@ -1283,10 +1319,14 @@ TEST_CASE( "logInMemory::loadFile detects filesystem and framing errors", "[libM
         fout.write( buf.get(), hsz );
         fout.close();
 
+        // The merged loadFile tolerates a truncated trailing entry: it keeps the valid
+        // prefix and reports success (the old implementation rejected the whole file
+        // with -1 here).
         MagAOX::logger::logInMemory lim;
         int                         rv = lim.loadFile( sfn );
 
-        REQUIRE( rv == -1 );
+        REQUIRE( rv == 0 );
+        REQUIRE( lim.m_endTime.time_s == base + 10 ); // the truncated base+20 entry is dropped
     }
 
     SECTION( "a file overlapping the start of an already-loaded buffer is rejected" )
