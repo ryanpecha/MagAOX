@@ -10,6 +10,7 @@
 #include "../../MagAOXApp.hpp"
 #include "../stdCamera.hpp"
 #include "../telemeter.hpp"
+#include "testHarnessCommon.hpp"
 
 // LCOV_EXCL_START
 
@@ -449,7 +450,8 @@ struct stdCameraFullHarness : public MagAOX::app::MagAOXApp<false>,
     // catch their own send failures, so this doesn't need a live INDI server).
     void setupRealDriver()
     {
-        m_indiDriver = new MagAOX::app::indiDriver<MagAOX::app::MagAOXApp<false>>( this, m_configName, "0", "0" );
+        m_indiDriver = MagAOX::app::dev::testHarness::makeFifolessIndiDriver<MagAOX::app::MagAOXApp<false>>(
+            this, m_configName );
     }
 
     // -- capture outgoing goto-focus commands instead of requiring a real INDI driver --
@@ -899,7 +901,8 @@ struct stdCameraReportOnlyHarness : public MagAOX::app::MagAOXApp<false>,
     // See stdCameraFullHarness::setupRealDriver() for why this is needed.
     void setupRealDriver()
     {
-        m_indiDriver = new MagAOX::app::indiDriver<MagAOX::app::MagAOXApp<false>>( this, m_configName, "0", "0" );
+        m_indiDriver = MagAOX::app::dev::testHarness::makeFifolessIndiDriver<MagAOX::app::MagAOXApp<false>>(
+            this, m_configName );
     }
 };
 

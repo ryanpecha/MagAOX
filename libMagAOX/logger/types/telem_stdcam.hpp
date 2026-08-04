@@ -380,10 +380,12 @@ struct telem_stdcam : public flatbuffer_log
             if( fbs->tempCtrl()->statusStr() )
                 return fbs->tempCtrl()->statusStr()->c_str();
             else
-                return ""; // LCOV_EXCL_LINE -- statusStr is always created by the only constructor
+                // LCOV_EXCL_START -- statusStr/tempCtrl are always created by the only constructor
+                return "";
         }
         else
-            return ""; // LCOV_EXCL_LINE -- tempCtrl is always created by the only constructor
+            return "";
+        // LCOV_EXCL_STOP
     }
 
     static std::string shutterStatusStr( void *msgBuffer )
@@ -394,10 +396,12 @@ struct telem_stdcam : public flatbuffer_log
             if( fbs->shutter()->statusStr() )
                 return fbs->shutter()->statusStr()->c_str();
             else
-                return ""; // LCOV_EXCL_LINE -- shutterStatusSr is always created by the only constructor
+                // LCOV_EXCL_START -- shutterStatusSr/shutter are always created by the only constructor
+                return "";
         }
         else
-            return ""; // LCOV_EXCL_LINE -- shutter is always created by the only constructor
+            return "";
+        // LCOV_EXCL_STOP
     }
 
     static std::string shutterState( void *msgBuffer )

@@ -684,6 +684,16 @@ void mcp3208Ctrl::setupConfig()
                 "float",
                 "Global EMA coefficient for synchronized timing smoothers. Default is 0.01." );
 
+    config.add( "accel.numChannels",
+                "",
+                "accel.numChannels",
+                argType::Required,
+                "accel",
+                "numChannels",
+                false,
+                "int",
+                "The number of MCP3208 channels read into each output frame. Default is 2." );
+
     config.add( "numChannels.device",
                 "",
                 "numChannels.device",

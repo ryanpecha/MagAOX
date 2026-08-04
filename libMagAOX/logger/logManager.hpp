@@ -29,6 +29,7 @@ using namespace flatlogs;
 
 #include "generated/logTypes.hpp"
 #include "generated/logStdFormat.hpp"
+#include "tests/testMacros.hpp"
 
 namespace MagAOX
 {
@@ -434,21 +435,16 @@ int logManager<parentT, logFileT>::logThreadStart()
 {
    try
    {
-      // clang-format off
-      #ifdef XWCTEST_LOGMANAGER_LOGTHREADSTART_STD_EXCEPTION
-          throw std::runtime_error( "XWCTEST" ); // LCOV_EXCL_LINE
-      #endif
-
-      #ifdef XWCTEST_LOGMANAGER_LOGTHREADSTART_UNKNOWN_EXCEPTION
-          throw 42; // LCOV_EXCL_LINE
-      #endif
+      XWCTEST_IF_LOGMANAGER_LOGTHREADSTART_STD_EXCEPTION( throw std::runtime_error( "XWCTEST" ) );
+      XWCTEST_IF_LOGMANAGER_LOGTHREADSTART_UNKNOWN_EXCEPTION( throw 42 );
 
       // NOT_JOINABLE skips the construction entirely, leaving the default-constructed
-      // (non-joinable) thread so the joinable() check below genuinely fails.
+      // (non-joinable) thread so the joinable() check below genuinely fails. This shape
+      // (suppressing a real statement rather than injecting one) doesn't fit the
+      // XWCTEST_IF_ macro pattern, so it stays a raw #ifndef block.
       #ifndef XWCTEST_LOGMANAGER_LOGTHREADSTART_NOT_JOINABLE
           m_logThread = std::thread( _logThreadStart, this);
       #endif
-      // clang-format on
    }
    catch( const std::exception & e )
    {

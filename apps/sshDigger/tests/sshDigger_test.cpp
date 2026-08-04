@@ -399,10 +399,6 @@ SCENARIO( "sshDigger Configuration", "[sshDigger]" )
     }
 }
 
-} // namespace sshDiggerTest
-
-} // namespace libXWCTest
-
 SCENARIO( "sshDigger tunnel exec preparation", "[sshDigger]" )
 {
     GIVEN( "a config file with 1 tunnel" )
@@ -454,3 +450,7 @@ SCENARIO( "sshDigger tunnel exec preparation", "[sshDigger]" )
         }
     }
 }
+
+} // namespace sshDiggerTest
+
+} // namespace libXWCTest

@@ -17,6 +17,8 @@
 
 #include "../common/exceptions.hpp"
 
+#include "tests/testMacros.hpp"
+
 namespace MagAOX
 {
 namespace file
@@ -48,28 +50,15 @@ mx::error_t timestamp( std::string &tstamp, /**< [out] the timestamp string*/
 {
     try
     {
-
-        // clang-format off
-        #ifdef XWCTEST_TIMESTAMP_THROW_BAD_ALLOC
-        throw std::bad_alloc(); // LCOV_EXCL_LINE
-        #endif
-        // clang-format on
-
-        // clang-format off
-        #ifdef XWCTEST_TIMESTAMP_THROW_FORMAT_ERROR
-        throw std::format_error("testing format_error"); // LCOV_EXCL_LINE
-        #endif
-        // clang-format on
-
-        // clang-format off
-        #ifdef XWCTEST_TIMESTAMP_THROW_EXCEPTION
-        throw std::exception(); // LCOV_EXCL_LINE
-        #endif
-        // clang-format on
+        XWCTEST_IF_TIMESTAMP_THROW_BAD_ALLOC( throw std::bad_alloc() );
+        XWCTEST_IF_TIMESTAMP_THROW_FORMAT_ERROR( throw std::format_error( "testing format_error" ) );
+        XWCTEST_IF_TIMESTAMP_THROW_EXCEPTION( throw std::exception() );
 
         tstamp = std::format( "{:04}{:02}{:02}{:02}{:02}{:02}{:09}",
-                              uttime.tm_year + 1900, // LCOV_EXCL_LINE (gcov quirk: these two arithmetic-argument lines of this
-                              uttime.tm_mon + 1, // LCOV_EXCL_LINE      single call get spurious 0 hits; the call itself is covered)
+                              // LCOV_EXCL_START (gcov quirk: these two arithmetic-argument lines of this single call get spurious 0 hits; the call itself is covered)
+                              uttime.tm_year + 1900,
+                              uttime.tm_mon + 1,
+                              // LCOV_EXCL_STOP
                               uttime.tm_mday,
                               uttime.tm_hour,
                               uttime.tm_min,
@@ -123,11 +112,7 @@ mx::error_t timestamp( std::string &tstamp, /**< [out] the timestamp string*/
     errno = 0;
     if( gmtime_r( &ts_sec, &uttime ) == 0 )
     {
-        // clang-format off
-        #ifdef XWCTEST_TIMESTAMP_GMTIME_OTHER
-        errno = 0; // LCOV_EXCL_LINE
-        #endif
-        // clang-format on
+        XWCTEST_IF_TIMESTAMP_GMTIME_OTHER( errno = 0 );
 
         if( errno != 0 )
         {
@@ -222,23 +207,9 @@ mx::error_t fileTimeRelPath( std::string &tstamp,  /**< [out] */
 
     try
     {
-        // clang-format off
-        #ifdef XWCTEST_FILETIMERELPATH_THROW_BAD_ALLOC
-        throw std::bad_alloc(); // LCOV_EXCL_LINE
-        #endif
-        // clang-format on
-
-        // clang-format off
-        #ifdef XWCTEST_FILETIMERELPATH_THROW_FORMAT_ERROR
-        throw std::format_error("testing format_error"); // LCOV_EXCL_LINE
-        #endif
-        // clang-format on
-
-        // clang-format off
-        #ifdef XWCTEST_FILETIMERELPATH_THROW_EXCEPTION
-        throw std::exception(); // LCOV_EXCL_LINE
-        #endif
-        // clang-format on
+        XWCTEST_IF_FILETIMERELPATH_THROW_BAD_ALLOC( throw std::bad_alloc() );
+        XWCTEST_IF_FILETIMERELPATH_THROW_FORMAT_ERROR( throw std::format_error( "testing format_error" ) );
+        XWCTEST_IF_FILETIMERELPATH_THROW_EXCEPTION( throw std::exception() );
 
         mx_error_check( timestamp<verboseT>( tstamp, uttime, ts_sec, ts_nsec ) );
 
@@ -305,17 +276,8 @@ mx::error_t fileTimeRelPath( std::string       &fileName, /**< [out] the resulti
 
     try
     {
-        // clang-format off
-        #ifdef XWCTEST_FILETIMERELPATHSTRING_THROW_BAD_ALLOC
-        throw std::bad_alloc(); // LCOV_EXCL_LINE
-        #endif
-        // clang-format on
-
-        // clang-format off
-        #ifdef XWCTEST_FILETIMERELPATHSTRING_THROW_EXCEPTION
-        throw std::exception(); // LCOV_EXCL_LINE
-        #endif
-        // clang-format on
+        XWCTEST_IF_FILETIMERELPATHSTRING_THROW_BAD_ALLOC( throw std::bad_alloc() );
+        XWCTEST_IF_FILETIMERELPATHSTRING_THROW_EXCEPTION( throw std::exception() );
 
         relPath  = devName + '/' + tmprelpath;
         fileName = devName + '_' + tstamp + '.' + ext;
@@ -361,23 +323,9 @@ mx::error_t parseTimestamp( std::string       &YYYY,  /**< [out] the 4 digit yea
 {
     try
     {
-        // clang-format off
-        #ifdef XWCTEST_PARSETIMESTAMP_THROW_BAD_ALLOC
-        throw std::bad_alloc(); // LCOV_EXCL_LINE
-        #endif
-        // clang-format on
-
-        // clang-format off
-        #ifdef XWCTEST_PARSETIMESTAMP_THROW_OUT_OF_RANGE
-        throw std::out_of_range("testing out of range"); // LCOV_EXCL_LINE
-        #endif
-        // clang-format on
-
-        // clang-format off
-        #ifdef XWCTEST_PARSETIMESTAMP_THROW_EXCEPTION
-        throw std::exception(); // LCOV_EXCL_LINE
-        #endif
-        // clang-format on
+        XWCTEST_IF_PARSETIMESTAMP_THROW_BAD_ALLOC( throw std::bad_alloc() );
+        XWCTEST_IF_PARSETIMESTAMP_THROW_OUT_OF_RANGE( throw std::out_of_range( "testing out of range" ) );
+        XWCTEST_IF_PARSETIMESTAMP_THROW_EXCEPTION( throw std::exception() );
 
         if( tstamp.length() != 23 )
         {
@@ -440,17 +388,8 @@ mx::error_t parseFilePath( std::string       &devName, /**< [out] the device nam
 {
     try
     {
-        // clang-format off
-        #ifdef XWCTEST_PARSEFILEPATH_THROW_BAD_ALLOC
-        throw std::bad_alloc(); // LCOV_EXCL_LINE
-        #endif
-        // clang-format on
-
-        // clang-format off
-        #ifdef XWCTEST_PARSEFILEPATH_THROW_EXCEPTION
-        throw std::exception(); // LCOV_EXCL_LINE
-        #endif
-        // clang-format on
+        XWCTEST_IF_PARSEFILEPATH_THROW_BAD_ALLOC( throw std::bad_alloc() );
+        XWCTEST_IF_PARSEFILEPATH_THROW_EXCEPTION( throw std::exception() );
 
         size_t est = fname.rfind( '.' ); // rfind does not throw
         if( est == std::string::npos )
@@ -502,11 +441,7 @@ mx::error_t parseFilePath( std::string       &devName, /**< [out] the device nam
             else // finally, we have a device name
             {
 
-                // clang-format off
-                #ifdef XWCTEST_PARSEFILEPATH_THROW_OUT_OF_RANGE
-                throw std::out_of_range("testing out of range"); // LCOV_EXCL_LINE
-                #endif
-                // clang-format on
+                XWCTEST_IF_PARSEFILEPATH_THROW_OUT_OF_RANGE( throw std::out_of_range( "testing out of range" ) );
 
                 devName = fname.substr( dst, dend - dst );
             }
@@ -521,12 +456,8 @@ mx::error_t parseFilePath( std::string       &devName, /**< [out] the device nam
             return mx::error_report<verboseT>( mx::error_t::invalidarg, "timestamp does not have 23 characters" );
         }
 
-        // clang-format off
-        #ifdef XWCTEST_PARSEFILEPATH_TOO_SHORT
         // this will generate a too-short error at this point (invalidarg)
-        ++dst; // LCOV_EXCL_LINE
-        #endif
-        // clang-format on
+        XWCTEST_IF_PARSEFILEPATH_TOO_SHORT( ++dst );
 
         mx_error_return( parseTimestamp<verboseT>( YYYY, MM, DD, hh, mm, ss, nn, fname.substr( dst, dend - dst ) ) );
     }

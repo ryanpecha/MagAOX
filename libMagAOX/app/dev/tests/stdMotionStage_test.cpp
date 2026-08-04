@@ -11,6 +11,7 @@
 
 #include "../../MagAOXApp.hpp"
 #include "../stdMotionStage.hpp"
+#include "testHarnessCommon.hpp"
 
 using namespace MagAOX::app;
 
@@ -318,10 +319,9 @@ void stdMotionStageHarness::setFakeIndiDriver( bool present )
     {
         if( !m_indiDriver )
         {
-            // This never activates (no execute() thread is started) so sendSetProperty/sendDefProperty
-            // remain harmless no-ops (INDI response mode is never enabled), matching the pattern used by
-            // libMagAOX/app/tests/MagAOXApp_test.hpp and apps/zaberLowLevel/tests/zaberLowLevel_test.cpp.
-            m_indiDriver = new indiDriver<MagAOXApp<false>>( this, m_configName, "0", "0" );
+            // See dev::testHarness::makeFifolessIndiDriver() for why this never needs a live,
+            // connected INDI server.
+            m_indiDriver = dev::testHarness::makeFifolessIndiDriver<MagAOXApp<false>>( this, m_configName );
         }
     }
     else if( m_indiDriver )

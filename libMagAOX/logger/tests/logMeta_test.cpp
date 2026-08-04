@@ -1812,6 +1812,14 @@ TEST_CASE( "getLogStateVal/getLogContVal skip unverifiable entries and honor max
         auto card = lmeta.card( lm, flatlogs::timespecX( base, 0 ), flatlogs::timespecX( base + 5, 0 ) );
         REQUIRE( card.valueStr() == "NOT AVAILABLE" );
         REQUIRE( lmeta.unavailableReason() != "" );
+
+        // unavailableCard() is never invoked by card()/value() themselves -- it's a
+        // separate public entry point callers use to build a placeholder card without
+        // attempting a lookup at all (e.g. for a metadata item known in advance to be
+        // unavailable). Call it directly.
+        auto unavailCard = lmeta.unavailableCard();
+        REQUIRE( unavailCard.valueStr() == MagAOX::logger::logMeta::unavailableValue() );
+        REQUIRE( unavailCard.comment() == "cmt" );
     }
 }
 

@@ -9,6 +9,7 @@
 //#define OUTLET_CTRL_TEST_NOLOG
 #include "../../MagAOXApp.hpp"
 #include "../outletController.hpp"
+#include "testHarnessCommon.hpp"
 
 using namespace MagAOX::app;
 
@@ -104,7 +105,8 @@ struct outletControllerTest : public MagAOXApp<false>, dev::outletController<out
 
    void setupRealDriver()
    {
-      m_indiDriver = new MagAOX::app::indiDriver<MagAOX::app::MagAOXApp<false>>( this, m_configName, "0", "0" );
+      m_indiDriver = MagAOX::app::dev::testHarness::makeFifolessIndiDriver<MagAOX::app::MagAOXApp<false>>(
+         this, m_configName );
    }
 
    int appLogic()

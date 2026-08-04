@@ -19,6 +19,7 @@
 
 #include "../../MagAOXApp.hpp"
 #include "../shmimMonitor.hpp"
+#include "testHarnessCommon.hpp"
 
 using namespace MagAOX::app;
 
@@ -161,7 +162,8 @@ struct smTest : public MagAOX::app::MagAOXApp<false>, public MAPPNS::shmimMonito
     void setConfigNameWithDriver( const std::string &cn )
     {
         m_configName = cn;
-        m_indiDriver = new MagAOX::app::indiDriver<MagAOX::app::MagAOXApp<false>>( this, m_configName, "0", "0" );
+        m_indiDriver = MagAOX::app::dev::testHarness::makeFifolessIndiDriver<MagAOX::app::MagAOXApp<false>>(
+            this, m_configName );
     }
 
     int setupConfig( mx::app::appConfigurator &config )

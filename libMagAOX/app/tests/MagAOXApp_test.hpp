@@ -11,6 +11,8 @@
 #ifndef app_tests_MagAOXApp_test_hpp
 #define app_tests_MagAOXApp_test_hpp
 
+#include "../dev/tests/testHarnessCommon.hpp"
+
 namespace libXWCTest
 {
 namespace appTest
@@ -155,7 +157,8 @@ struct MagAOXApp_test : public APP_XWCTEST_BASE
     {
         m_configName = cn;
 
-        m_indiDriver = new MagAOX::app::indiDriver<APP_XWCTEST_BASE>( this, m_configName, "0", "0" );
+        m_indiDriver =
+            MagAOX::app::dev::testHarness::makeFifolessIndiDriver<APP_XWCTEST_BASE>( this, m_configName );
     }
 
     void setConfigBase( const std::string &cb )

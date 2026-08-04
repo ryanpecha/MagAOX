@@ -1082,6 +1082,38 @@ TEST_CASE( "getPriorLog scans a loaded buffer for the last log at or before a ti
     }
 }
 
+/// getPriorLog's own empty-memory guard after a loadFiles() call that "succeeds" (returns 0)
+/// without ever populating m_memory -- loadFiles() doesn't propagate loadFile()'s per-file
+/// return value, so this can only be reached by a real file selected by loadFiles() that
+/// exists on disk (a valid stdFileName) but has content loadFile() itself rejects.
+/**
+ * \ingroup logMap_unit_test
+ */
+TEST_CASE( "getPriorLog reports an error when loadFiles succeeds but leaves memory empty",
+           "[libMagAOX::logger::logMap]" )
+{
+    const time_t base = 1732170780;
+
+    std::filesystem::remove_all( "/tmp/logMap_test_emptyload" );
+    std::string fileName, relPath;
+    MagAOX::file::fileTimeRelPath( fileName, relPath, "devEmptyLoad", "xlog", base, 0 );
+    std::filesystem::create_directories( "/tmp/logMap_test_emptyload/" + relPath );
+    std::ofstream( "/tmp/logMap_test_emptyload/" + relPath + '/' + fileName ).close(); // empty file: loadFile() rejects it
+
+    MagAOX::file::stdFileName<XWC_DEFAULT_VERBOSITY> sfn( "/tmp/logMap_test_emptyload/" + relPath + '/' + fileName );
+    REQUIRE( sfn.valid() );
+
+    MagAOX::logger::logMap<XWC_DEFAULT_VERBOSITY> lm;
+    lm.m_appToFileMap["devEmptyLoad"].insert( sfn );
+
+    char *logBefore = nullptr;
+    int   rv = lm.getPriorLog(
+        logBefore, "devEmptyLoad", dummyLogA::eventCode, flatlogs::timespecX( base + 100, 0 ) );
+
+    REQUIRE( rv == -1 );
+    REQUIRE( lm.m_appToBufferMap["devEmptyLoad"].m_memory.size() == 0 );
+}
+
 /// getNextLog stepping forward to the next log with a matching event code
 /**
  * \ingroup logMap_unit_test

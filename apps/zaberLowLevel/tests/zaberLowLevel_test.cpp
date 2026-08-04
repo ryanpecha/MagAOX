@@ -77,6 +77,11 @@ class zaberLowLevel_test : public zaberLowLevel
             stateOut << rawPos << '\n' << parked << '\n' << maxPos << '\n' << lastHomed << '\n';
         }
 
+        // appStartup() bails out immediately while the FSM is still in its default
+        // UNINITIALIZED state (matching the real execute() sequence, which always
+        // transitions to INITIALIZED right before calling appStartup()).
+        state( stateCodes::INITIALIZED );
+
         if( appStartup() < 0 )
         {
             return -1;
@@ -122,7 +127,7 @@ class zaberLowLevel_test : public zaberLowLevel
     }
 
     /// Get the cached device address for a configured stage.
-    int deviceAddressFor( size_t stageIndex ) const
+    int deviceAddressFor( size_t stageIndex )
     {
         return m_stages.at( stageIndex ).deviceAddress();
     }
@@ -141,7 +146,7 @@ class zaberLowLevel_test : public zaberLowLevel
     }
 
     /// Get the FSM state for recovery tests.
-    stateCodes::stateCodeT appState() const
+    stateCodes::stateCodeT appState()
     {
         return state();
     }
@@ -191,7 +196,7 @@ class zaberLowLevel_test : public zaberLowLevel
     /// Get the warning-switch property value for a stage.
     std::string warnValue( const std::string &stageName ) const
     {
-        return propertyValue( m_indiP_warn, stageName );
+        return m_indiP_warn[stageName].getSwitchState() == pcf::IndiElement::On ? "On" : "Off";
     }
 
     /// Invoke the power-off handling under test.

@@ -14,6 +14,7 @@
 #include <flatlogs/flatlogs.hpp>
 
 #include "../file/fileTimes.hpp"
+#include "tests/testMacros.hpp"
 
 namespace MagAOX
 {
@@ -186,15 +187,8 @@ mx::error_t logFileRaw<verboseT>::logPath( const std::string &newPath )
 {
     try
     {
-        // clang-format off
-        #ifdef XWCTEST_LOGFILERAW_LOGPATH_BAD_ALLOC
-            throw std::bad_alloc(); // LCOV_EXCL_LINE
-        #endif
-
-        #ifdef XWCTEST_LOGFILERAW_LOGPATH_EXCEPTION
-            throw std::exception(); // LCOV_EXCL_LINE
-        #endif
-        // clang-format on
+        XWCTEST_IF_LOGFILERAW_LOGPATH_BAD_ALLOC( throw std::bad_alloc() );
+        XWCTEST_IF_LOGFILERAW_LOGPATH_EXCEPTION( throw std::exception() );
 
         m_logPath = newPath;
     }
@@ -221,15 +215,8 @@ mx::error_t logFileRaw<verboseT>::logName( const std::string &newName )
 {
     try
     {
-        // clang-format off
-        #ifdef XWCTEST_LOGFILERAW_LOGNAME_BAD_ALLOC
-            throw std::bad_alloc(); // LCOV_EXCL_LINE
-        #endif
-
-        #ifdef XWCTEST_LOGFILERAW_LOGNAME_EXCEPTION
-            throw std::exception(); // LCOV_EXCL_LINE
-        #endif
-        // clang-format on
+        XWCTEST_IF_LOGFILERAW_LOGNAME_BAD_ALLOC( throw std::bad_alloc() );
+        XWCTEST_IF_LOGFILERAW_LOGNAME_EXCEPTION( throw std::exception() );
 
         m_logName = newName;
     }
@@ -256,15 +243,8 @@ mx::error_t logFileRaw<verboseT>::logExt( const std::string &newExt )
 {
     try
     {
-        // clang-format off
-        #ifdef XWCTEST_LOGFILERAW_LOGEXT_BAD_ALLOC
-            throw std::bad_alloc(); // LCOV_EXCL_LINE
-        #endif
-
-        #ifdef XWCTEST_LOGFILERAW_LOGEXT_EXCEPTION
-            throw std::exception(); // LCOV_EXCL_LINE
-        #endif
-        // clang-format on
+        XWCTEST_IF_LOGFILERAW_LOGEXT_BAD_ALLOC( throw std::bad_alloc() );
+        XWCTEST_IF_LOGFILERAW_LOGEXT_EXCEPTION( throw std::exception() );
 
         m_logExt = newExt;
     }
@@ -326,11 +306,7 @@ mx::error_t logFileRaw<verboseT>::writeLog( flatlogs::bufferPtrT &data )
 
     size_t nwr = fwrite( data.get(), sizeof( char ), N, m_fout );
 
-    // clang-format off
-    #ifdef XWCTEST_LOGFILERAW_WRITELOG_FWRITE_FAIL
-        nwr = 0; // LCOV_EXCL_LINE
-    #endif
-    // clang-format on
+    XWCTEST_IF_LOGFILERAW_WRITELOG_FWRITE_FAIL( nwr = 0 );
 
     if( nwr != N * sizeof( char ) )
     {
@@ -351,12 +327,7 @@ mx::error_t logFileRaw<verboseT>::flush()
     {
         int frv = fflush( m_fout );
 
-        // clang-format off
-        #ifdef XWCTEST_LOGFILERAW_FLUSH_FFLUSH_FAIL
-            errno = EIO; // LCOV_EXCL_LINE
-            frv   = -1;  // LCOV_EXCL_LINE
-        #endif
-        // clang-format on
+        XWCTEST_IF_LOGFILERAW_FLUSH_FFLUSH_FAIL( ( errno = EIO, frv = -1 ) );
 
         if( frv != 0 )
         {
@@ -375,12 +346,7 @@ mx::error_t logFileRaw<verboseT>::close()
 
         int crv = fclose( m_fout );
 
-        // clang-format off
-        #ifdef XWCTEST_LOGFILERAW_CLOSE_FCLOSE_FAIL
-            errno = EIO; // LCOV_EXCL_LINE
-            crv   = -1;  // LCOV_EXCL_LINE
-        #endif
-        // clang-format on
+        XWCTEST_IF_LOGFILERAW_CLOSE_FCLOSE_FAIL( ( errno = EIO, crv = -1 ) );
 
         if( crv != 0 )
         {
@@ -405,11 +371,7 @@ mx::error_t logFileRaw<verboseT>::createFile( flatlogs::timespecX &ts )
     {
         mx::error_t errc = file::fileTimeRelPath( fileName, relPath, m_logName, m_logExt, ts.time_s, ts.time_ns );
 
-        // clang-format off
-        #ifdef XWCTEST_LOGFILERAW_CREATEFILE_EXCEPTION
-            throw std::bad_alloc(); // LCOV_EXCL_LINE
-        #endif
-        // clang-format on
+        XWCTEST_IF_LOGFILERAW_CREATEFILE_EXCEPTION( throw std::bad_alloc() );
 
         if( !!errc )
         {
@@ -438,11 +400,7 @@ mx::error_t logFileRaw<verboseT>::createFile( flatlogs::timespecX &ts )
         return mx::error_report<verboseT>( mx::error_t::eexist, "file " + fullPath + " exists" );
     }
 
-    // clang-format off
-    #ifdef XWCTEST_LOGFILERAW_CREATEFILE_EXISTS_ERRC
-        errc = mx::error_t::eacces; // LCOV_EXCL_LINE
-    #endif
-    // clang-format on
+    XWCTEST_IF_LOGFILERAW_CREATEFILE_EXISTS_ERRC( errc = mx::error_t::eacces );
 
     if( !!errc )
     {
@@ -460,16 +418,7 @@ mx::error_t logFileRaw<verboseT>::createFile( flatlogs::timespecX &ts )
 
     m_fout = fopen( fullPath.c_str(), "wb" );
 
-    // clang-format off
-    #ifdef XWCTEST_LOGFILERAW_CREATEFILE_FOPEN_FAIL
-        if( m_fout != 0 )        // LCOV_EXCL_LINE
-        {                        // LCOV_EXCL_LINE
-            fclose( m_fout );    // LCOV_EXCL_LINE
-        }                        // LCOV_EXCL_LINE
-        m_fout = 0;              // LCOV_EXCL_LINE
-        errno  = EACCES;         // LCOV_EXCL_LINE
-    #endif
-    // clang-format on
+    XWCTEST_IF_LOGFILERAW_CREATEFILE_FOPEN_FAIL( if( m_fout != 0 ) { fclose( m_fout ); } m_fout = 0; errno = EACCES; );
 
     if( m_fout == 0 )
     {

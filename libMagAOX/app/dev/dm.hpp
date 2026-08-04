@@ -1694,9 +1694,11 @@ int dm<derivedT, realT>::appShutdown()
         {
             m_satThread.join(); // this will throw if it was already joined
         }
-        catch( ... ) // LCOV_EXCL_LINE
+        // LCOV_EXCL_START
+        catch( ... )
         {
-        } // LCOV_EXCL_LINE
+        }
+        // LCOV_EXCL_STOP
     }
 
     return 0;
@@ -3277,9 +3279,11 @@ void dm<derivedT, realT>::intervalSatTrip()
             // sendNewProperty() under the MagAOXApp<false> harness used here always
             // short-circuits to a plain return 0 (see MagAOXApp.hpp), so nothing in
             // this try block can actually throw -- not reachable via a safe test.
-            catch( ... ) // LCOV_EXCL_LINE
+            // LCOV_EXCL_START
+            catch( ... )
             {
-            } // LCOV_EXCL_LINE
+            }
+            // LCOV_EXCL_STOP
         }
     }
 }

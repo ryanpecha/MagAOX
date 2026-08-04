@@ -21,6 +21,8 @@
 #include "../frameGrabber.hpp"
 #undef protected
 
+#include "testHarnessCommon.hpp"
+
 using namespace MagAOX::app;
 
 namespace frameGrabber_tests
@@ -166,7 +168,8 @@ struct fgTest : public MagAOX::app::MagAOXApp<true>,
     void setConfigNameWithDriver( const std::string &cn )
     {
         m_configName = cn;
-        m_indiDriver = new MagAOX::app::indiDriver<MagAOX::app::MagAOXApp<true>>( this, m_configName, "0", "0" );
+        m_indiDriver = MagAOX::app::dev::testHarness::makeFifolessIndiDriver<MagAOX::app::MagAOXApp<true>>(
+            this, m_configName );
     }
 
     // MagAOXApp's pure virtuals -- tests call frameGrabberT::appStartup()/appLogic()/

@@ -7,6 +7,7 @@
  */
 
 #include "logMap.hpp"
+#include "tests/testMacros.hpp"
 
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -53,11 +54,7 @@ int logInMemory::loadFile( file::stdFileName<verboseT> const &lfn )
 
     close( fd );
 
-    // clang-format off
-    #ifdef XWCTEST_LOGINMEMORY_LOADFILE_SHORTREAD
-        nrd = 0; // LCOV_EXCL_LINE
-    #endif
-    // clang-format on
+    XWCTEST_IF_LOGINMEMORY_LOADFILE_SHORTREAD( nrd = 0 );
 
     if( nrd != fsz )
     {

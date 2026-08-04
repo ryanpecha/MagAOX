@@ -1021,8 +1021,10 @@ void SystemSocket::setOption(const int &nLevel,
     if ( ::setsockopt( m_nSocket, nLevel, nOption,
                        static_cast<char *>( pvOptionValue ), nOptionLength ) == -1 )
     {
-      m_nLastError = errno; // LCOV_EXCL_LINE -- see next line
-      throw ( Error( string( ": " ) + strerror( m_nLastError ) ) ); // LCOV_EXCL_LINE -- setsockopt(SO_RCVTIMEO) on a valid socket with a valid timeval cannot fail
+      // LCOV_EXCL_START -- setsockopt(SO_RCVTIMEO) on a valid socket with a valid timeval cannot fail
+      m_nLastError = errno;
+      throw ( Error( string( ": " ) + strerror( m_nLastError ) ) );
+      // LCOV_EXCL_STOP
     }
   }
   catch ( const Error &err )
@@ -1084,8 +1086,10 @@ void SystemSocket::setNonBlocking( const bool &oIsNonBlocking )
     int nOpts = -1;
     if ( ( nOpts = ::fcntl( m_nSocket, F_GETFL ) ) == -1 )
     {
-      m_nLastError = errno; // LCOV_EXCL_LINE -- see next line
-      throw ( Error( string( ": " ) + strerror( m_nLastError ) ) ); // LCOV_EXCL_LINE -- fcntl F_GETFL on a valid socket cannot fail
+      // LCOV_EXCL_START -- fcntl F_GETFL on a valid socket cannot fail
+      m_nLastError = errno;
+      throw ( Error( string( ": " ) + strerror( m_nLastError ) ) );
+      // LCOV_EXCL_STOP
     }
 
     // Flip the correct bit in the read value.
@@ -1095,8 +1099,10 @@ void SystemSocket::setNonBlocking( const bool &oIsNonBlocking )
     //  write this updated setting.
     if ( ::fcntl ( m_nSocket, F_SETFL, nOpts ) == -1 )
     {
-      m_nLastError = errno; // LCOV_EXCL_LINE -- see next line
-      throw ( Error( string( ": " ) + strerror( m_nLastError ) ) ); // LCOV_EXCL_LINE -- fcntl F_SETFL on a valid socket cannot fail
+      // LCOV_EXCL_START -- fcntl F_SETFL on a valid socket cannot fail
+      m_nLastError = errno;
+      throw ( Error( string( ": " ) + strerror( m_nLastError ) ) );
+      // LCOV_EXCL_STOP
     }
 #endif
   }
@@ -1342,17 +1348,21 @@ string SystemSocket::getLocalHostName()
     memset( pcHostName, 0, 256 );
     if ( ::gethostname( pcHostName, 255 ) == -1 )
     {
-      int nErr = errno; // LCOV_EXCL_LINE -- see next line
-      throw ( Error( string( ": " ) + strerror( nErr ) ) ); // LCOV_EXCL_LINE -- gethostname with a 256-byte buffer cannot fail
+      // LCOV_EXCL_START -- gethostname with a 256-byte buffer cannot fail
+      int nErr = errno;
+      throw ( Error( string( ": " ) + strerror( nErr ) ) );
+      // LCOV_EXCL_STOP
     }
 
     // if we got here, we got a good hostname.
     return string( pcHostName );
   }
-  catch ( const Error &err ) // LCOV_EXCL_LINE -- only reachable from the gethostname throw excluded above
+  // LCOV_EXCL_START -- only reachable from the gethostname throw excluded above
+  catch ( const Error &err )
   {
-    throw Error( string( "::getLocalHostName" ) + err.what() ); // LCOV_EXCL_LINE
-  } // LCOV_EXCL_LINE
+    throw Error( string( "::getLocalHostName" ) + err.what() );
+  }
+  // LCOV_EXCL_STOP
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -300,7 +300,7 @@ std::string logMeta::fitsKeyword() const
     }
 
     return keyw;
-}
+} // LCOV_EXCL_LINE -- gcov attributes this closing brace to the compiler-generated exception-unwind cleanup for the local std::string `keyw`; it only fires if an exception propagates through the return, never induced by any realistic input
 
 logMeta::logMeta( const logMetaSpec &lms )
 {
@@ -987,7 +987,7 @@ std::string logMeta::valueString( logMap<verboseT>          &lm,
         std::cerr << "String type specified as something other than state\n";
     }
     return val;
-}
+} // LCOV_EXCL_LINE -- gcov attributes this closing brace to the compiler-generated exception-unwind cleanup for the local std::string `val`; it only fires if an exception propagates through the return, never induced by any realistic input
 
 mx::fits::fitsHeaderCard<logMeta::verboseT> logMeta::unavailableCard() const
 {

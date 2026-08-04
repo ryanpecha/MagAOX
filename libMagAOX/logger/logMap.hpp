@@ -22,6 +22,7 @@ using namespace mx::sys::tscomp;
 #include <flatlogs/flatlogs.hpp>
 #include "../file/stdFileName.hpp"
 #include "generated/logCodes.hpp"
+#include "tests/testMacros.hpp"
 
 #ifndef DEBUG_CRUMB
     #ifdef DEBUG
@@ -314,19 +315,9 @@ mx::error_t logMap<verboseT>::addFileListToFileMap( const std::string           
         // Test-only fault hooks (XWCTEST_*): a test TU compiles this header with one
         // of these defined to force this one site to fail, so the real handler below
         // it runs. Production builds never define them.
-        // clang-format off
-        #ifdef XWCTEST_LOGMAP_AFLTFM_XWCE
-            throw xwcException("std::bad_alloc"); // LCOV_EXCL_LINE
-        #endif
-
-        #ifdef XWCTEST_LOGMAP_AFLTFM_BADALL
-            throw std::bad_alloc(); // LCOV_EXCL_LINE
-        #endif
-
-        #ifdef XWCTEST_LOGMAP_AFLTFM_EXCEPTION
-            throw std::exception(); // LCOV_EXCL_LINE
-        #endif
-        // clang-format on
+        XWCTEST_IF_LOGMAP_AFLTFM_XWCE( throw xwcException( "std::bad_alloc" ) );
+        XWCTEST_IF_LOGMAP_AFLTFM_BADALL( throw std::bad_alloc() );
+        XWCTEST_IF_LOGMAP_AFLTFM_EXCEPTION( throw std::exception() );
 
         for( size_t n = n0; n < nf; ++n )
         {
@@ -427,11 +418,7 @@ mx::error_t logMap<verboseT>::loadAppToFileMap( const std::string               
 
         isdir = mx::ioutils::dir_exists_is( basedir + subdir.path(), errc );
 
-        // clang-format off
-        #ifdef XWCTEST_LOGMAP_LATFM_DIREXISTS_ERRC
-            errc = mx::error_t::eacces; // LCOV_EXCL_LINE
-        #endif
-        // clang-format on
+        XWCTEST_IF_LOGMAP_LATFM_DIREXISTS_ERRC( errc = mx::error_t::eacces );
 
         mx_error_check_code( errc );
 
@@ -456,11 +443,7 @@ mx::error_t logMap<verboseT>::loadAppToFileMap( const std::string               
 
             try
             {
-                // clang-format off
-                #ifdef XWCTEST_LOGMAP_LATFM_BADALL1
-                    throw xwcException("std::bad_alloc"); // LCOV_EXCL_LINE
-                #endif
-                // clang-format on
+                XWCTEST_IF_LOGMAP_LATFM_BADALL1( throw xwcException( "std::bad_alloc" ) );
 
                 sfn.fullName( tmp_flist[n] );
             }
@@ -506,11 +489,7 @@ mx::error_t logMap<verboseT>::loadAppToFileMap( const std::string               
     {
         try
         {
-            // clang-format off
-            #ifdef XWCTEST_LOGMAP_LATFM_BADALL2
-                throw xwcException("std::bad_alloc"); // LCOV_EXCL_LINE
-            #endif
-            // clang-format on
+            XWCTEST_IF_LOGMAP_LATFM_BADALL2( throw xwcException( "std::bad_alloc" ) );
 
             ++ndays;
 
@@ -608,10 +587,7 @@ mx::error_t logMap<verboseT>::loadAppToFileMap( const std::string               
 
         try
         {
-#ifdef XWCTEST_LOGMAP_LATFM_BADALL3
-            throw xwcException( "std::bad_alloc" ); // LCOV_EXCL_LINE
-#endif
-            // clang-format on
+            XWCTEST_IF_LOGMAP_LATFM_BADALL3( throw xwcException( "std::bad_alloc" ) );
 
             subdir = prevLogSubDir;
 
@@ -627,11 +603,7 @@ mx::error_t logMap<verboseT>::loadAppToFileMap( const std::string               
             {
                 ++follLogFile_n;
 
-                // clang-format off
-                #ifdef XWCTEST_LOGMAP_LATFM_SIZEERR1
-                    follLogFile_n = tmp_flist.size() + 1; // LCOV_EXCL_LINE
-                #endif
-                // clang-format on
+                XWCTEST_IF_LOGMAP_LATFM_SIZEERR1( follLogFile_n = tmp_flist.size() + 1 );
 
                 if( follLogFile_n > tmp_flist.size() )
                 {
@@ -651,15 +623,7 @@ mx::error_t logMap<verboseT>::loadAppToFileMap( const std::string               
     {
         try
         {
-            // clang-format off
-            #ifdef XWCTEST_LOGMAP_LATFM_XWCE4
-                throw xwcException("std::bad_alloc"); // LCOV_EXCL_LINE
-            #endif
-
-            #ifdef XWCTEST_LOGMAP_LATFM_BADALL4
-                throw xwcException("std::bad_alloc"); // LCOV_EXCL_LINE
-            #endif
-            // clang-format on
+            XWCTEST_IF_LOGMAP_LATFM_XWCE4( throw xwcException( "std::bad_alloc" ) );
 
             subdir = prevLogSubDir;
 
@@ -680,15 +644,7 @@ mx::error_t logMap<verboseT>::loadAppToFileMap( const std::string               
         {
             try
             {
-                // clang-format off
-                #ifdef XWCTEST_LOGMAP_LATFM_XWCE5
-                    throw xwcException("std::bad_alloc"); // LCOV_EXCL_LINE
-                #endif
-
-                #ifdef XWCTEST_LOGMAP_LATFM_BADALL5
-                    throw xwcException("std::bad_alloc"); // LCOV_EXCL_LINE
-                #endif
-                // clang-format on
+                XWCTEST_IF_LOGMAP_LATFM_XWCE5( throw xwcException( "std::bad_alloc" ) );
 
                 if( !std::filesystem::exists( basedir + subdir.path() ) )
                 {
@@ -712,15 +668,7 @@ mx::error_t logMap<verboseT>::loadAppToFileMap( const std::string               
 
         try
         {
-            // clang-format off
-            #ifdef XWCTEST_LOGMAP_LATFM_XWCE6
-                throw xwcException("std::bad_alloc"); // LCOV_EXCL_LINE
-            #endif
-
-            #ifdef XWCTEST_LOGMAP_LATFM_BADALL6
-                throw xwcException("std::bad_alloc"); // LCOV_EXCL_LINE
-            #endif
-            // clang-format on
+            XWCTEST_IF_LOGMAP_LATFM_XWCE6( throw xwcException( "std::bad_alloc" ) );
 
             std::vector<std::string> tmp_flist;
 
@@ -743,11 +691,7 @@ mx::error_t logMap<verboseT>::loadAppToFileMap( const std::string               
                 {
                     ++follLogFile_n;
 
-                    // clang-format off
-                    #ifdef XWCTEST_LOGMAP_LATFM_SIZEERR2
-                        follLogFile_n = tmp_flist.size() + 1; // LCOV_EXCL_LINE
-                    #endif
-                    // clang-format on
+                    XWCTEST_IF_LOGMAP_LATFM_SIZEERR2( follLogFile_n = tmp_flist.size() + 1 );
 
                     if( follLogFile_n > tmp_flist.size() )
                     {

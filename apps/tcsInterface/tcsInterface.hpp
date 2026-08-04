@@ -57,8 +57,11 @@ class tcsInterface : public MagAOXApp<true>, public dev::ioDevice, public dev::t
     bool m_labMode{ true };
 
     pcf::IndiProperty m_indiP_labMode;
+
+  public:
     INDI_NEWCALLBACK_DECL( tcsInterface, m_indiP_labMode );
 
+  protected:
     ///@}
 
     /** \name TCS Networking

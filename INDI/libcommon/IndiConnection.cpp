@@ -273,10 +273,12 @@ void *IndiConnection::pthreadProcess( void *pUnknown )
     {
         pThis->process();
     }
-    catch( const std::exception &excep ) // LCOV_EXCL_LINE - process() catches all std exceptions internally, so this handler is unreachable
-    { // LCOV_EXCL_LINE - see above
-        std::cerr << "Process thread exited: " << excep.what() << std::endl; // LCOV_EXCL_LINE - see above
-    } // LCOV_EXCL_LINE - see above
+    // LCOV_EXCL_START - process() catches all std exceptions internally, so this handler is unreachable
+    catch( const std::exception &excep )
+    {
+        std::cerr << "Process thread exited: " << excep.what() << std::endl;
+    }
+    // LCOV_EXCL_STOP
     catch( ... )
     {
         std::cerr << "An exception was thrown, process thread exited." << std::endl;

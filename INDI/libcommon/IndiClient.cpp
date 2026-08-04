@@ -95,12 +95,14 @@ void IndiClient::setup( const string &szIPAddr, const int &port )
         // Set them by default to an invalid value.
         detachFds();
 
-        if( m_socClient.isValid() == true ) // LCOV_EXCL_LINE - setup() is private, called once per ctor with a fresh invalid socket
-        { // LCOV_EXCL_LINE - see above
-            detachFds(); // LCOV_EXCL_LINE - see above
-            m_socClient.close(); // LCOV_EXCL_LINE - see above
-            Thread::msleep( 10 ); // LCOV_EXCL_LINE - see above
-        } // LCOV_EXCL_LINE - see above
+        // LCOV_EXCL_START - setup() is private, called once per ctor with a fresh invalid socket
+        if( m_socClient.isValid() == true )
+        {
+            detachFds();
+            m_socClient.close();
+            Thread::msleep( 10 );
+        }
+        // LCOV_EXCL_STOP
 
         // Config cfReader;
         m_socClient = SystemSocket( SystemSocket::Stream, port, szIPAddr.c_str() );

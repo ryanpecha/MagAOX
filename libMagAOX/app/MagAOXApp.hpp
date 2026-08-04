@@ -41,6 +41,8 @@
 #include "indiMacros.hpp"
 #include "indiUtils.hpp"
 
+#include "tests/testMacros.hpp"
+
 using namespace mx::app;
 
 using namespace MagAOX::logger;
@@ -1744,10 +1746,7 @@ int MagAOXApp<_useINDI>::execute() // virtual
         return -1;
     }
 
-    // clang-format off
-    #ifdef XWCTEST_MAGAOXAPP_EXEC_WRONG_USER
-    logstat.st_uid = geteuid()+1; // LCOV_EXCL_LINE
-    #endif // clang-format on
+    XWCTEST_IF_MAGAOXAPP_EXEC_WRONG_USER( logstat.st_uid = geteuid()+1 );
 
     if( logstat.st_uid != geteuid() )
     {
@@ -1782,10 +1781,7 @@ int MagAOXApp<_useINDI>::execute() // virtual
     /* ***************************** */
     m_log.logThreadStart(); // no return type
 
-    // clang-format off
-    #ifdef XWCTEST_MAGAOXAPP_EXEC_LOG_START
-    m_log.logShutdown(true); // LCOV_EXCL_LINE
-    #endif // clang-format on
+    XWCTEST_IF_MAGAOXAPP_EXEC_LOG_START( m_log.logShutdown(true) );
 
     // Give up to 2 secs to make sure log thread has time to get started and try to open a file.
     int w = 0;
@@ -1817,15 +1813,17 @@ int MagAOXApp<_useINDI>::execute() // virtual
     // so the log-thread-death check inside the main loop below genuinely fires.
     // clang-format off
     #ifdef XWCTEST_MAGAOXAPP_EXEC_LOG_DEATH
-    m_log.logShutdown(true); // LCOV_EXCL_LINE
-    {                                                                 // LCOV_EXCL_LINE
-        int wd = 0;                                                  // LCOV_EXCL_LINE
-        while( m_log.logThreadRunning() == true && wd < 20 )          // LCOV_EXCL_LINE
-        {                                                             // LCOV_EXCL_LINE
-            std::this_thread::sleep_for( std::chrono::duration<unsigned long, std::nano>( 100000000 ) ); // LCOV_EXCL_LINE
-            ++wd;                                                     // LCOV_EXCL_LINE
-        }                                                             // LCOV_EXCL_LINE
-    }                                                                 // LCOV_EXCL_LINE
+    // LCOV_EXCL_START
+    m_log.logShutdown(true);
+    {
+        int wd = 0;
+        while( m_log.logThreadRunning() == true && wd < 20 )
+        {
+            std::this_thread::sleep_for( std::chrono::duration<unsigned long, std::nano>( 100000000 ) );
+            ++wd;
+        }
+    }
+    // LCOV_EXCL_STOP
     #endif // clang-format on
 
     /* ***************************** */
@@ -1923,10 +1921,7 @@ int MagAOXApp<_useINDI>::execute() // virtual
                 m_shutdown = 1;
             }
 
-            // clang-format off
-            #ifdef XWCTEST_MAGAOXAPP_EXEC_NORM
-            m_powerState = 0; // LCOV_EXCL_LINE
-            #endif // clang-format on
+            XWCTEST_IF_MAGAOXAPP_EXEC_NORM( m_powerState = 0 );
         }
 
         // This pre-loop transition is logically identical to (and immediately followed
@@ -1966,10 +1961,12 @@ int MagAOXApp<_useINDI>::execute() // virtual
     {
         // clang-format off
         #ifdef XWCTEST_MAGAOXAPP_EXEC_NORM
-             if(testTimesThrough > 2) // LCOV_EXCL_LINE
-             {                        // LCOV_EXCL_LINE
-                m_shutdown = 1;       // LCOV_EXCL_LINE
-             }                        // LCOV_EXCL_LINE
+             // LCOV_EXCL_START
+             if(testTimesThrough > 2)
+             {
+                m_shutdown = 1;
+             }
+             // LCOV_EXCL_STOP
         #endif // clang-format on
 
         // Step 0: check if log thread is still running
@@ -2031,10 +2028,7 @@ int MagAOXApp<_useINDI>::execute() // virtual
                 continue;
             }
 
-            // clang-format off
-            #ifdef XWCTEST_MAGAOXAPP_EXEC_NORM
-                m_powerState = 1; // LCOV_EXCL_LINE
-            #endif // clang-format on
+            XWCTEST_IF_MAGAOXAPP_EXEC_NORM( m_powerState = 1 );
         }
 
         /** \todo Need a heartbeat update here.
@@ -2059,10 +2053,7 @@ int MagAOXApp<_useINDI>::execute() // virtual
             std::this_thread::sleep_for( std::chrono::duration<unsigned long, std::nano>( m_loopPause ) );
         }
 
-        // clang-format off
-        #ifdef XWCTEST_MAGAOXAPP_EXEC_NORM
-             ++testTimesThrough; // LCOV_EXCL_LINE
-        #endif // clang-format on
+        XWCTEST_IF_MAGAOXAPP_EXEC_NORM( ++testTimesThrough );
     }
 
     if( appShutdown() < 0 )
@@ -2442,12 +2433,7 @@ int MagAOXApp<_useINDI>::lockPID()
                 configPos = pidCmdLine.find( m_configName );
             }
 
-            // clang-format off
-            #ifdef XWCTEST_MAGAOXAPP_PID_LOCKED
-            invokedPos = 0; // LCOV_EXCL_LINE
-            configPos = 0; // LCOV_EXCL_LINE
-            #endif
-            // clang-format on
+            XWCTEST_IF_MAGAOXAPP_PID_LOCKED( (invokedPos = 0, configPos = 0) );
 
             // Check if PID is already locked by this program+config combo:
             if( invokedPos != std::string::npos && configPos != std::string::npos )
@@ -2469,11 +2455,7 @@ int MagAOXApp<_useINDI>::lockPID()
     std::ofstream pidOut;
     pidOut.open( pidFileName );
 
-    // clang-format off
-    #ifdef XWCTEST_MAGAOXAPP_PID_WRITE_FAIL
-    pidOut.close(); // LCOV_EXCL_LINE
-    #endif
-    // clang-format on
+    XWCTEST_IF_MAGAOXAPP_PID_WRITE_FAIL( pidOut.close() );
 
     if( !( pidOut << m_pid ) )
     {

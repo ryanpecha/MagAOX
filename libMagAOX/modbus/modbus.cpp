@@ -9,6 +9,8 @@
 #include <cerrno>
 #include <cstring>
 
+#include "tests/testMacros.hpp"
+
 // Test-only: when XWCTEST_NAMESPACE is defined, a test translation unit compiles a second
 // copy of this file inside that namespace with one of the XWCTEST_* fault macros below
 // enabled, so real error-handling branches execute and are counted against these same
@@ -129,11 +131,7 @@ bool modbus::modbus_set_timeouts( int seconds, int microseconds )
 
     int sndRv = setsockopt( _socket, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof( timeout ) );
 
-    // clang-format off
-    #ifdef XWCTEST_MODBUS_SET_TIMEOUTS_SNDTIMEO_FAIL
-        sndRv = -1; // LCOV_EXCL_LINE
-    #endif
-    // clang-format on
+    XWCTEST_IF_MODBUS_SET_TIMEOUTS_SNDTIMEO_FAIL( sndRv = -1 );
 
     if( sndRv != 0 )
     {
@@ -451,11 +449,8 @@ ssize_t modbus::modbus_send( uint8_t *to_send, int length )
         modbusConnectionError( *this, "send" );
     }
 
-    // clang-format off
-    #ifdef XWCTEST_MODBUS_SEND_PARTIAL
-        sent = length - 1; // LCOV_EXCL_LINE -- simulate a short write without touching real I/O
-    #endif
-    // clang-format on
+    // simulate a short write without touching real I/O
+    XWCTEST_IF_MODBUS_SEND_PARTIAL( sent = length - 1 );
 
     if( sent != length )
     {
