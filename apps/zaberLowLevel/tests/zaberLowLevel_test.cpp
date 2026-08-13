@@ -194,6 +194,11 @@ class zaberLowLevel_test : public zaberLowLevel
     }
 
     /// Get the warning-switch property value for a stage.
+    /** m_indiP_warn's element is a Switch, not a text/number element, so the shared
+     * propertyValue() helper (which reads the generic string value) doesn't apply here --
+     * it always reports "1"/"0" rather than the On/Off state -- so this reads the
+     * switch state directly instead.
+     */
     std::string warnValue( const std::string &stageName ) const
     {
         return m_indiP_warn[stageName].getSwitchState() == pcf::IndiElement::On ? "On" : "Off";

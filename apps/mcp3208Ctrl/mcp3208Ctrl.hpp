@@ -684,6 +684,12 @@ void mcp3208Ctrl::setupConfig()
                 "float",
                 "Global EMA coefficient for synchronized timing smoothers. Default is 0.01." );
 
+    // This target was previously never registered via config.add(), so loadConfigImpl()'s
+    // `_config( m_numChannels, "accel.numChannels" )` call could never actually find a value
+    // in the config file -- appConfigurator::get() only looks up names present in its
+    // pre-registered target map, so the option silently always fell back to the in-class
+    // default of 2 regardless of what was configured. Registering it here is what makes the
+    // option loadable at all.
     config.add( "accel.numChannels",
                 "",
                 "accel.numChannels",

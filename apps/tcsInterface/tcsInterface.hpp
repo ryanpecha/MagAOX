@@ -58,6 +58,9 @@ class tcsInterface : public MagAOXApp<true>, public dev::ioDevice, public dev::t
 
     pcf::IndiProperty m_indiP_labMode;
 
+    // Made public below: the callback is invoked from a free SCENARIO function in the test
+    // file, not from a method of the friended tcsInterface_test struct itself, so the
+    // `friend class tcsInterface_test` above doesn't grant it access.
   public:
     INDI_NEWCALLBACK_DECL( tcsInterface, m_indiP_labMode );
 

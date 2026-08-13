@@ -9,12 +9,11 @@ local/
 !local/common.example.mk
 !local/config.example.mk
 **/a.out
-**/tests/# binary log files written by logger/file unit tests
-*.binlog
+# binary log files written by logger/file unit tests
+**/tests/*.binlog
 **/.*~
 **/*.stash
 **/*-swp
-*.binlog
 
 #Qt:
 **/res/

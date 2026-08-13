@@ -79,8 +79,8 @@ macro is ever defined outside a test translation unit). Two patterns are used:
 | `libMagAOX/logger/tests/Makefile` | Uses the repo-standard `Make/common.mk` (drops the locally duplicated `COVERAGE` flag block and hard-coded `-std`) and `Make/python.mk` (`$(PYTHON)`: the test generator needs Python ≥ 3.10). Links `-lflatbuffers` (msgJSON, see above) and `../../app/stateCodes.cpp` (generated tests reference stateCodes symbols). |
 | `tests/tests.list` | Registers the 31 new test binaries (see §5). `tty_test` removed (split into five focused suites); all other existing entries retained. |
 | `Makefile` | `coverage_clean` passes `NO_GUIS=1` — the coverage environment has no Qt, and cleaning must not require GUI targets to configure. |
-| `.gitignore` | `*.binlog` (binary log files created by `stdFileName`/`logMap` tests), `**/*.gcov` (text dumps produced when debugging coverage). |
-| `tests/.fftw_wisdom.float` | Machine-generated FFTW wisdom cache, refreshed as a side effect of running the suite. No hand edits. |
+| `.gitignore` | `**/tests/*.binlog` (binary log files created by `stdFileName`/`logMap` tests; scoped to tests directories), `**/*.gcov` (text dumps produced when debugging coverage). |
+| `tests/.fftw_wisdom.float`, `apps/modalPSDs/tests/.fftw_wisdom.float` | Machine-generated FFTW wisdom caches, refreshed/created as a side effect of running the suite. No hand edits. |
 | `libMagAOX/logger/tests/generateTemplatedCatch2Tests.py`, `catch2TestTemplate.jinja2` | Generator extended (no existing generation removed): the per-log-type template now also round-trips every type through `logShortStdFormat`, `logMinStdFormat`, and `logJsonFormat` (previously only `logStdFormat`), which is what exposed the `telem_sparkleclock` and `flatbuffer_log` bugs in §1. |
 
 ## 4. `LCOV_EXCL` exclusions added to production sources
@@ -131,7 +131,7 @@ Per-file:
 | `INDI/libcommon/Thread.cpp` | (d)/(e) two `fcntl` cleanup blocks and the pause-pipe read failure (`select` just reported the fd readable). |
 | `libMagAOX/app/MagAOXApp.hpp` | (b) `new` nullptr check, joinable-after-construct, `indiTargetUpdate` always-true `set`; (c) catches around `sendXml`-backed calls (best-effort `write()`, never throws); (d) SIGTERM `sigaction` (see the long in-code note on why only SIGQUIT/SIGINT are fault-injectable per TU); (e) `std::thread` ctor failure (RLIMIT_NPROC), tpid short-write (RLIMIT_FSIZE/SIGXFSZ), `startINDI` re-entry teardown (segfaults without a real indiserver), indiDriver ctor throw, success returns of `sendNewProperty*` (need a live indiserver connection); config bookkeeping branches unreachable without a derived app that defines-but-never-reads an option. |
 | `libMagAOX/app/dev/dm.hpp`, `dmPokeWFS.hpp`, `dssShutter.hpp`, `frameGrabber.hpp`, `shmimMonitor.hpp`, `stdCamera.hpp`, `outletController.hpp`, `indiUtils.hpp` | (b) registration-failure propagation that the `MagAOXApp<false>` harness short-circuits to success; (d) `sigaction`/`sem_init`/`sem_post`/`clock_gettime`; (e) `threadStart` failure (RLIMIT_NPROC), signal-vs-join races in `appShutdown`, stat-after-open races, second shm create() failing while the first succeeded, 30 s-window races; (g) `recordCamera` cast-argument lines; plus one documented harness-combination gap in `stdCamera::newCallBack_stdCamera` (tempControl-without-temp dispatch line). |
-| `libMagAOX/logger/logMap.hpp`, `logMap.cpp`, `logMeta.cpp` | (b) `loadFiles` failure ruled out by the caller's own precondition, garbage-read corruption guards only reachable via out-of-bounds reads, value types no generated log ever produces (verified by grep over `types/*.hpp`); (a) one epilogue brace. |
+| `libMagAOX/logger/logMap.hpp`, `logMap.cpp`, `logMeta.hpp`, `logMeta.cpp` | (b) `loadFiles` failure ruled out by the caller's own precondition, garbage-read corruption guards only reachable via out-of-bounds reads, null-entry guards ruled out by `getNextLog`/`getPriorLog` postconditions, value types no generated log ever produces (verified by grep over `types/*.hpp`); (a) one epilogue brace. |
 | `libMagAOX/logger/types/*.hpp` (≈55 files) | (a) epilogue braces; (b) null-checks on flatbuffers fields that every `messageT` constructor unconditionally creates (each exclusion names the field and the constructor argument that guarantees it). |
 | `libMagAOX/sys/runCommand.cpp` | (e) the forked child branch: it genuinely runs (the tests pass on its output) but `execvp` replaces the image before gcov's atexit flush; forcing the exec-failure fallthrough would let the child re-enter the test binary. (b) `read()` failure on a just-created owned pipe. |
 | `libMagAOX/tty/telnetConn.cpp` | (d) bind to port 0/INADDR_ANY; (b) `telnet_init` (fails only on internal malloc), `send()` returning 0 (POSIX doesn't define it here); (e) fixed 30 s poll timeout, libtelnet fatal-compression and never-negotiated event types (the class never calls `telnet_negotiate`). |
@@ -176,7 +176,9 @@ real semaphores, and real INDI property callbacks.
 paths), `logMeta_test` (accessors, card generation, buffer walking), `logTypes_test`
 (format/parse for hand-picked types, long-appName truncation regimes for
 `logShortStdFormat`, unknown-code fallbacks, garbage-schema `msgJSON`); expanded
-`logFileRaw_test` (all §2 hook fault paths), `logMap_test`; generator now round-trips
+`logFileRaw_test` (all §2 hook fault paths), `logMap_test`, and
+`logTypes_Accessor_test` (adds a valid-member `getAccessor` case via `string_log`, the
+one type with no generated per-type test of its own); generator now round-trips
 all four formatters for every generated log type (§3).
 
 **libMagAOX/tty:** `tty_test.cpp` split into `ttyErrors_test`, `usbDevice_test`,
@@ -212,8 +214,98 @@ site in code (see §1 of the in-code comments; also candidates for a follow-up P
   `SystemSocket::recvFrom`/`recvChunkFrom`, though empty datagrams are legal.
 - `Thread::setOneShot` is declared but never defined (link error if ever used).
 
-## 7. Known unrelated failures
+## 7. The `XWCTEST_IF_` macro pattern (second phase)
 
-The full suite shows pre-existing failures in three hardware-adjacent app tests not
-touched by this change set: `apps/mcp3208Ctrl` (6), `apps/ocam2KCtrl` (13),
-`apps/zaberCtrl` (2). They fail identically with and without these changes.
+A follow-on pass replaced the verbose raw `#ifdef XWCTEST_* ... #endif` fault-hook
+blocks of §2 with single-line macro calls, minimizing the visual footprint of test
+hooks in production sources without changing what compiles in any configuration.
+
+**Generator.** `tests/genTestMacros.py` + `tests/xwcTestMacroTemplate.jinja2` generate a
+per-directory `testMacros.hpp` from that directory's `xwcTestNames.txt` (one hook name
+per line; regenerate with
+`python3 tests/genTestMacros.py --names <dir>/xwcTestNames.txt --out <dir>/testMacros.hpp`).
+For each name the generated header defines:
+
+```c
+#ifdef XWCTEST_<NAME>
+#define XWCTEST_IF_<NAME>(line) { line ; } /* LCOV_EXCL_LINE */
+#else
+#define XWCTEST_IF_<NAME>(line) do {} while(0)
+#endif
+```
+
+so a production call site is one line — `XWCTEST_IF_<NAME>( sndRv = -1 );` — inert
+unless the test TU defines `XWCTEST_<NAME>` before including the header. The expansion
+is a braced compound statement (`{ line ; }`, not `(line);`) so hooks can wrap
+statements like `return -1` and call sites may be written with or without their own
+trailing `;` (a doubled `;` is a harmless empty statement). The trigger line carries
+`LCOV_EXCL_LINE` in the macro itself, so call sites need no per-site exclusion.
+
+Generated header/name-list pairs live in: `libMagAOX/logger/tests/`,
+`libMagAOX/app/tests/`, `libMagAOX/app/dev/tests/`, `libMagAOX/file/tests/`,
+`libMagAOX/modbus/tests/`, and `apps/userGainCtrl/tests/`.
+
+**Converted production sources** (hook behavior identical, sites now one line each):
+`libMagAOX/logger/logMap.hpp`/`.cpp`, `logFileRaw.hpp`, `logManager.hpp`;
+`libMagAOX/app/MagAOXApp.hpp`, `indiDriver.hpp`; `libMagAOX/app/dev/stdCamera.hpp`,
+`telemeter.hpp`; `libMagAOX/file/stdSubDir.hpp`, `stdFileName.hpp`, `fileTimes.hpp`;
+`libMagAOX/modbus/modbus.cpp`; `apps/userGainCtrl/userGainCtrl.hpp`. A few sites
+deliberately remain raw `#ifdef`/`#ifndef` where the macro cannot express them
+(e.g. conditional *compilation of declarations* rather than statements); each such
+site has an in-code comment saying so. The `XWCTEST_NAMESPACE` re-inclusion technique
+of §2 is unchanged and coexists with the macros.
+
+**`tbd/` prototype.** The three staged files under `tbd/` are the abandoned first
+draft of this generator (hardcoded name list, no CLI, and the older `(line);` macro
+shape that cannot wrap `return` statements). They are fully superseded by
+`tests/genTestMacros.py` and are safe to drop from the change set.
+
+**Design doc.** `xwctest-macro-coverage-strategy.md` (repo root) is the strategy
+document this phase was implemented from: the macro pattern's rationale, the verified
+coverage gaps it targets, and the adoption plan.
+
+**Harness minimization.** `libMagAOX/app/dev/tests/testHarnessCommon.hpp` factors the
+previously copy-pasted throwaway `indiDriver` construction into one documented helper,
+`makeFifolessIndiDriver<AppT>()`, used by the dm, stdCamera, frameGrabber,
+outletController, shmimMonitor, stdMotionStage, MagAOXApp, zaberCtrl, and mcp3208Ctrl
+harnesses. Its header documents the safety contract (never `execute()`/`activate()`d,
+so sends are no-ops) and its one limitation (`indiDriver::sendNewProperty()` still
+constructs a real outbound `indiClient`, which needs a live indiserver — see §8).
+
+**`LCOV_EXCL` hygiene.** Runs of consecutive `// LCOV_EXCL_LINE` markers were
+consolidated into `LCOV_EXCL_START`/`LCOV_EXCL_STOP` blocks (12 files), keeping one
+justification comment per block instead of one per line.
+
+## 8. App-test repairs (second phase)
+
+Failures in `apps/` suites — pre-existing, but fixed rather than left documented:
+
+| File(s) | Fix |
+|---|---|
+| `apps/mcp3208Ctrl/mcp3208Ctrl.hpp` | **Production bug**: `loadConfigImpl()` read `_config( m_numChannels, "accel.numChannels" )` but no matching `config.add("accel.numChannels", ...)` registration existed, so the option could never be loaded from a config file (the configurator only looks up pre-registered targets); it silently always used the in-class default. Registration added (with in-code comment). |
+| `apps/mcp3208Ctrl/tests/mcp3208Ctrl_test.cpp` | Harness constructs a fifoless `indiDriver` so `updateTimingDiagnosticsIndi()`'s publishes are observable (`MagAOXApp::updatesIfChanged()` silently no-ops with a null driver — the cause of the timing-diagnostics assertion failures); new test covering the null-driver no-op guard itself (`MagAOXApp.hpp:3798`); corrected the delay-controller expected-value formula (the app resets `m_synchroDelay` to the *target* before the controller correction, so the target term appears twice); trigger-time test now performs two semaphore cycles (`updateTriggerTiming()` needs a measured period before it computes `m_triggerTime`). |
+| `apps/zaberCtrl/tests/zaberCtrl_test.cpp` | `tests/testMacrosINDI.hpp` unconditionally defines `XWCTEST_INDI_CALLBACK_VALIDATION`, which flips `INDI_VALIDATE_CALLBACK_PROPS` into a short-circuit test mode for the whole TU — masking the real HOMING-transition callback logic under test. Fixed with `#undef` after the include (commented in place). This exposes that `rawPos`/`preset`'s "Right Device.Name" sub-cases call `sendNewProperty()`, which requires a live indiserver connection; left failing with a detailed known-limitation comment (see §9). |
+| `apps/zaberLowLevel/tests/zaberLowLevel_test.cpp` | Removed incorrect `const` from two harness methods calling non-const production methods; harness now sets `state(INITIALIZED)` before `appStartup()` (matching the real `execute()` sequence — `appStartup()` fails from UNINITIALIZED); `warnValue()` reads the Switch element via `getSwitchState()` (the generic string value of a Switch is `"1"`/`"0"`, not On/Off). |
+| `apps/tcsInterface/tcsInterface.hpp` | `INDI_NEWCALLBACK_DECL( ..., m_indiP_labMode )` moved to a `public:` section: the callback is invoked from a free SCENARIO function, which the class's `friend class tcsInterface_test` does not cover (commented in place). |
+| `apps/xindiserver/xindiserver.hpp` | Same friend-declaration pitfall, for eight data members driven directly by the test harness: the existing unqualified `friend class xindiserver_test;` binds to `MagAOX::app::xindiserver_test`, not the real harness struct in its nested test namespace, so the accessed members are now `public:` (commented in place). |
+| `apps/xindiserver/tests/xindiserver_test.cpp`, `apps/sshDigger/tests/sshDigger_test.cpp` | Identical latent bug: the test namespaces were closed *before* a later `SCENARIO` block that needs the harness class unqualified; closing braces moved to end of file. |
+| `apps/siglentSDG/tests/siglentSDG_test.cpp` | Removed an orphaned `}` (a leftover closing brace for a namespace name that never existed). |
+| `apps/timeSeriesSimulator/tests/` | `timeSeriesSimulator.cpp` → `timeSeriesSimulator_test.cpp` (`git mv`): the file was misnamed, so the test build had no rule to make the target. |
+| `flatlogs/include/flatlogs/timespecX.hpp` | `LCOV_EXCL` on `timeStamp()`'s `gmtime_r` failure branch: `time_s` is `secT` (`uint32_t`, max ≈ year 2106), entirely within glibc `gmtime_r`'s representable range, so the defensive check cannot fire (category (b) of §4; the sibling formatters in the same file do not check at all). |
+
+## 9. Known remaining failures
+
+- **Nine suites do not build here** for lack of third-party libraries absent from this
+  environment: `loPredCtrl_test` (DDSPC), `usbtempMon_test` (DS18B20), and the seven
+  instGraph-dependent suites (`xInstGraph_test`, `xigNode_test`, `fsmNode_test`,
+  `indiPropNode_test`, `pwrOnOffNode_test`, `staticNode_test`, `stdMotionNode_test`).
+  None of their sources are touched by this change set.
+- **`zaberCtrl_test`: 2 assertions** (`rawPos`/`preset` "Right Device.Name") fail
+  because the real callbacks call `indiDriver::sendNewProperty()`, which lazily
+  constructs a genuine outbound `indiClient` and returns −1 when no live indiserver is
+  reachable. Previously masked by the `XWCTEST_INDI_CALLBACK_VALIDATION` leak fixed in
+  §8. Properly covering it needs a mocked `indiClient` or a local indiserver; a
+  detailed comment marks the site.
+- **Environment note:** `ocam2KCtrl_test` requires `$MILK_SHM_DIR` (default
+  `/milk/shm`) to be writable; with it writable all 474 assertions pass. Not a code or
+  test defect.
