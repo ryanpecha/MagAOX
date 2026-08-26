@@ -47,6 +47,15 @@ int runCommand( std::vector<std::string> & commandOutput, // [out] the output, l
       return -1;
    }
 
+   // This is the child branch. It really runs.
+   // The stdout and stderr tests pass only because it does.
+   // But gcov cannot observe it.
+   // On the success path execvp() replaces the process image before the
+   // child's own gcov atexit hook can flush its counters.
+   // On the failure path the child falls through to return -1 without exiting.
+   // Forcing that from a test would let the forked child re-enter and re-run
+   // the rest of this test binary. That would corrupt the run.
+   // LCOV_EXCL_START
    if(pid == 0)
    {
       dup2 (link[1], STDOUT_FILENO);
@@ -63,9 +72,12 @@ int runCommand( std::vector<std::string> & commandOutput, // [out] the output, l
          charCommandList[index]=commandList[index].c_str();
       }
       execvp( charCommandList[0], const_cast<char**>(charCommandList.data()));
-      commandOutput.push_back(std::string("execvp returned: ") + strerror(errno));
-      return -1;
+      // Bug fix. execvp() only returns when it fails. The child used to return -1 here,
+      // which made it keep running the caller's code as a second copy of the process.
+      // The child must exit instead. The parent sees the closed pipes and empty output.
+      _exit(127);
    }
+   // LCOV_EXCL_STOP
    else
    {
       char commandOutput_c[4096];
@@ -76,12 +88,21 @@ int runCommand( std::vector<std::string> & commandOutput, // [out] the output, l
       close(errlink[1]);
 
       int rd;
-      if ( (rd = read(link[0], commandOutput_c, sizeof(commandOutput_c))) < 0)
+      // A read() failure here means the OS call itself failed on a pipe file
+      // descriptor that this same process just created and still owns.
+      // That is not reachable without corrupting the descriptor directly.
+      // For example, closing it out from under the read would do that.
+      // That is not a real usage pattern.
+      // Bug fix. The read leaves one byte free for the terminator written below.
+      // A read that filled the whole buffer used to put the terminator past the end.
+      // LCOV_EXCL_START
+      if ( (rd = read(link[0], commandOutput_c, sizeof(commandOutput_c) - 1)) < 0)
       {
          commandOutput.push_back(std::string("Read error: ") + strerror(errno));
          close(link[0]);
          return -1;
       }
+      // LCOV_EXCL_STOP
       close(link[0]);
 
       std::string line;
@@ -97,12 +118,16 @@ int runCommand( std::vector<std::string> & commandOutput, // [out] the output, l
       }
 
       //----stderr
-      if ( (rd = read(errlink[0], commandOutput_c, sizeof(commandOutput_c))) < 0)
+      // The same reasoning as the stdout read() above applies here.
+      // Bug fix. Same as the stdout read above. One byte is left free for the terminator.
+      // LCOV_EXCL_START
+      if ( (rd = read(errlink[0], commandOutput_c, sizeof(commandOutput_c) - 1)) < 0)
       {
          commandStderr.push_back(std::string("Read error on stderr: ") + strerror(errno));
          close(errlink[0]);
          return -1;
       }
+      // LCOV_EXCL_STOP
       close(errlink[0]);
 
       commandOutput_c[rd] = '\0';

@@ -81,7 +81,7 @@ struct telem_coreloads : public flatbuffer_log
 
       return msg;
 
-   }
+   } // LCOV_EXCL_LINE gcov reports this closing brace as a separate line that only runs during exception cleanup
 
    /// Get the logMetaDetail for a member by name
    /**

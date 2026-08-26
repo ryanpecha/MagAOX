@@ -909,5 +909,3 @@ SCENARIO( "Parsing the ARWV? response", "[siglentSDG]" )
         }
     }
 }
-
-} // namespace siglentSDG_test

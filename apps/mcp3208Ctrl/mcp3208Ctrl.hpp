@@ -684,6 +684,22 @@ void mcp3208Ctrl::setupConfig()
                 "float",
                 "Global EMA coefficient for synchronized timing smoothers. Default is 0.01." );
 
+    // Bug fix. This target was never registered. loadConfigImpl() reads it with
+    // _config( m_numChannels, "accel.numChannels" ), but the configurator only returns
+    // values for names that were registered here. So the value in the config file was
+    // ignored and m_numChannels always kept its default of 2. Registering it makes the
+    // option work. A config file that already sets accel.numChannels will now take
+    // effect and change the output frame width.
+    config.add( "accel.numChannels",
+                "",
+                "accel.numChannels",
+                argType::Required,
+                "accel",
+                "numChannels",
+                false,
+                "int",
+                "The number of MCP3208 channels read into each output frame. Default is 2." );
+
     config.add( "numChannels.device",
                 "",
                 "numChannels.device",

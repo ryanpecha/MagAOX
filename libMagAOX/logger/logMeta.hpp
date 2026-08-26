@@ -426,10 +426,10 @@ char *getNextVerifiedLog( logMap<verboseT>  &lm,                 /**< [in] loade
 
     while( lm.getNextLog( candidate, current, appName ) == 0 )
     {
-        if( candidate == nullptr )
+        if( candidate == nullptr ) // LCOV_EXCL_START: Defensive check. getNextLog() returns 0 only after it sets a non-null entry pointer.
         {
             return nullptr;
-        }
+        } // LCOV_EXCL_STOP
 
         if( verifyLogEntry( ev, candidate ) )
         {
@@ -517,10 +517,10 @@ int getLogStateVal( valT                      &val,
         return logMetaFail( failureReason, "due to missing prior telemetry" );
     }
 
-    if( stprior == nullptr || flatlogs::logHeader::eventCode( stprior ) != ev )
+    if( stprior == nullptr || flatlogs::logHeader::eventCode( stprior ) != ev ) // LCOV_EXCL_START: Defensive check. The merged getPriorLog() returns only non-null entries with the requested code.
     {
         return logMetaFail( failureReason, "due to missing prior telemetry" );
-    }
+    } // LCOV_EXCL_STOP
     if( !verifyLogEntry( ev, stprior ) )
     {
         DEBUG_CRUMB( "getLogStateVal prior verify failed app=" + appName + " ev=" + std::to_string( ev ) +
@@ -554,7 +554,7 @@ int getLogStateVal( valT                      &val,
 
         return logMetaFail( failureReason, "due to missing following telemetry" );
     }
-    if( atprior == nullptr )
+    if( atprior == nullptr ) // LCOV_EXCL_START: Defensive check. getNextLog() returns 0 only after it sets a non-null entry pointer.
     {
         if( logMetaGapValid( flatlogs::logHeader::timespec( stprior ), atime, maxGap ) )
         {
@@ -565,7 +565,7 @@ int getLogStateVal( valT                      &val,
         }
 
         return logMetaFail( failureReason, logMetaGapReason( maxGap ) );
-    }
+    } // LCOV_EXCL_STOP
     if( !verifyLogEntry( ev, atprior ) )
     {
         DEBUG_CRUMB( "getLogStateVal next verify failed app=" + appName + " ev=" + std::to_string( ev ) +
@@ -607,7 +607,7 @@ int getLogStateVal( valT                      &val,
 
             return logMetaFail( failureReason, "due to missing following telemetry" );
         }
-        if( atprior == nullptr )
+        if( atprior == nullptr ) // LCOV_EXCL_START: Defensive check. getNextLog() returns 0 only after it sets a non-null entry pointer.
         {
             if( logMetaGapValid( flatlogs::logHeader::timespec( stprior ), atime, maxGap ) )
             {
@@ -618,7 +618,7 @@ int getLogStateVal( valT                      &val,
             }
 
             return logMetaFail( failureReason, logMetaGapReason( maxGap ) );
-        }
+        } // LCOV_EXCL_STOP
         if( !verifyLogEntry( ev, atprior ) )
         {
             DEBUG_CRUMB( "getLogStateVal next verify failed app=" + appName + " ev=" + std::to_string( ev ) +
@@ -673,10 +673,10 @@ int getLogContVal( valT                      &val,
         return logMetaFail( failureReason, "due to missing prior telemetry", 1 );
     }
 
-    if( stprior == nullptr || flatlogs::logHeader::eventCode( stprior ) != ev )
+    if( stprior == nullptr || flatlogs::logHeader::eventCode( stprior ) != ev ) // LCOV_EXCL_START: Defensive check. The merged getPriorLog() returns only non-null entries with the requested code.
     {
         return logMetaFail( failureReason, "due to missing prior telemetry", 1 );
-    }
+    } // LCOV_EXCL_STOP
     if( !verifyLogEntry( ev, stprior ) )
     {
         DEBUG_CRUMB( "getLogContVal prior verify failed app=" + appName + " ev=" + std::to_string( ev ) +
@@ -703,10 +703,10 @@ int getLogContVal( valT                      &val,
 #endif
         return logMetaFail( failureReason, "due to missing following telemetry", 1 );
     }
-    if( atafter == nullptr )
+    if( atafter == nullptr ) // LCOV_EXCL_START: Defensive check. getNextLog() returns 0 only after it sets a non-null entry pointer.
     {
         return logMetaFail( failureReason, "due to missing following telemetry", 1 );
-    }
+    } // LCOV_EXCL_STOP
     if( !verifyLogEntry( ev, atafter ) )
     {
         DEBUG_CRUMB( "getLogContVal next verify failed app=" + appName + " ev=" + std::to_string( ev ) +

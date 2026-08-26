@@ -51,6 +51,10 @@ class tcsInterface_test : public tcsInterface
         XWCTEST_SETUP_INDI_NEW_PROP( offlFthresh );
         // XWCTEST_SETUP_INDI_ARB_PROP(m_indiP_teldata, tcsi, zd);
     }
+
+    // newCallBack_m_indiP_labMode is protected in tcsInterface. The callback test macro
+    // calls it on a harness object from a free function, so it is made public here.
+    using tcsInterface::newCallBack_m_indiP_labMode;
 };
 /// \endcond
 

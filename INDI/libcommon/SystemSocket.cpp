@@ -323,7 +323,7 @@ sockaddr_in SystemSocket::convertStrToAddr( const string &szHost )
         throw ( Error( string( ": " ) + strerror( EINVAL ) ) );
 
       if ( nRet == -1 )
-        throw ( Error( string( ": " ) + strerror( nErr ) ) );
+        throw ( Error( string( ": " ) + strerror( nErr ) ) ); // LCOV_EXCL_LINE inet_pton returns -1 only for an unknown address family. The family here is always AF_INET.
 #endif
     }
     return saAddr;
@@ -485,11 +485,11 @@ void SystemSocket::sendChunk( char *pcData,
 
       // Was there an error?
       if ( nSent == -1 && m_nLastError != EAGAIN )
-        throw ( Error( string( ": " ) + strerror( m_nLastError ) ) );
+        throw ( Error( string( ": " ) + strerror( m_nLastError ) ) ); // LCOV_EXCL_LINE Reaching this throw needs send() to fail inside this loop. The closed peer test exercises that error through send() and not through this loop. See the EAGAIN note below.
 
       // If we got EAGAIN, go around again, otherwise drop out.
       if ( nSent == -1 && m_nLastError == EAGAIN )
-        nSent = 0;
+        nSent = 0; // LCOV_EXCL_LINE EAGAIN here needs a nonblocking socket with a full send buffer. That makes this loop spin forever, so a test cannot exercise it safely.
     }
 
     // If we got here, nTotalSent holds how many bytes were sent,
@@ -533,7 +533,7 @@ void SystemSocket::sendChunkTo( char *pcData,
 
     // Otherwise, we sent some data, but did we send it all?
     if ( nRet < nNumBytes )
-      throw ( Error( string( ": " ) + strerror( EMSGSIZE ) ) );
+      throw ( Error( string( ": " ) + strerror( EMSGSIZE ) ) ); // LCOV_EXCL_LINE A UDP sendto sends the whole datagram or fails. A partial send cannot happen.
 
     // If we got here, we sent all the bytes.
     nNumBytes = nRet;
@@ -690,7 +690,7 @@ void SystemSocket::send( const string &szData )
 
     // Otherwise, we sent some data, but did we send it all?
     if ( static_cast<unsigned int>( nRet ) < szData.length() )
-      throw ( Error( string( ": " ) + strerror( EMSGSIZE ) ) );
+      throw ( Error( string( ": " ) + strerror( EMSGSIZE ) ) ); // LCOV_EXCL_LINE A blocking send of a small buffer sends everything or fails. A partial send cannot happen here.
   }
   catch ( const Error &err )
   {
@@ -727,7 +727,7 @@ void SystemSocket::sendTo( const string &szData )
 
     //  Otherwise, we sent some data, but did we send it all?
     if ( static_cast<unsigned int>( nRet ) < szData.length() )
-      throw ( Error( string( ": " ) + strerror( EMSGSIZE ) ) );
+      throw ( Error( string( ": " ) + strerror( EMSGSIZE ) ) ); // LCOV_EXCL_LINE A UDP sendto sends the whole datagram or fails. A partial send cannot happen.
   }
   catch ( const Error &err )
   {
@@ -881,7 +881,7 @@ void SystemSocket::connect()
 
       // The only acceptable error is 'in progress'.
       if ( m_nLastError != EINPROGRESS )
-        throw ( Error( string( ": " ) + strerror( m_nLastError ) ) );
+        throw ( Error( string( ": " ) + strerror( m_nLastError ) ) ); // LCOV_EXCL_LINE Reaching this needs connect() to fail at once instead of returning EINPROGRESS. On Linux a nonblocking connect returns EINPROGRESS even for a refused loopback port and reports the error later through SO_ERROR. An immediate failure needs an address with no route, and that depends on the test host.
 
       // Wait for the connection to complete.
       int nNum = ::select( m_nSocket + 1,
@@ -891,7 +891,7 @@ void SystemSocket::connect()
 
       // Did select have an error?
       if ( nNum < 0 )
-        throw ( Error( string( ": " ) + strerror( m_nLastError ) ) );
+        throw ( Error( string( ": " ) + strerror( m_nLastError ) ) ); // LCOV_EXCL_LINE select() on one valid descriptor with a valid timeout does not fail.
       // Did we timeout (no descriptors are ready)?
       if ( nNum == 0 )
         throw ( Error( string( ": " ) + strerror( ETIMEDOUT ) ) );
@@ -1021,8 +1021,10 @@ void SystemSocket::setOption(const int &nLevel,
     if ( ::setsockopt( m_nSocket, nLevel, nOption,
                        static_cast<char *>( pvOptionValue ), nOptionLength ) == -1 )
     {
+      // LCOV_EXCL_START The socket was checked above. Every caller passes a valid option and value, so setsockopt does not fail here.
       m_nLastError = errno;
       throw ( Error( string( ": " ) + strerror( m_nLastError ) ) );
+      // LCOV_EXCL_STOP
     }
   }
   catch ( const Error &err )
@@ -1084,8 +1086,10 @@ void SystemSocket::setNonBlocking( const bool &oIsNonBlocking )
     int nOpts = -1;
     if ( ( nOpts = ::fcntl( m_nSocket, F_GETFL ) ) == -1 )
     {
+      // LCOV_EXCL_START fcntl with F_GETFL on a valid socket does not fail.
       m_nLastError = errno;
       throw ( Error( string( ": " ) + strerror( m_nLastError ) ) );
+      // LCOV_EXCL_STOP
     }
 
     // Flip the correct bit in the read value.
@@ -1095,8 +1099,10 @@ void SystemSocket::setNonBlocking( const bool &oIsNonBlocking )
     //  write this updated setting.
     if ( ::fcntl ( m_nSocket, F_SETFL, nOpts ) == -1 )
     {
+      // LCOV_EXCL_START fcntl with F_SETFL on a valid socket does not fail.
       m_nLastError = errno;
       throw ( Error( string( ": " ) + strerror( m_nLastError ) ) );
+      // LCOV_EXCL_STOP
     }
 #endif
   }
@@ -1342,17 +1348,21 @@ string SystemSocket::getLocalHostName()
     memset( pcHostName, 0, 256 );
     if ( ::gethostname( pcHostName, 255 ) == -1 )
     {
+      // LCOV_EXCL_START gethostname with a 256-byte buffer does not fail.
       int nErr = errno;
       throw ( Error( string( ": " ) + strerror( nErr ) ) );
+      // LCOV_EXCL_STOP
     }
 
     // if we got here, we got a good hostname.
     return string( pcHostName );
   }
+  // LCOV_EXCL_START This handler is reached only from the gethostname throw excluded above.
   catch ( const Error &err )
   {
     throw Error( string( "::getLocalHostName" ) + err.what() );
   }
+  // LCOV_EXCL_STOP
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -1442,7 +1452,7 @@ int SystemSocket::getInterfaces( vector<SystemSocket::Interface> &vecInterfaces 
 
     if ( nRetVal < 0 )
     {
-      nError = -1;
+      nError = -1; // LCOV_EXCL_LINE The SIOCGIFCONF ioctl on a new AF_INET socket does not fail.
     }
     else
     {

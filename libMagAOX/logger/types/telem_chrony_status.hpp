@@ -100,34 +100,34 @@ struct telem_chrony_status : public flatbuffer_log
 
       return msg;
 
-   }
+   } // LCOV_EXCL_LINE gcov reports this closing brace as a separate line that only runs during exception cleanup
 
    static std::string sourceMAC(void * msgBuffer )
    {
       auto fbs = GetTelem_chrony_status_fb(msgBuffer);
       if(fbs->sourceMAC()) return std::string(fbs->sourceMAC()->c_str());
-      else return "";
+      else return ""; // LCOV_EXCL_LINE the only constructor always sets sourceMAC so the null check cannot fail
    }
 
    static std::string sourceIP(void * msgBuffer )
    {
       auto fbs = GetTelem_chrony_status_fb(msgBuffer);
       if(fbs->sourceIP()) return std::string(fbs->sourceIP()->c_str());
-      else return "";
+      else return ""; // LCOV_EXCL_LINE the only constructor always sets sourceIP so the null check cannot fail
    }
 
    static std::string synch(void * msgBuffer )
    {
       auto fbs = GetTelem_chrony_status_fb(msgBuffer);
       if(fbs->synch()) return std::string(fbs->synch()->c_str());
-      else return "";
+      else return ""; // LCOV_EXCL_LINE the only constructor always sets synch so the null check cannot fail
    }
 
    static std::string leap(void * msgBuffer )
    {
       auto fbs = GetTelem_chrony_status_fb(msgBuffer);
       if(fbs->leap()) return std::string(fbs->leap()->c_str());
-      else return "";
+      else return ""; // LCOV_EXCL_LINE the only constructor always sets leap so the null check cannot fail
    }
 
    /// Get the logMetaDetail for a member by name

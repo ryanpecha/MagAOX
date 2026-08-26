@@ -64,6 +64,8 @@ struct user_log : public flatbuffer_log
 
         std::string msg = "[USER] ";
 
+        // email is a required std::string in the only messageT constructor.
+        // The constructor always passes it to builder.CreateString() so email() is never nullptr.
         if(fbs->email())
         {
             msg += fbs->email()->c_str();
@@ -71,7 +73,7 @@ struct user_log : public flatbuffer_log
         }
         else
         {
-            msg += "unknown: ";
+            msg += "unknown: "; // LCOV_EXCL_LINE email() is never nullptr
         }
 
         if(fbs->message())
@@ -80,7 +82,7 @@ struct user_log : public flatbuffer_log
         }
 
         return msg;
-    }
+    } // LCOV_EXCL_LINE gcov reports this closing brace as a separate line that only runs during exception cleanup
 
     ///Get the user email from a user_log
     static std::string email( void * msgBuffer /**< [in] Buffer containing the flatbuffer serialized message.*/)
@@ -90,7 +92,7 @@ struct user_log : public flatbuffer_log
         {
             return std::string(fbs->email()->c_str());
         }
-        else return "";
+        else return ""; // LCOV_EXCL_LINE the only constructor always sets email so the null check cannot fail
    }
 
     ///Get the message from a user_log
@@ -101,7 +103,7 @@ struct user_log : public flatbuffer_log
         {
             return std::string(fbs->message()->c_str());
         }
-        else return "";
+        else return ""; // LCOV_EXCL_LINE the only constructor always sets message so the null check cannot fail
     }
 
     /// Get the logMetaDetail for a member by name

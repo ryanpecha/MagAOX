@@ -96,7 +96,7 @@ struct telem_pi335 : public flatbuffer_log
         msg += std::to_string(fbs->sva3());
 
         return msg;
-    }
+    } // LCOV_EXCL_LINE gcov reports this closing brace as a separate line that only runs during exception cleanup
 
     static float pos1Set(void *msgBuffer)
     {

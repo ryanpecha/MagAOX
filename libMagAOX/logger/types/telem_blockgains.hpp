@@ -100,6 +100,10 @@ struct telem_blockgains : public flatbuffer_log
                 }
             }
         }
+        // gains_constant is a required parameter in the only messageT constructor.
+        // The constructor always passes it to builder.CreateVector() so gains_constant() is never nullptr.
+        // This branch handles gains being present while gains_constant is absent, which cannot happen.
+        // LCOV_EXCL_START
         else if( fbs->gains() )
         {
             for( size_t i = 0; i < fbs->gains()->size(); ++i )
@@ -109,6 +113,7 @@ struct telem_blockgains : public flatbuffer_log
                 msg += " (?)";
             }
         }
+        // LCOV_EXCL_STOP
 
         msg += " [mcs] ";
         if( fbs->mcs() && fbs->mcs_constant() )
@@ -134,6 +139,10 @@ struct telem_blockgains : public flatbuffer_log
                 }
             }
         }
+        // mcs_constant is a required parameter in the only messageT constructor.
+        // The constructor always passes it to builder.CreateVector() so mcs_constant() is never nullptr.
+        // This branch handles mcs being present while mcs_constant is absent, which cannot happen.
+        // LCOV_EXCL_START
         else if( fbs->mcs() )
         {
             for( size_t i = 0; i < fbs->mcs()->size(); ++i )
@@ -143,6 +152,7 @@ struct telem_blockgains : public flatbuffer_log
                 msg += " (?)";
             }
         }
+        // LCOV_EXCL_STOP
 
         msg += " [lims] ";
 
@@ -169,6 +179,10 @@ struct telem_blockgains : public flatbuffer_log
                 }
             }
         }
+        // lims_constant is a required parameter in the only messageT constructor.
+        // The constructor always passes it to builder.CreateVector() so lims_constant() is never nullptr.
+        // This branch handles lims being present while lims_constant is absent, which cannot happen.
+        // LCOV_EXCL_START
         else if( fbs->lims() )
         {
             for( size_t i = 0; i < fbs->lims()->size(); ++i )
@@ -178,9 +192,10 @@ struct telem_blockgains : public flatbuffer_log
                 msg += " (?)";
             }
         }
+        // LCOV_EXCL_STOP
 
         return msg;
-    }
+    } // LCOV_EXCL_LINE gcov reports this closing brace as a separate line that only runs during exception cleanup
 
     static std::vector<float> gains( void *msgBuffer /**< [in] Buffer containing the flatbuffer serialized message.*/ )
     {
@@ -196,7 +211,7 @@ struct telem_blockgains : public flatbuffer_log
             }
         }
         return p;
-    }
+    } // LCOV_EXCL_LINE gcov reports this closing brace as a separate line that only runs during exception cleanup
 
     static std::vector<bool>
     gains_constant( void *msgBuffer /**< [in] Buffer containing the flatbuffer serialized message.*/ )
@@ -213,7 +228,7 @@ struct telem_blockgains : public flatbuffer_log
             }
         }
         return p;
-    }
+    } // LCOV_EXCL_LINE gcov reports this closing brace as a separate line that only runs during exception cleanup
 
     static std::vector<float> mcs( void *msgBuffer /**< [in] Buffer containing the flatbuffer serialized message.*/ )
     {
@@ -229,7 +244,7 @@ struct telem_blockgains : public flatbuffer_log
             }
         }
         return p;
-    }
+    } // LCOV_EXCL_LINE gcov reports this closing brace as a separate line that only runs during exception cleanup
 
     static std::vector<bool>
     mcs_constant( void *msgBuffer /**< [in] Buffer containing the flatbuffer serialized message.*/ )
@@ -246,7 +261,7 @@ struct telem_blockgains : public flatbuffer_log
             }
         }
         return p;
-    }
+    } // LCOV_EXCL_LINE gcov reports this closing brace as a separate line that only runs during exception cleanup
 
     static std::vector<float> lims( void *msgBuffer /**< [in] Buffer containing the flatbuffer serialized message.*/ )
     {
@@ -262,7 +277,7 @@ struct telem_blockgains : public flatbuffer_log
             }
         }
         return p;
-    }
+    } // LCOV_EXCL_LINE gcov reports this closing brace as a separate line that only runs during exception cleanup
 
     static std::vector<bool>
     lims_constant( void *msgBuffer /**< [in] Buffer containing the flatbuffer serialized message.*/ )
@@ -279,7 +294,7 @@ struct telem_blockgains : public flatbuffer_log
             }
         }
         return p;
-    }
+    } // LCOV_EXCL_LINE gcov reports this closing brace as a separate line that only runs during exception cleanup
 
     /// Get the logMetaDetail for a member by name
     /**
