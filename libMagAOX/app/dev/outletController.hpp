@@ -600,11 +600,13 @@ int outletController<derivedT>::turnChannelOn( const std::string & channel )
    }
 
    derivedT::template log<outlet_channel_state>({ channel, 2});
-   
+
+   // LCOV_EXCL_START: clock_gettime() with a valid and always supported clock ID does not fail in practice.
    if(clock_gettime(CLOCK_ISIO, &m_channels[channel].m_stateTime) < 0)
    {
       return derivedT::template log<software_error,-1>({errno, 0, "clock_gettime"});
    }
+   // LCOV_EXCL_STOP
 
    #ifndef OUTLET_CTRL_TEST_NOINDI
    indi::updateIfChanged(m_indiP_stateTimes, channel, m_channels[channel].m_stateTime.tv_sec, derived().m_indiDriver, INDI_IDLE );
@@ -679,10 +681,12 @@ int outletController<derivedT>::turnChannelOff( const std::string & channel )
 
    derivedT::template log<outlet_channel_state>({ channel, 0});
 
+   // LCOV_EXCL_START: clock_gettime() with a valid and always supported clock ID does not fail in practice.
    if(clock_gettime(CLOCK_ISIO, &m_channels[channel].m_stateTime) < 0)
    {
       return derivedT::template log<software_error,-1>({errno, 0, "clock_gettime"});
    }
+   // LCOV_EXCL_STOP
 
    #ifndef OUTLET_CTRL_TEST_NOINDI
    indi::updateIfChanged(m_indiP_stateTimes, channel, m_channels[channel].m_stateTime.tv_sec, derived().m_indiDriver, INDI_IDLE );

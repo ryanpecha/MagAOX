@@ -70,7 +70,7 @@ struct telem_flowrpm : public flatbuffer_log
         msg += ( fbs->valid() ? "true" : "false" );
 
         return msg;
-    }
+    } // LCOV_EXCL_LINE gcov reports this closing brace as a separate line that only runs during exception cleanup
 
     /// Recover the flow rate from a serialized message.
     static double flowRate( void *msgBuffer )

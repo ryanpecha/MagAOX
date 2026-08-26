@@ -94,21 +94,32 @@ int ttyOpenRaw( int & fileDescrip,        // [out] the file descriptor.  Set to 
       return TTY_E_SETISPEED;
    }
 
+   // glibc validates a speed_t the same way in cfsetispeed() and cfsetospeed().
+   // Reaching this call means cfsetispeed() just above already accepted this speed.
+   // So cfsetospeed() cannot fail here with the same value.
+   // LCOV_EXCL_START
    if( cfsetospeed(&termopt, speed) < 0 )
    {
       close(fileDescrip);
       fileDescrip = 0;
       return TTY_E_SETOSPEED;
    }
+   // LCOV_EXCL_STOP
 
    cfmakeraw(&termopt);
 
+   // tcsetattr() can fail here only if the real tty file descriptor becomes
+   // invalid between tcgetattr() and this call. That descriptor is already open
+   // and already validated. Such a failure is not reachable without a hardware
+   // or device disconnect in the middle of the operation.
+   // LCOV_EXCL_START
    if( tcsetattr(fileDescrip, TCSANOW, &termopt) < 0 )
    {
       close(fileDescrip);
       fileDescrip = 0;
       return TTY_E_TCSETATTR;
    }
+   // LCOV_EXCL_STOP
 
    return TTY_E_NOERROR;
 }

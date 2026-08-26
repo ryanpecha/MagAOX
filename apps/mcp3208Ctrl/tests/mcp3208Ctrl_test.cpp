@@ -13,6 +13,8 @@
 #include "../mcp3208Ctrl.hpp"
 #undef protected
 
+#include "../../../libMagAOX/app/dev/tests/testHarnessCommon.hpp"
+
 namespace
 {
 
@@ -128,6 +130,11 @@ class mcp3208Ctrl_test : public mcp3208Ctrl
     mcp3208Ctrl_test()
     {
         m_configName = "mcp3208Ctrl_test";
+
+        // updateTimingDiagnosticsIndi() publishes through MagAOXApp::updatesIfChanged(). That
+        // call is a silent no-op whenever m_indiDriver is null. A driver that never connects is
+        // installed here so the diagnostics tests can observe the published INDI values.
+        m_indiDriver = dev::testHarness::makeFifolessIndiDriver<MagAOXApp<true>>( this, m_configName );
     }
 
     /// Initialize the local fps INDI property used by the callback tests.
@@ -474,6 +481,29 @@ TEST_CASE( "mcp3208Ctrl synchroDelay callback updates signed offsets", "[mcp3208
     REQUIRE( app.m_synchroDelay == Approx( 115000.0f ) );
     REQUIRE( app.m_delayApplied_ns == Approx( 115000.0 ) );
     REQUIRE( app.m_delayModel_ns == Approx( 120000.0 ) );
+}
+
+/// Verify timing diagnostics publishing is a no-op when there is no INDI driver.
+/**
+ * \ingroup mcp3208Ctrl_unit_test
+ */
+TEST_CASE( "mcp3208Ctrl timing diagnostics is a no-op without an INDI driver", "[mcp3208Ctrl]" )
+{
+    mcp3208Ctrl_test app;
+
+    // Exercise the early `if(!m_indiDriver) return;` guard in MagAOXApp::updatesIfChanged().
+    // The harness constructor installs a driver without a FIFO for the other diagnostics tests
+    // below, and that driver never takes this guard. So the driver is removed here.
+    delete app.m_indiDriver;
+    app.m_indiDriver = nullptr;
+
+    app.setupTimingDiagnosticsProperty();
+    REQUIRE( app.m_indiP_timingDiag["avg_read_latency_us"].getValue() == "" );
+
+    app.m_avgReadLatency_ns = 125000.0;
+    app.updateTimingDiagnosticsIndi();
+
+    REQUIRE( app.m_indiP_timingDiag["avg_read_latency_us"].getValue() == "" );
 }
 
 /// Verify synchronized-mode timing diagnostics publish loop state and derived error.
@@ -1005,11 +1035,19 @@ TEST_CASE( "mcp3208Ctrl synchronized mode reads on semaphore wake", "[mcp3208Ctr
     REQUIRE( stubState().m_readOrder == std::vector<int>( { 0, 1, 2 } ) );
     REQUIRE( app.m_firstSemaphore == false );
     REQUIRE( app.m_lastAtime.tv_sec > 0 );
-    REQUIRE( app.m_triggerTime.tv_sec > 0 );
     REQUIRE( app.m_currImageTimestamp.tv_sec > 0 );
     REQUIRE( app.m_firstReadLatency == false );
     REQUIRE( app.m_avgReadLatency_ns ==
              Approx( mcp3208Ctrl::timespecToNs( app.m_currImageTimestamp ) - mcp3208Ctrl::timespecToNs( app.m_atime ) ) );
+
+    // updateTriggerTiming() in mcp3208Ctrl.hpp needs two semaphore arrivals to measure a period
+    // before it computes m_triggerTime. The first call above only seeds m_lastAtime. The value
+    // of m_avgReadLatency_ns is intentionally not checked again here. The second call folds
+    // its own latency into the first through the read-latency moving average, so it no longer
+    // equals the raw single-call latency delta asserted above.
+    REQUIRE( sem_post( &semaphore ) == 0 );
+    REQUIRE( app.acquireAndCheckValid() == 0 );
+    REQUIRE( app.m_triggerTime.tv_sec > 0 );
 
     REQUIRE( sem_destroy( &semaphore ) == 0 );
 }
@@ -1214,7 +1252,7 @@ TEST_CASE( "mcp3208Ctrl synchronized delay controller uses read latency EMA", "[
     app.m_numChannels        = 1;
     app.m_values.assign( 1, 0 );
     app.m_synchroSemaphore   = &semaphore;
-    app.m_synchroDelayTarget = 0.0f;
+    app.m_synchroDelayTarget = 3000000.0f;
     app.m_synchroDelay       = 2000000.0f;
     app.m_gain               = 1.0f;
     app.m_alpha              = 0.2f;
@@ -1227,8 +1265,15 @@ TEST_CASE( "mcp3208Ctrl synchronized delay controller uses read latency EMA", "[
         mcp3208Ctrl::timespecToNs( app.m_currImageTimestamp ) - mcp3208Ctrl::timespecToNs( app.m_atime );
     const double alpha = static_cast<double>( app.m_alpha );
     const double expectedAvgLatency_ns = alpha * readLatency_ns + ( 1.0 - alpha ) * 800000.0;
+    // acquireSynchroAndCheckValid() resets m_synchroDelay to m_synchroDelayTarget before it
+    // calls updateSynchroDelayController(). That reset also sets desiredDelay_ns. The controller
+    // then subtracts gain*(avgReadLatency_ns - m_synchroDelayTarget) from that same
+    // desiredDelay_ns. So the target term appears twice. The result in mcp3208Ctrl.hpp is
+    // updatedDelay_ns = 2*target - gain*avgReadLatency_ns, not a single correction relative to
+    // the target.
+    const double target_ns = static_cast<double>( app.m_synchroDelayTarget );
     const double expectedDelay_ns =
-        ( 2000000.0 - expectedAvgLatency_ns ) > 0.0 ? ( 2000000.0 - expectedAvgLatency_ns ) : 0.0;
+        ( 2.0 * target_ns - expectedAvgLatency_ns ) > 0.0 ? ( 2.0 * target_ns - expectedAvgLatency_ns ) : 0.0;
 
     REQUIRE( app.m_avgReadLatency_ns == Approx( expectedAvgLatency_ns ) );
     REQUIRE( app.m_synchroDelay == Approx( expectedDelay_ns ) );

@@ -64,7 +64,7 @@ struct telem_tcsi_labmode : public flatbuffer_log
         msg += std::to_string( fbs->labMode() );
 
         return msg;
-    }
+    } // LCOV_EXCL_LINE gcov reports this closing brace as a separate line that only runs during exception cleanup
 
     /// Access the lab-mode state.
     static bool labMode( void *msgBuffer /**< [in] Buffer containing the flatbuffer serialized message.*/ )

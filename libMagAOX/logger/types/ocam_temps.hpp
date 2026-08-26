@@ -95,7 +95,7 @@ struct ocam_temps : public flatbuffer_log
 
       return msg;
 
-   }
+   } // LCOV_EXCL_LINE gcov reports this closing brace as a separate line that only runs during exception cleanup
 
    static float ccd( void * msgBuffer /**< [in] Buffer containing the flatbuffer serialized message.*/ )
    {

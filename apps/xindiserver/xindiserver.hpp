@@ -33,6 +33,16 @@
   * \ingroup xindiserver
   */
 
+// Forward declaration of the test harness so the friend declaration in the class can
+// name it. The harness is defined in the test file inside this nested namespace.
+namespace libXWCTest
+{
+namespace xindiserverTest
+{
+struct xindiserver_test;
+}
+}
+
 namespace MagAOX
 {
 namespace app
@@ -116,8 +126,11 @@ int loadSSHTunnelConfigs( tunnelMapT & tmap, ///< [out] the tunnel map which wil
 class xindiserver : public MagAOXApp<false>
 {
 
-   //Give the test harness access.
-   friend class xindiserver_test;
+   // Give the test harness access. The harness struct lives in the test namespace
+   // libXWCTest::xindiserverTest, so the friend declaration must name it in full. The
+   // old unqualified name referred to a class in this namespace that does not exist,
+   // so the harness never had access.
+   friend struct libXWCTest::xindiserverTest::xindiserver_test;
 
 protected:
 

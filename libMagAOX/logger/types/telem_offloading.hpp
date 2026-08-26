@@ -73,7 +73,7 @@ struct telem_offloading : public flatbuffer_log
         msg += std::to_string( fbs->fps() ) + " ";
 
         return msg;
-    }
+    } // LCOV_EXCL_LINE gcov reports this closing brace as a separate line that only runs during exception cleanup
 
     static uint32_t num_modes( void *msgBuffer )
     {

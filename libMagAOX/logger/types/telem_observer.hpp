@@ -145,6 +145,8 @@ struct telem_observer : public flatbuffer_log
 
         msg += std::to_string( fbs->observing() );
 
+        // tgt_name is a required std::string in the only messageT constructor.
+        // The constructor always passes it to builder.CreateString() so tgt_name() is never nullptr.
         if( fbs->tgt_name() )
         {
             msg += " tgt: ";
@@ -153,7 +155,7 @@ struct telem_observer : public flatbuffer_log
         }
         else
         {
-            msg += " tgt: notimpl";
+            msg += " tgt: notimpl"; // LCOV_EXCL_LINE tgt_name() is never nullptr
         }
 
         if( fbs->operator_email() )
@@ -164,7 +166,7 @@ struct telem_observer : public flatbuffer_log
         }
 
         return msg;
-    }
+    } // LCOV_EXCL_LINE gcov reports this closing brace as a separate line that only runs during exception cleanup
 
     static std::string email( void *msgBuffer )
     {
@@ -174,7 +176,7 @@ struct telem_observer : public flatbuffer_log
             return std::string( fbs->email()->c_str() );
         }
         else
-            return "";
+            return ""; // LCOV_EXCL_LINE the only constructor always sets email so the null check cannot fail
     }
 
     static std::string obsName( void *msgBuffer )
@@ -185,7 +187,7 @@ struct telem_observer : public flatbuffer_log
             return std::string( fbs->obsName()->c_str() );
         }
         else
-            return "";
+            return ""; // LCOV_EXCL_LINE the only constructor always sets obsName so the null check cannot fail
     }
 
     static bool observing( void *msgBuffer )
@@ -202,7 +204,7 @@ struct telem_observer : public flatbuffer_log
             return std::string( fbs->tgt_name()->c_str() );
         }
         else
-            return "notimpl";
+            return "notimpl"; // LCOV_EXCL_LINE the only constructor always sets tgt_name so the null check cannot fail
     }
 
     static std::string operator_email( void *msgBuffer )
@@ -213,7 +215,7 @@ struct telem_observer : public flatbuffer_log
             return std::string( fbs->operator_email()->c_str() );
         }
         else
-            return "";
+            return ""; // LCOV_EXCL_LINE the only constructor always sets operator_email so the null check cannot fail
     }
 
     /// Get the logMetaDetail for a member by name

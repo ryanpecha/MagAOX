@@ -435,21 +435,28 @@ private:
 template<class derivedT>
 int dmPokeWFS<derivedT>::setupConfig(mx::app::appConfigurator & config)
 {
+    // This block handles an error from shmimMonitor<>::setupConfig().
+    // That function only adds config options and always returns 0.
+    // So the error branch cannot run.
+    // LCOV_EXCL_START
     if(derived().shmimMonitor().setupConfig(config) < 0)
     {
         derivedT::template log<software_error>({__FILE__, __LINE__, "shmimMonitorT::setupConfig"});
         return -1;
     }
+    // LCOV_EXCL_STOP
 
     config.add("wfscam.camDevName", "", "wfscam.camDevName", argType::Required, "wfscam", "camDevName", false, "string", "INDI device name of the WFS camera.  Default is wfscam.shmimName.");
     config.add("wfscam.loopSemWait", "", "wfscam.loopSemWait", argType::Required, "wfscam", "loopSemWait", false, "float", "The semaphore wait time for the wfs loop start signal");
     config.add("wfscam.imageSemWait", "", "wfscam.imageSemWait", argType::Required, "wfscam", "imageSemWait", false, "float", "The semaphore wait time for the image availability signal");
 
+    // LCOV_EXCL_START: same reason as the shmimMonitor setupConfig() check above. The callee always returns 0.
     if(derived().darkShmimMonitor().setupConfig(config) < 0)
     {
         derivedT::template log<software_error>({__FILE__, __LINE__, "darkShmimMonitorT::setupConfig"});
         return -1;
     }
+    // LCOV_EXCL_STOP
 
     config.add("pokecen.dmChannel", "", "pokecen.dmChannel", argType::Required, "pokecen", "dmChannel", false, "string", "The dm channel to use for pokes, e.g. dm01disp06.");
     config.add("pokecen.pokeX", "", "pokecen.pokeX", argType::Required, "pokecen", "pokeX", false, "vector<int>", "The x-coordinates of the actuators to poke. ");
@@ -467,10 +474,14 @@ int dmPokeWFS<derivedT>::setupConfig(mx::app::appConfigurator & config)
 template<class derivedT>
 int dmPokeWFS<derivedT>::loadConfig( mx::app::appConfigurator & config)
 {
+    // This block handles an error from shmimMonitor<>::loadConfig().
+    // That function always returns 0, so the error branch cannot run.
+    // LCOV_EXCL_START
     if(derived().shmimMonitor().loadConfig(config) < 0)
     {
         return derivedT::template log<software_error, -1>({__FILE__, __LINE__, "shmimMonitorT::loadConfig"});
     }
+    // LCOV_EXCL_STOP
 
     m_wfsCamDevName = derived().shmimMonitor().shmimName();
     config(m_wfsCamDevName, "wfscam.camDevName");
@@ -486,10 +497,12 @@ int dmPokeWFS<derivedT>::loadConfig( mx::app::appConfigurator & config)
     m_imageSemWait_sec = floor(m_imageSemWait);
     m_imageSemWait_nsec = (m_imageSemWait - m_imageSemWait_sec) * 1e9;
 
+    // LCOV_EXCL_START: same reason as the shmimMonitor loadConfig() check above. The callee always returns 0.
     if(derived().darkShmimMonitor().loadConfig(config) < 0)
     {
         return derivedT::template log<software_error, -1>({__FILE__, __LINE__, "darkShmimMonitorT::loadConfig"});
     }
+    // LCOV_EXCL_STOP
 
     config(m_dmChan, "pokecen.dmChannel");
 
@@ -516,15 +529,24 @@ int dmPokeWFS<derivedT>::loadConfig( mx::app::appConfigurator & config)
 template<class derivedT>
 int dmPokeWFS<derivedT>::appStartup()
 {
+    // These two blocks handle an error from shmimMonitor<>::appStartup().
+    // That function fails only if registerIndiPropertyNew() or threadStart() fails.
+    // Under the MagAOXApp<false> harness registerIndiPropertyNew() always returns success.
+    // Forcing threadStart() to fail requires lowering RLIMIT_NPROC, which is not safe here.
+    // See the threadStart() test in MagAOXApp.hpp.
+    // LCOV_EXCL_START
     if( derived().shmimMonitor().appStartup() < 0)
     {
         return derivedT::template log<software_error, -1>({__FILE__,__LINE__});
     }
+    // LCOV_EXCL_STOP
 
+    // LCOV_EXCL_START: same reason as the shmimMonitor appStartup() check above.
     if( derived().darkShmimMonitor().appStartup() < 0)
     {
         return derivedT::template log<software_error, -1>({__FILE__,__LINE__});
     }
+    // LCOV_EXCL_STOP
 
     CREATE_REG_INDI_NEW_NUMBERF_DERIVED(m_indiP_poke_amp, "poke_amp", -1, 1, 1e-1, "%0.01f", "", "");
     m_indiP_poke_amp["current"].setValue(m_poke_amp);
@@ -551,20 +573,34 @@ int dmPokeWFS<derivedT>::appStartup()
     m_indiP_measurement.add({"delta_y", 0.0});
     m_indiP_measurement.add({"counter", 0});
 
+    // These two blocks handle a failure of sem_init().
+    // sem_init() fails only with EINVAL, ENFILE, or ENOMEM.
+    // EINVAL needs a bad pshared or value argument. Both are fixed and valid here.
+    // ENFILE and ENOMEM need the system to run out of semaphores or memory.
+    // A test cannot force that without exhausting shared system resources.
+    // LCOV_EXCL_START
     if(sem_init(&m_wfsSemaphore, 0,0) < 0)
     {
         return derivedT::template log<software_critical, -1>({__FILE__, __LINE__, errno,0, "Initializing wfs semaphore"});
     }
+    // LCOV_EXCL_STOP
 
+    // LCOV_EXCL_START: same reason as the wfs semaphore sem_init() check above.
     if(sem_init(&m_imageSemaphore, 0,0) < 0)
     {
         return derivedT::template log<software_critical, -1>({__FILE__, __LINE__, errno,0, "Initializing image semaphore"});
     }
+    // LCOV_EXCL_STOP
 
+    // This block handles a failure to start the wfs thread.
+    // Forcing threadStart() to fail requires lowering RLIMIT_NPROC to block thread creation.
+    // That is not safe in this test environment. See the threadStart() test in MagAOXApp.hpp.
+    // LCOV_EXCL_START
     if(derived().template threadStart( m_wfsThread, m_wfsThreadInit, m_wfsThreadID, m_wfsThreadProp, m_wfsThreadPrio, m_wfsCpuset, "wfs", this, wfsThreadStart)  < 0)
     {
         return derivedT::template log<software_critical,-1>({__FILE__, __LINE__});
     }
+    // LCOV_EXCL_STOP
 
     return 0;
 }
@@ -593,11 +629,17 @@ int dmPokeWFS<derivedT>::appLogic()
             return -1;
         }
     }
+    // This catch handles a throw from the try block above.
+    // pthread_tryjoin_np() is a C function and cannot throw.
+    // native_handle() does not throw on a joinable std::thread.
+    // So the catch can only run if the thread object is corrupted.
+    // LCOV_EXCL_START
     catch(...)
     {
         derivedT::template log<software_error>({__FILE__, __LINE__, "WFS thread has exited"});
         return -1;
     }
+    // LCOV_EXCL_STOP
 
     if(m_measuring > 0)
     {
@@ -635,15 +677,21 @@ int dmPokeWFS<derivedT>::appLogic()
 template<class derivedT>
 int dmPokeWFS<derivedT>::appShutdown()
 {
+    // This block handles an error from shmimMonitor<>::appShutdown().
+    // That function always returns 0, so the error branch cannot run.
+    // LCOV_EXCL_START
     if(derived().shmimMonitor().appShutdown() < 0)
     {
         derivedT::template log<software_error>({__FILE__, __LINE__, "error from shmimMonitorT::appShutdown"});
     }
+    // LCOV_EXCL_STOP
 
+    // LCOV_EXCL_START: same reason as the shmimMonitor appShutdown() check above.
     if(derived().darkShmimMonitor().appShutdown() < 0)
     {
         derivedT::template log<software_error>({__FILE__, __LINE__, "error from darkShmimMonitorT::appShutdown"});
     }
+    // LCOV_EXCL_STOP
 
     if (m_wfsThread.joinable())
     {
@@ -652,9 +700,11 @@ int dmPokeWFS<derivedT>::appShutdown()
         {
             m_wfsThread.join(); // this will throw if it was already joined
         }
+        // LCOV_EXCL_START: join() throws only if the thread was already joined. Forcing that needs a race against the real thread, which is not practical in a test.
         catch (...)
         {
         }
+        // LCOV_EXCL_STOP
     }
 
     return 0;
@@ -734,10 +784,17 @@ int dmPokeWFS<derivedT>::processImage( void * curr_src,
         }
     }
 
+    // This block handles a failure of sem_post().
+    // sem_post() fails only with EINVAL or EOVERFLOW.
+    // EINVAL needs an invalid semaphore. This semaphore is valid.
+    // EOVERFLOW needs the count to reach SEM_VALUE_MAX.
+    // This semaphore is always paired with a wait that lowers the count, so that cannot happen.
+    // LCOV_EXCL_START
     if(sem_post(&m_imageSemaphore) < 0)
     {
         return derivedT::template log<software_critical, -1>({__FILE__, __LINE__, errno, 0, "Error posting to semaphore"});
     }
+    // LCOV_EXCL_STOP
 
     return 0;
 }
@@ -963,25 +1020,38 @@ int dmPokeWFS<derivedT>::basicRunSensor()
 
         rv = basicTimedPoke(+1);
 
+        // This block handles an error from basicTimedPoke().
+        // basicTimedPoke() returns a negative value only when clock_gettime() fails.
+        // See XWC_SEM_WAIT_TS_DERIVED. clock_gettime() does not fail in practice.
+        // LCOV_EXCL_START
         if(rv < 0)
         {
             derivedT::template log<software_error>({__FILE__, __LINE__});
             return rv;
         }
+        // LCOV_EXCL_STOP
         else if (rv > 0) // shutdown
         {
             return rv;
         }
 
+        // This check stops the loop if a stop or shutdown was requested.
+        // basicTimedPoke() checks the same flags before it returns.
+        // If either flag is set it returns 1, which the branch above handles.
+        // Reaching this check with rv equal to 0 and a flag set needs the flag to change
+        // between that internal check and the return. A test cannot force that timing.
+        // LCOV_EXCL_START
         if(m_stopMeasurement || derived().m_shutdown)
         {
             break;
         }
+        // LCOV_EXCL_STOP
 
         //************** NEGATIVE POKE **********************/
 
         rv = basicTimedPoke(-1);
 
+        // LCOV_EXCL_START: same reason as the error check after the positive poke above.
         if(rv < 0)
         {
             derivedT::template log<software_error>({__FILE__, __LINE__});
@@ -991,13 +1061,22 @@ int dmPokeWFS<derivedT>::basicRunSensor()
         {
             return rv;
         }
+        // LCOV_EXCL_STOP
 
+        // LCOV_EXCL_START: same reason as the stop check after the positive poke above.
         if(m_stopMeasurement || derived().m_shutdown)
         {
             break;
         }
+        // LCOV_EXCL_STOP
     }
 
+    // This catch handles a throw from the assignment in the try block.
+    // The assignment writes to the Eigen Map held by the milkImage.
+    // This build defines no custom eigen_assert, so a shape mismatch aborts through
+    // the standard assert instead of throwing.
+    // A test cannot reach the catch without crashing the test process.
+    // LCOV_EXCL_START
     try
     {
         m_pokeImage = m_pokeLocal/(2.0*m_nPokeImages*m_nPokeAverage);
@@ -1006,6 +1085,7 @@ int dmPokeWFS<derivedT>::basicRunSensor()
     {
         return derivedT::template log<software_error,-1>({__FILE__, __LINE__, e.what()});
     }
+    // LCOV_EXCL_STOP
 
 
 
@@ -1110,10 +1190,12 @@ INDI_NEWCALLBACK_DEFN( dmPokeWFS<derivedT>, m_indiP_single )(const pcf::IndiProp
         {
             m_continuous = 0;
             m_single = 1;
+            // LCOV_EXCL_START: sem_post() cannot fail on this valid semaphore. See the note in processImage().
             if(sem_post(&m_wfsSemaphore) < 0)
             {
                 return derivedT::template log<software_critical, -1>({__FILE__, __LINE__, errno, 0, "Error posting to semaphore"});
             }
+            // LCOV_EXCL_STOP
         }
     }
 
@@ -1136,10 +1218,12 @@ INDI_NEWCALLBACK_DEFN( dmPokeWFS<derivedT>, m_indiP_continuous )(const pcf::Indi
         {
             m_continuous = 1;
             m_single = 0;
+            // LCOV_EXCL_START: sem_post() cannot fail on this valid semaphore. See the note in processImage().
             if(sem_post(&m_wfsSemaphore) < 0)
             {
                 return derivedT::template log<software_critical, -1>({__FILE__, __LINE__, errno, 0, "Error posting to semaphore"});
             }
+            // LCOV_EXCL_STOP
         }
     }
     else if( ipRecv["toggle"].getSwitchState() == pcf::IndiElement::Off )

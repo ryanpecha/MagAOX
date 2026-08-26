@@ -71,7 +71,7 @@ struct telem_psfacq : public flatbuffer_log
       msg += "seeing: " + std::to_string( fbs->seeing() ) + " ";
 
       return msg;
-   }
+   } // LCOV_EXCL_LINE gcov reports this closing brace as a separate line that only runs during exception cleanup
 
    /// Get the one-based star index.
    static int star_no( void *msgBuffer )
