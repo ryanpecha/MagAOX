@@ -290,6 +290,11 @@ sed -i 's#all_clean COVERAGE=1 ALL_APPS=1$#all_clean COVERAGE=1 ALL_APPS=1 NO_GU
 > The logger patch is in the source tree on the volume, so it survives `docker rm`. lcov installs
 > into the container layer (`/usr/local/bin`) — **re-run the lcov install after a `docker rm` +
 > recreate.**
+>
+> ⚠ Both seds patch **tracked files**, so any git operation that rewrites them (merge, checkout,
+> restore, pull) silently reverts the patches — `make_coverage` then dies in `coverage_clean` with
+> *"No qmake found on PATH"*. Check with `grep NO_GUIS=1 Makefile` and re-run the sed if it's gone.
+> Don't commit the patched Makefile — the MR deliberately leaves it untouched.
 
 ### 9.2 Full-repo coverage (matches CI)
 
