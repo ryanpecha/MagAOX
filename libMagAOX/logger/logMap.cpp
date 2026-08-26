@@ -7,6 +7,7 @@
  */
 
 #include "logMap.hpp"
+#include "tests/testMacros.hpp"
 
 #include <sys/stat.h>
 #include <fcntl.h>
@@ -23,6 +24,15 @@ namespace MagAOX
 {
 namespace logger
 {
+
+// Test-only: when XWCTEST_NAMESPACE is defined, a test translation unit compiles a second
+// copy of this file inside that namespace with one of the XWCTEST_* fault macros below
+// enabled, so real error-handling branches execute and are counted against these same
+// source lines. Production builds never define these macros.
+#ifdef XWCTEST_NAMESPACE
+namespace XWCTEST_NAMESPACE
+{
+#endif
 
 int logInMemory::loadFile( file::stdFileName<verboseT> const &lfn )
 {
@@ -43,6 +53,8 @@ int logInMemory::loadFile( file::stdFileName<verboseT> const &lfn )
     ssize_t nrd = read( fd, memory.data(), memory.size() );
 
     close( fd );
+
+    XWCTEST_IF_LOGINMEMORY_LOADFILE_SHORTREAD( nrd = 0 );
 
     if( nrd != fsz )
     {
@@ -216,7 +228,13 @@ size_t logInMemory::sourceOffset( char *log ) const
     return std::numeric_limits<size_t>::max();
 }
 
+#ifdef XWCTEST_NAMESPACE
+} // namespace XWCTEST_NAMESPACE
+#endif
+
+#ifndef XWCTEST_NAMESPACE
 template class logMap<XWC_DEFAULT_VERBOSITY>;
+#endif
 
 } // namespace logger
 } // namespace MagAOX

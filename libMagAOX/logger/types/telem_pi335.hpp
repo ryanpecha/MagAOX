@@ -96,7 +96,7 @@ struct telem_pi335 : public flatbuffer_log
         msg += std::to_string(fbs->sva3());
 
         return msg;
-    }
+    } // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
 
     static float pos1Set(void *msgBuffer)
     {

@@ -78,7 +78,7 @@ struct telem_dmmodes : public flatbuffer_log
 
       return msg;
 
-   }
+   } // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
 
    static std::vector<float> amps( void * msgBuffer )
    {
@@ -94,7 +94,7 @@ struct telem_dmmodes : public flatbuffer_log
       }
 
       return amps;
-   }
+   } // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
 
    /// Get the logMetaDetail for a member by name
    /**

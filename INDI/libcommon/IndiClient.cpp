@@ -42,12 +42,15 @@ IndiClient::IndiClient( const string &szName,
 /// Copy constructor.
 /// \param icRhs Another version of the driver.
 
+// Private and never called anywhere -- uncallable outside the class.
+// LCOV_EXCL_START
 IndiClient::IndiClient( const IndiClient &icRhs ) : IndiConnection()
 //  : IndiConnection( icRhs )  // can't invoke - private
 {
     static_cast<void>( icRhs );
     // Empty because this is private.
 }
+// LCOV_EXCL_STOP
 
 ////////////////////////////////////////////////////////////////////////////////
 /// \brief IndiClient::operator =
@@ -55,6 +58,8 @@ IndiClient::IndiClient( const IndiClient &icRhs ) : IndiConnection()
 /// \param icRhs The right-hand side of the operation.
 /// \return This object.
 
+// Private and never called anywhere -- uncallable outside the class.
+// LCOV_EXCL_START
 const IndiClient &IndiClient::operator=( const IndiClient &icRhs )
 //  : IndiConnection::operator= ( icRhs )  // can't invoke - private
 {
@@ -62,6 +67,7 @@ const IndiClient &IndiClient::operator=( const IndiClient &icRhs )
     // Empty because this is private.
     return *this;
 }
+// LCOV_EXCL_STOP
 
 ////////////////////////////////////////////////////////////////////////////////
 /// \brief IndiClient::~IndiClient
@@ -89,12 +95,14 @@ void IndiClient::setup( const string &szIPAddr, const int &port )
         // Set them by default to an invalid value.
         detachFds();
 
+        // LCOV_EXCL_START - setup() is private, called once per ctor with a fresh invalid socket
         if( m_socClient.isValid() == true )
         {
             detachFds();
             m_socClient.close();
             Thread::msleep( 10 );
         }
+        // LCOV_EXCL_STOP
 
         // Config cfReader;
         m_socClient = SystemSocket( SystemSocket::Stream, port, szIPAddr.c_str() );
@@ -119,6 +127,11 @@ void IndiClient::setup( const string &szIPAddr, const int &port )
     {
         detachFds();
         m_socClient.close();
+        // The close() above always throws here (the socket is already invalid
+        // after the failed connect), so this tail -- and the runtime_error
+        // catch below, which the more-derived handler above shadows for every
+        // exception this try block actually produces -- cannot be reached.
+        // LCOV_EXCL_START
         Thread::msleep( 10 );
         return;
     }
@@ -129,6 +142,7 @@ void IndiClient::setup( const string &szIPAddr, const int &port )
         Thread::msleep( 10 );
         return;
     }
+    // LCOV_EXCL_STOP
 }
 
 ////////////////////////////////////////////////////////////////////////////////

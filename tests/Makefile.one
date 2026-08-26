@@ -34,7 +34,7 @@ BASENAME=$(basename $(TARGET))
 PATHNAME=$(dir $(TARGET))
 OBJNAME = $(PATHNAME)$(notdir $(BASENAME)).o
 TESTNAME = $(PATHNAME)$(notdir $(BASENAME))
-EDT_TESTS = ocam2KCtrl_test ocam2KCtrl_lifecycle_test cred2Ctrl_test cred2Ctrl_lifecycle_test
+EDT_TESTS = ocam2KCtrl_test ocam2KCtrl_lifecycle_test cred2Ctrl_test cred2Ctrl_lifecycle_test edtCamera_test
 
 # add extra libraries for special cases
 
@@ -43,6 +43,9 @@ ifeq ($(notdir $(TESTNAME)),cursesINDI_test)
 	LDLIBS += -lncurses
 else ifeq ($(notdir $(TESTNAME)),logdump_test)
 	LDLIBS = -lmxlib -lflatbuffers
+else ifeq ($(notdir $(TESTNAME)),logTypes_test)
+	# exercises logJsonFormat/msgJSON, whose schema reflection lives in libflatbuffers
+	LDLIBS += -lflatbuffers
 else ifeq ($(notdir $(TESTNAME)),logstream_test)
 	LDLIBS = -lmxlib -lflatbuffers
 else ifeq ($(notdir $(TESTNAME)),logsurgeon_test)
@@ -110,8 +113,10 @@ pcommand:
 	@echo "Command to run test: " $(TESTNAME)
 
 .PHONY: magaox_git_version.h
+# Generate to a unique temp file and mv atomically: parallel per-test builds each
+# regenerate this header and previously raced, corrupting it mid-compile.
 magaox_git_version.h:
-	@gengithead.sh $(abspath $(SELF_DIR)/../) $(SELF_DIR)/../magaox_git_version.h MAGAOX
+	@gengithead.sh $(abspath $(SELF_DIR)/../) $(SELF_DIR)/../magaox_git_version.h.tmp.$$$$ MAGAOX && mv -f $(SELF_DIR)/../magaox_git_version.h.tmp.$$$$ $(SELF_DIR)/../magaox_git_version.h
 
 .PHONY: clean
 clean:

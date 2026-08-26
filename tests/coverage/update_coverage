@@ -65,20 +65,32 @@ else
     fi
 fi
 
-lcov --directory . --capture --output-file coverage.info
+# -j: lcov 2.x parallel capture. The ignore-errors are for lcov 2.x strictness:
+# 'inconsistent' tolerates gcc gcno/gcda oddities (e.g. templates) that would
+# otherwise abort the whole capture; 'path' tolerates relative-vs-absolute
+# source path mismatches in the gcno records.
+lcov --directory . --capture -j $(nproc) --output-file coverage.info \
+         --ignore-errors inconsistent,inconsistent \
+         --ignore-errors path
 
-lcov --remove coverage.info "*/tests/*" "/usr/*" "/sys/*" "/tty/*" \
+# Only test code and system headers are excluded. ("/sys/*" and "/tty/*" must NOT
+# be listed here: lcov treats them as substring globs, so they would also remove
+# the production sources libMagAOX/sys/ and libMagAOX/tty/ from the report.)
+lcov --remove coverage.info "*/tests/*" "/usr/*" \
          --ignore-errors unused,unused \
          --ignore-errors inconsistent,inconsistent \
          --ignore-errors path \
          --output-file coverage_filtered.info
 
-genhtml coverage_filtered.info --output-directory coverage_report \
+# --filter brace,blank (in addition to function): discounts gcov's spurious
+# records on brace-only and blank lines (e.g. exception-cleanup epilogues on
+# closing braces) instead of requiring an LCOV_EXCL marker on each.
+genhtml coverage_filtered.info -j $(nproc) --output-directory coverage_report \
                                --title "MagAOX" \
                                --hierarchical \
                                --merge-aliases \
                                --suppress-aliases \
-                               --filter function \
+                               --filter function,brace,blank \
                                --prefix "$repo_root" \
                                --demangle-cpp \
                                --css-file tests/coverage/gcov.css

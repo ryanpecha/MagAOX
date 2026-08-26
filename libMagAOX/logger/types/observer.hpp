@@ -91,8 +91,10 @@ struct observer : public flatbuffer_log
       if(fbs->email())
       {
          msg += fbs->email()->c_str();
+         // institution is a required std::string in the only messageT constructor, so
+         // builder.CreateString() always creates it -- institution() is never nullptr.
          if(fbs->institution()) msg += ", ";
-         else msg += " ";
+         else msg += " "; // LCOV_EXCL_LINE
       }
 
       if(fbs->institution())
@@ -102,7 +104,7 @@ struct observer : public flatbuffer_log
 
       return msg;
 
-   }
+   } // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
 
    /// Get an empty logMetaDetail because meta data doesn't make sense for this log
    /**

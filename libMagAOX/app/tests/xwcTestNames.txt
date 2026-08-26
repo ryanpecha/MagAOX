@@ -1,0 +1,22 @@
+# XWCTEST_* fault-injection names used by libMagAOX/app production headers, consumed by
+# tests/genTestMacros.py to generate testMacros.hpp. One name per line; '#' comments and
+# blank lines are ignored. See xwctest-macro-coverage-strategy.md for the conversion.
+#
+# Sites intentionally NOT listed here (left as raw #ifdef/#endif blocks) -- see the
+# conversion report for details:
+#   XWCTEST_MAGAOXAPP_EXEC_NORM's testTimesThrough declaration + braced-if check sites
+#     (declaration/statement-with-control-flow shape, doesn't fit a single wrapped expression)
+#   XWCTEST_MAGAOXAPP_EXEC_LOG_DEATH (multi-line block with its own loop)
+#   XWCTEST_MAGAOXAPP_SIGTERMH_ERR and XWCTEST_MAGAOXAPP_PID_UNLOCK_ERR (bare `return -1;`,
+#     not an expression that can be wrapped in parens)
+#   XWCTEST_MAGAOXAPP_SIGTERMH_SIGTERM/SIGQUIT/SIGINT (redefine standard signal macros, not
+#     statement injection)
+
+# MagAOXApp.hpp (execute())
+XWCTEST_MAGAOXAPP_EXEC_WRONG_USER
+XWCTEST_MAGAOXAPP_EXEC_LOG_START
+XWCTEST_MAGAOXAPP_EXEC_NORM
+
+# MagAOXApp.hpp (lockPID()/unlockPID())
+XWCTEST_MAGAOXAPP_PID_LOCKED
+XWCTEST_MAGAOXAPP_PID_WRITE_FAIL

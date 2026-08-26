@@ -95,7 +95,7 @@ struct telem_telsee : public flatbuffer_log
       msg += std::to_string(fbs->mag2_fwhm_corr()) + "] ";
       return msg;
 
-   }
+   } // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
 
     static int dimm_time( void * msgBuffer  /**< [in] Buffer containing the flatbuffer serialized message.*/ )
     {

@@ -79,7 +79,7 @@ struct telem_coretemps : public flatbuffer_log
 
       return msg;
 
-   }
+   } // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
 
    /// Get the logMetaDetail for a member by name
    /**

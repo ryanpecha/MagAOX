@@ -66,8 +66,10 @@ struct outlet_channel_state : public flatbuffer_log
       std::stringstream s;
       s << "Channel: ";
 
+      // channel is a required std::string in the only messageT constructor, so
+      // builder.CreateString() always creates it -- channel() is never nullptr.
       if(rgs->channel() != nullptr) s << rgs->channel()->c_str() << " ";
-      else s << "????" << " ";
+      else s << "????" << " "; // LCOV_EXCL_LINE
 
       if(rgs->state()==2)
       {

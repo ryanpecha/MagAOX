@@ -55,7 +55,7 @@ struct telem_pokecenter : public flatbuffer_log
             auto fb = CreateTelem_pokecenter_fb( builder, measuring, pupil_x, pupil_y, _poke_xs, _poke_ys );
 
             builder.Finish( fb );
-        }
+        } // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
 
         /// Construct from components with single vector for pokes
         messageT( const uint8_t            &measuring, ///<[in] whether or not measurements are in progress
@@ -157,13 +157,18 @@ struct telem_pokecenter : public flatbuffer_log
                 msg += " [poke-avg] ? [pokes] ?";
             }
         }
+        // poke_x/poke_y are always created (both messageT constructors always call
+        // builder.CreateVector() for them, even given an empty input vector), so this
+        // branch (either one entirely absent) is unreachable via the public API.
+        // LCOV_EXCL_START
         else
         {
             msg += " [poke-avg] ? [pokes] ?";
         }
+        // LCOV_EXCL_STOP
 
         return msg;
-    }
+    } // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
 
     static bool measuring( void *msgBuffer /**< [in] Buffer containing the flatbuffer serialized message.*/ )
     {
@@ -197,7 +202,7 @@ struct telem_pokecenter : public flatbuffer_log
             }
         }
         return p;
-    }
+    } // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
 
     static std::vector<float> poke_y( void *msgBuffer /**< [in] Buffer containing the flatbuffer serialized message.*/ )
     {
@@ -213,7 +218,7 @@ struct telem_pokecenter : public flatbuffer_log
             }
         }
         return p;
-    }
+    } // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
 
     /// Get the logMetaDetail for a member by name
     /**

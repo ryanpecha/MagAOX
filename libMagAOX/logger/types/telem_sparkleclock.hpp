@@ -25,7 +25,9 @@ namespace logger
 struct telem_sparkleclock : public flatbuffer_log
 {
    ///The event code
-   static const flatlogs::eventCodeT eventCode = eventCodes::TELEM_DMSPECK;
+   // (Previously TELEM_DMSPECK -- a copy-paste error that made every sparkle-clock
+   // log identify itself as a DM-speck log in the binary stream.)
+   static const flatlogs::eventCodeT eventCode = eventCodes::TELEM_SPARKLECLOCK;
 
    ///The default level
    static const flatlogs::logPrioT defaultLevel = flatlogs::logPrio::LOG_TELEM;
@@ -94,10 +96,15 @@ struct telem_sparkleclock : public flatbuffer_log
       }
 
       msg += "seps: ";
-      for(flatbuffers::Vector<float>::const_iterator it = fbs->separations()->begin(); it != fbs->separations()->end(); ++it)
+      // separations is not a required field, so a deserialized message can lack it
+      // entirely -- iterating without this null check dereferences NULL.
+      if(fbs->separations() != nullptr)
       {
-         msg+= std::to_string(*it);
-         msg+= " ";
+         for(flatbuffers::Vector<float>::const_iterator it = fbs->separations()->begin(); it != fbs->separations()->end(); ++it)
+         {
+            msg+= std::to_string(*it);
+            msg+= " ";
+         }
       }
       msg += "angle offset: ";
       msg += std::to_string(fbs->angleOffset());
@@ -106,7 +113,7 @@ struct telem_sparkleclock : public flatbuffer_log
 
       return msg;
 
-   }
+   } // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
 
    static bool modulating( void * msgBuffer )
    {
@@ -138,7 +145,7 @@ struct telem_sparkleclock : public flatbuffer_log
       }
 
       return v;
-   }
+   } // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
 
    static float angleOffset( void * msgBuffer )
    {

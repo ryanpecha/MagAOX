@@ -52,7 +52,7 @@ struct telem_pokeloop : public flatbuffer_log
             auto fb = CreateTelem_pokeloop_fb(builder, measuring, deltaX, deltaY, counter);
 
             builder.Finish(fb);
-        }
+        } // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
     };
 
     static bool verify( flatlogs::bufferPtrT &logBuff, ///< [in] Buffer containing the flatbuffer serialized message.
@@ -90,7 +90,7 @@ struct telem_pokeloop : public flatbuffer_log
         }
 
         return msg;
-    }
+    } // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
 
     static bool measuring( void * msgBuffer /**< [in] Buffer containing the flatbuffer serialized message.*/ )
     {

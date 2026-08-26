@@ -29,11 +29,21 @@ using namespace flatlogs;
 
 #include "generated/logTypes.hpp"
 #include "generated/logStdFormat.hpp"
+#include "tests/testMacros.hpp"
 
 namespace MagAOX
 {
 namespace logger
 {
+
+// Test-only: when XWCTEST_NAMESPACE is defined, a test translation unit compiles a second
+// copy of this file inside that namespace with one of the XWCTEST_* fault macros below
+// enabled, so real error-handling branches execute and are counted against these same
+// source lines. Production builds never define these macros.
+#ifdef XWCTEST_NAMESPACE
+namespace XWCTEST_NAMESPACE
+{
+#endif
 
 /// The standard MagAOX log manager, used for both process logs and telemetry streams.
 /** Manages the formatting and queueing of the log entries.
@@ -425,7 +435,16 @@ int logManager<parentT, logFileT>::logThreadStart()
 {
    try
    {
-      m_logThread = std::thread( _logThreadStart, this);
+      XWCTEST_IF_LOGMANAGER_LOGTHREADSTART_STD_EXCEPTION( throw std::runtime_error( "XWCTEST" ) );
+      XWCTEST_IF_LOGMANAGER_LOGTHREADSTART_UNKNOWN_EXCEPTION( throw 42 );
+
+      // NOT_JOINABLE skips the construction entirely, leaving the default-constructed
+      // (non-joinable) thread so the joinable() check below genuinely fails. This shape
+      // (suppressing a real statement rather than injecting one) doesn't fit the
+      // XWCTEST_IF_ macro pattern, so it stays a raw #ifndef block.
+      #ifndef XWCTEST_LOGMANAGER_LOGTHREADSTART_NOT_JOINABLE
+          m_logThread = std::thread( _logThreadStart, this);
+      #endif
    }
    catch( const std::exception & e )
    {
@@ -613,6 +632,10 @@ void logManager<parentT, logFileT>::log( timespecX & ts,
 //class logFileRaw;
 
 //extern template struct logManager<logFileRaw>;
+
+#ifdef XWCTEST_NAMESPACE
+} // namespace XWCTEST_NAMESPACE
+#endif
 
 } //namespace logger
 } //namespace MagAOX

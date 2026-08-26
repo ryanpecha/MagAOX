@@ -134,7 +134,7 @@ string IndiElement::createString() const
   ssOutput << "{ "
            << "\"name\" : \"" << m_szName << "\" , "
            << "\"value\" : \"" << m_szValue << "\" , "
-           << "\"lightstate\" : \"" << getLightStateString( m_lsValue ) << "\" , "
+           << "\"lightstate\" : \"" << getLightStateString( m_lsValue ) << "\" , " // LCOV_EXCL_LINE -- demonstrably executes (output asserted in tests); gcov attributes only the string temporary's EH-cleanup block to this line of the stream chain
            << "\"switchstate\" : \"" << getSwitchStateString( m_ssValue ) << "\" , "
            << "\"label\" : \"" << m_szLabel << "\" , "
            << "\"format\" : \"" << m_szFormat << "\" , "
@@ -666,7 +666,7 @@ string IndiElement::getLightStateString( const LightStateType &tType )
   }
 
   return szType;
-}
+} // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Returns the enumerated type given the string type.
@@ -704,7 +704,7 @@ string IndiElement::getSwitchStateString( const SwitchStateType &tType )
   }
 
   return szType;
-}
+} // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Returns the string type given the enumerated type.
@@ -755,7 +755,7 @@ string IndiElement::convertTypeToString( const Type &tType )
   }
 
   return szType;
-}
+} // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Returns the enumerated type given the tag.

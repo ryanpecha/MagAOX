@@ -111,11 +111,17 @@ struct timespecX
 
       time_t t0 = time_s;
 
+      // Unreachable via the test surface: time_s is a secT (uint32_t), whose entire range
+      // (up to year ~2106) is far within what glibc's gmtime_r can represent, so this
+      // defensive check can never actually fail -- consistent with the sibling
+      // ISO8601DateTimeStrX()/secondStrX()/minute() calls below, which don't check at all.
+      // LCOV_EXCL_START
       if(gmtime_r(&t0, &uttime) == 0)
       {
          std::cerr << "Error getting UT time (gmtime_r returned 0). At: " <<  __FILE__ << " " << __LINE__ << "\n";
          return -1;
       }
+      // LCOV_EXCL_STOP
 
       char buffer[48];
 

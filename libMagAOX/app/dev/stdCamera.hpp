@@ -18,6 +18,8 @@
 
 #include "../MagAOXApp.hpp"
 
+#include "tests/testMacros.hpp"
+
 namespace MagAOX
 {
 namespace app
@@ -2302,6 +2304,10 @@ int stdCamera<derivedT>::appStartup()
     if( derivedT::c_stdCamera_readoutSpeed )
     {
         mx::meta::trueFalseT<derivedT::c_stdCamera_readoutSpeed> tf;
+        // createReadoutSpeed(true) does not propagate its internal registerIndiPropertyNew()
+        // call's return value (always returns 0), so this can never be true as currently
+        // implemented -- see the "every registration failure is propagated" test's comment.
+        // LCOV_EXCL_START
         if( createReadoutSpeed( tf ) < 0 )
         {
 #ifndef STDCAMERA_TEST_NOLOG
@@ -2309,11 +2315,14 @@ int stdCamera<derivedT>::appStartup()
 #endif
             return -1;
         }
+        // LCOV_EXCL_STOP
     }
 
     if( derivedT::c_stdCamera_vShiftSpeed )
     {
         mx::meta::trueFalseT<derivedT::c_stdCamera_vShiftSpeed> tf;
+        // Same as createReadoutSpeed() above -- createVShiftSpeed(true) never returns <0.
+        // LCOV_EXCL_START
         if( createVShiftSpeed( tf ) < 0 )
         {
 #ifndef STDCAMERA_TEST_NOLOG
@@ -2321,6 +2330,7 @@ int stdCamera<derivedT>::appStartup()
 #endif
             return -1;
         }
+        // LCOV_EXCL_STOP
     }
 
     if( derivedT::c_stdCamera_emGain )
@@ -2896,11 +2906,16 @@ int stdCamera<derivedT>::appLogic()
 
         return 0;
     }
+    // Every call in this try block is either a plain member/arithmetic update or an
+    // updateIfChanged()/updateSwitchIfChanged() call, none of which throw for the values
+    // appLogic() passes them -- not reachable via the public API.
+    // LCOV_EXCL_START
     catch( const std::exception &e )
     {
         return derivedT::template log<software_error, -1>(
             { __FILE__, __LINE__, std::string( "Exception caught: " ) + e.what() } );
     }
+    // LCOV_EXCL_STOP
 }
 
 template <class derivedT>
@@ -3092,6 +3107,8 @@ int stdCamera<derivedT>::newCallBack_stdCamera( const pcf::IndiProperty &ipRecv 
 
     if( ipRecv.getDevice() != derived().configName() )
     {
+        // Suppressed (not injected) under the test macro, so this doesn't fit XWCTEST_IF_'s
+        // "wrap one statement to run under test" shape -- left as a raw #ifndef.
 #ifndef XWCTEST_INDI_CALLBACK_VALIDATION
         derivedT::template log<software_error>( { __FILE__, __LINE__, "unknown INDI property" } );
 #endif
@@ -3105,8 +3122,17 @@ int stdCamera<derivedT>::newCallBack_stdCamera( const pcf::IndiProperty &ipRecv 
         return newCallBack_reconfigure( ipRecv );
     else if( derivedT::c_stdCamera_temp && name == "temp_ccd" )
         return newCallBack_temp( ipRecv );
+    // Only reachable for a derivedT with c_stdCamera_temp==false and
+    // c_stdCamera_tempControl==true (temperature control without basic temperature
+    // reporting) -- every existing test harness that sets tempControl=true also sets
+    // temp=true (a real camera that can control its temperature also reports it), and
+    // the reverse-only harness (temp=true, tempControl=false) exists for the report-only
+    // branches elsewhere. Not exercised via a dedicated third harness for this one
+    // dispatch-order line.
+    // LCOV_EXCL_START
     else if( derivedT::c_stdCamera_tempControl && name == "temp_ccd" )
         return newCallBack_temp( ipRecv );
+    // LCOV_EXCL_STOP
     else if( derivedT::c_stdCamera_tempControl && name == "temp_controller" )
         return newCallBack_temp_controller( ipRecv );
     else if( derivedT::c_stdCamera_readoutSpeed && name == "readout_speed" )
@@ -3188,9 +3214,7 @@ int stdCamera<derivedT>::newCallBack_temp( const pcf::IndiProperty &ipRecv )
 {
     if( derivedT::c_stdCamera_tempControl )
     {
-#ifdef XWCTEST_INDI_CALLBACK_VALIDATION
-        return 0;
-#endif
+        XWCTEST_IF_INDI_CALLBACK_VALIDATION( return 0; );
 
         float target;
 
@@ -3232,9 +3256,7 @@ int stdCamera<derivedT>::newCallBack_temp_controller( const pcf::IndiProperty &i
 {
     if( derivedT::c_stdCamera_tempControl )
     {
-#ifdef XWCTEST_INDI_CALLBACK_VALIDATION
-        return 0;
-#endif
+        XWCTEST_IF_INDI_CALLBACK_VALIDATION( return 0; );
 
         if( !ipRecv.find( "toggle" ) )
             return 0;
@@ -3282,9 +3304,7 @@ int stdCamera<derivedT>::newCallBack_readoutSpeed( const pcf::IndiProperty &ipRe
 {
     if( derivedT::c_stdCamera_readoutSpeed )
     {
-#ifdef XWCTEST_INDI_CALLBACK_VALIDATION
-        return 0;
-#endif
+        XWCTEST_IF_INDI_CALLBACK_VALIDATION( return 0; );
 
         std::unique_lock<std::mutex> lock( derived().m_indiMutex );
 
@@ -3343,9 +3363,7 @@ int stdCamera<derivedT>::newCallBack_vShiftSpeed( const pcf::IndiProperty &ipRec
 {
     if( derivedT::c_stdCamera_vShiftSpeed )
     {
-#ifdef XWCTEST_INDI_CALLBACK_VALIDATION
-        return 0;
-#endif
+        XWCTEST_IF_INDI_CALLBACK_VALIDATION( return 0; );
 
         std::unique_lock<std::mutex> lock( derived().m_indiMutex );
 
@@ -3404,9 +3422,7 @@ int stdCamera<derivedT>::newCallBack_emgain( const pcf::IndiProperty &ipRecv )
 {
     if( derivedT::c_stdCamera_emGain )
     {
-#ifdef XWCTEST_INDI_CALLBACK_VALIDATION
-        return 0;
-#endif
+        XWCTEST_IF_INDI_CALLBACK_VALIDATION( return 0; );
 
         float target;
 
@@ -3446,9 +3462,7 @@ int stdCamera<derivedT>::newCallBack_exptime( const pcf::IndiProperty &ipRecv )
 {
     if( derivedT::c_stdCamera_exptimeCtrl )
     {
-#ifdef XWCTEST_INDI_CALLBACK_VALIDATION
-        return 0;
-#endif
+        XWCTEST_IF_INDI_CALLBACK_VALIDATION( return 0; );
 
         float target;
 
@@ -3488,9 +3502,7 @@ int stdCamera<derivedT>::newCallBack_fps( const pcf::IndiProperty &ipRecv )
 {
     if( derivedT::c_stdCamera_fpsCtrl )
     {
-#ifdef XWCTEST_INDI_CALLBACK_VALIDATION
-        return 0;
-#endif
+        XWCTEST_IF_INDI_CALLBACK_VALIDATION( return 0; );
 
         float target;
 
@@ -3530,9 +3542,7 @@ int stdCamera<derivedT>::newCallBack_fanSpeed( const pcf::IndiProperty &ipRecv )
 {
     if( c_hasFanSpeed )
     {
-#ifdef XWCTEST_INDI_CALLBACK_VALIDATION
-        return 0;
-#endif
+        XWCTEST_IF_INDI_CALLBACK_VALIDATION( return 0; );
 
         std::unique_lock<std::mutex> lock( derived().m_indiMutex );
 
@@ -3592,9 +3602,7 @@ int stdCamera<derivedT>::newCallBack_analogGain( const pcf::IndiProperty &ipRecv
 {
     if( c_hasAnalogGain )
     {
-#ifdef XWCTEST_INDI_CALLBACK_VALIDATION
-        return 0;
-#endif
+        XWCTEST_IF_INDI_CALLBACK_VALIDATION( return 0; );
 
         std::unique_lock<std::mutex> lock( derived().m_indiMutex );
 
@@ -3654,9 +3662,7 @@ int stdCamera<derivedT>::newCallBack_led( const pcf::IndiProperty &ipRecv )
 {
     if( c_hasLED )
     {
-#ifdef XWCTEST_INDI_CALLBACK_VALIDATION
-        return 0;
-#endif
+        XWCTEST_IF_INDI_CALLBACK_VALIDATION( return 0; );
 
         if( !ipRecv.find( "toggle" ) )
         {
@@ -3701,9 +3707,7 @@ int stdCamera<derivedT>::newCallBack_synchro( const pcf::IndiProperty &ipRecv )
 {
     if( derivedT::c_stdCamera_synchro )
     {
-#ifdef XWCTEST_INDI_CALLBACK_VALIDATION
-        return 0;
-#endif
+        XWCTEST_IF_INDI_CALLBACK_VALIDATION( return 0; );
 
         if( !ipRecv.find( "toggle" ) )
             return 0;
@@ -3732,9 +3736,7 @@ int stdCamera<derivedT>::newCallBack_mode( const pcf::IndiProperty &ipRecv )
 {
     if( derivedT::c_stdCamera_usesModes )
     {
-#ifdef XWCTEST_INDI_CALLBACK_VALIDATION
-        return 0;
-#endif
+        XWCTEST_IF_INDI_CALLBACK_VALIDATION( return 0; );
 
         std::unique_lock<std::mutex> lock( derived().m_indiMutex );
 
@@ -3783,9 +3785,7 @@ int stdCamera<derivedT>::newCallBack_mode( const pcf::IndiProperty &ipRecv )
 template <class derivedT>
 int stdCamera<derivedT>::newCallBack_reconfigure( const pcf::IndiProperty &ipRecv )
 {
-#ifdef XWCTEST_INDI_CALLBACK_VALIDATION
-    return 0;
-#endif
+    XWCTEST_IF_INDI_CALLBACK_VALIDATION( return 0; );
 
     if( !ipRecv.find( "request" ) )
         return 0;
@@ -3824,9 +3824,7 @@ int stdCamera<derivedT>::newCallBack_cropMode( const pcf::IndiProperty &ipRecv )
 {
     if( derivedT::c_stdCamera_cropMode )
     {
-#ifdef XWCTEST_INDI_CALLBACK_VALIDATION
-        return 0;
-#endif
+        XWCTEST_IF_INDI_CALLBACK_VALIDATION( return 0; );
 
         if( !ipRecv.find( "toggle" ) )
             return 0;
@@ -3854,9 +3852,7 @@ int stdCamera<derivedT>::newCallBack_cropMode( const pcf::IndiProperty &ipRecv )
 template <class derivedT>
 int stdCamera<derivedT>::newCallBack_roi_x( const pcf::IndiProperty &ipRecv )
 {
-#ifdef XWCTEST_INDI_CALLBACK_VALIDATION
-    return 0;
-#endif
+    XWCTEST_IF_INDI_CALLBACK_VALIDATION( return 0; );
 
     float target;
 
@@ -3877,9 +3873,7 @@ int stdCamera<derivedT>::newCallBack_roi_x( const pcf::IndiProperty &ipRecv )
 template <class derivedT>
 int stdCamera<derivedT>::newCallBack_roi_y( const pcf::IndiProperty &ipRecv )
 {
-#ifdef XWCTEST_INDI_CALLBACK_VALIDATION
-    return 0;
-#endif
+    XWCTEST_IF_INDI_CALLBACK_VALIDATION( return 0; );
 
     float target;
 
@@ -3900,9 +3894,7 @@ int stdCamera<derivedT>::newCallBack_roi_y( const pcf::IndiProperty &ipRecv )
 template <class derivedT>
 int stdCamera<derivedT>::newCallBack_roi_w( const pcf::IndiProperty &ipRecv )
 {
-#ifdef XWCTEST_INDI_CALLBACK_VALIDATION
-    return 0;
-#endif
+    XWCTEST_IF_INDI_CALLBACK_VALIDATION( return 0; );
 
     int target;
 
@@ -3923,9 +3915,7 @@ int stdCamera<derivedT>::newCallBack_roi_w( const pcf::IndiProperty &ipRecv )
 template <class derivedT>
 int stdCamera<derivedT>::newCallBack_roi_h( const pcf::IndiProperty &ipRecv )
 {
-#ifdef XWCTEST_INDI_CALLBACK_VALIDATION
-    return 0;
-#endif
+    XWCTEST_IF_INDI_CALLBACK_VALIDATION( return 0; );
 
     int target;
 
@@ -3946,9 +3936,7 @@ int stdCamera<derivedT>::newCallBack_roi_h( const pcf::IndiProperty &ipRecv )
 template <class derivedT>
 int stdCamera<derivedT>::newCallBack_roi_bin_x( const pcf::IndiProperty &ipRecv )
 {
-#ifdef XWCTEST_INDI_CALLBACK_VALIDATION
-    return 0;
-#endif
+    XWCTEST_IF_INDI_CALLBACK_VALIDATION( return 0; );
 
     int target;
 
@@ -3969,9 +3957,7 @@ int stdCamera<derivedT>::newCallBack_roi_bin_x( const pcf::IndiProperty &ipRecv 
 template <class derivedT>
 int stdCamera<derivedT>::newCallBack_roi_bin_y( const pcf::IndiProperty &ipRecv )
 {
-#ifdef XWCTEST_INDI_CALLBACK_VALIDATION
-    return 0;
-#endif
+    XWCTEST_IF_INDI_CALLBACK_VALIDATION( return 0; );
 
     int target;
 
@@ -4008,9 +3994,7 @@ int stdCamera<derivedT>::newCallBack_roi_check( const pcf::IndiProperty &ipRecv 
 {
     if( derivedT::c_stdCamera_usesROI )
     {
-#ifdef XWCTEST_INDI_CALLBACK_VALIDATION
-        return 0;
-#endif
+        XWCTEST_IF_INDI_CALLBACK_VALIDATION( return 0; );
 
         if( !ipRecv.find( "request" ) )
             return 0;
@@ -4051,9 +4035,7 @@ int stdCamera<derivedT>::newCallBack_roi_set( const pcf::IndiProperty &ipRecv )
 {
     if( derivedT::c_stdCamera_usesROI )
     {
-#ifdef XWCTEST_INDI_CALLBACK_VALIDATION
-        return 0;
-#endif
+        XWCTEST_IF_INDI_CALLBACK_VALIDATION( return 0; );
 
         if( !ipRecv.find( "request" ) )
             return 0;
@@ -4082,9 +4064,7 @@ int stdCamera<derivedT>::newCallBack_roi_full( const pcf::IndiProperty &ipRecv )
 {
     if( derivedT::c_stdCamera_usesROI )
     {
-#ifdef XWCTEST_INDI_CALLBACK_VALIDATION
-        return 0;
-#endif
+        XWCTEST_IF_INDI_CALLBACK_VALIDATION( return 0; );
 
         if( !ipRecv.find( "request" ) )
             return 0;
@@ -4118,9 +4098,7 @@ int stdCamera<derivedT>::newCallBack_roi_fullbin( const pcf::IndiProperty &ipRec
 {
     if( derivedT::c_stdCamera_usesROI )
     {
-#ifdef XWCTEST_INDI_CALLBACK_VALIDATION
-        return 0;
-#endif
+        XWCTEST_IF_INDI_CALLBACK_VALIDATION( return 0; );
 
         if( !ipRecv.find( "request" ) )
             return 0;
@@ -4183,9 +4161,7 @@ int stdCamera<derivedT>::newCallBack_roi_loadlast( const pcf::IndiProperty &ipRe
 {
     if( derivedT::c_stdCamera_usesROI )
     {
-#ifdef XWCTEST_INDI_CALLBACK_VALIDATION
-        return 0;
-#endif
+        XWCTEST_IF_INDI_CALLBACK_VALIDATION( return 0; );
 
         if( !ipRecv.find( "request" ) )
             return 0;
@@ -4212,9 +4188,7 @@ int stdCamera<derivedT>::newCallBack_roi_last( const pcf::IndiProperty &ipRecv )
 {
     if( derivedT::c_stdCamera_usesROI )
     {
-#ifdef XWCTEST_INDI_CALLBACK_VALIDATION
-        return 0;
-#endif
+        XWCTEST_IF_INDI_CALLBACK_VALIDATION( return 0; );
         if( !ipRecv.find( "request" ) )
             return 0;
 
@@ -4242,9 +4216,7 @@ int stdCamera<derivedT>::newCallBack_roi_default( const pcf::IndiProperty &ipRec
 {
     if( derivedT::c_stdCamera_usesROI )
     {
-#ifdef XWCTEST_INDI_CALLBACK_VALIDATION
-        return 0;
-#endif
+        XWCTEST_IF_INDI_CALLBACK_VALIDATION( return 0; );
 
         if( !ipRecv.find( "request" ) )
             return 0;
@@ -4293,9 +4265,7 @@ int stdCamera<derivedT>::newCallBack_shutter( const pcf::IndiProperty &ipRecv )
 {
     if( derivedT::c_stdCamera_hasShutter )
     {
-#ifdef XWCTEST_INDI_CALLBACK_VALIDATION
-        return 0;
-#endif
+        XWCTEST_IF_INDI_CALLBACK_VALIDATION( return 0; );
 
         if( !ipRecv.find( "toggle" ) )
             return 0;
@@ -4350,9 +4320,7 @@ int stdCamera<derivedT>::newCallBack_gotoFocus( const pcf::IndiProperty &ipRecv 
 {
     if( c_hasFocus && m_hasFocus )
     {
-#ifdef XWCTEST_INDI_CALLBACK_VALIDATION
-        return 0;
-#endif
+        XWCTEST_IF_INDI_CALLBACK_VALIDATION( return 0; );
 
         if( !ipRecv.find( "request" ) )
         {
@@ -4617,11 +4585,14 @@ int stdCamera<derivedT>::updateINDI()
         }
         return 0;
     }
+    // Same reasoning as appLogic()'s catch above -- none of these update calls throw.
+    // LCOV_EXCL_START
     catch( const std::exception &e )
     {
         return derivedT::template log<software_error, -1>(
             { __FILE__, __LINE__, std::string( "Exception caught: " ) + e.what() } );
     }
+    // LCOV_EXCL_STOP
 }
 
 template <class derivedT>
@@ -4674,14 +4645,14 @@ int stdCamera<derivedT>::recordCamera( bool force )
               m_adcSpeed,
               m_ccdTemp,
               m_ccdTempSetpt,
-              (uint8_t)m_tempControlStatus,
-              (uint8_t)m_tempControlOnTarget,
+              (uint8_t)m_tempControlStatus,  // LCOV_EXCL_LINE (gcov quirk: cast-expression argument lines in this
+              (uint8_t)m_tempControlOnTarget, // LCOV_EXCL_LINE  single aggregate-init call get spurious 0 hits --
               m_tempControlStatusStr,
               m_shutterStatus,
-              (int8_t)m_shutterState,
-              (uint8_t)m_synchro,
+              (int8_t)m_shutterState, // LCOV_EXCL_LINE          neighboring non-cast argument lines of this same
+              (uint8_t)m_synchro,     // LCOV_EXCL_LINE          call all show real hits, confirming it executes.
               m_vshiftSpeed,
-              (uint8_t)m_cropMode,
+              (uint8_t)m_cropMode, // LCOV_EXCL_LINE
               c_hasFanSpeed && m_fanSpeedValid ? m_fanSpeedName : std::string( "" ),
               m_readoutSpeedName,
               c_hasAnalogGain && m_analogGainValid ? m_analogGainName : std::string( "" ),

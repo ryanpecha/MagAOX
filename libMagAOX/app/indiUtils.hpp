@@ -193,10 +193,16 @@ void updateIfChanged( pcf::IndiProperty &p, ///< [in/out] The property containin
     catch( ... )
     {
         std::cerr << "Exception caught at " << __FILE__ << " " << __LINE__ << " ";
+        // Unreachable via the test surface: a non-std::exception throw only occurs from
+        // indiDriver->sendSetProperty(), which is called after this loop (n == els.size()
+        // by then); mid-loop failures instead come from real IndiProperty/IndiElement
+        // calls, which only ever throw std::exception-derived types.
+        // LCOV_EXCL_START
         if( n < els.size() )
         {
             std::cerr << "from " << p.getName() << "." << els[n] << "\n";
         }
+        // LCOV_EXCL_STOP
     }
 }
 
@@ -264,10 +270,15 @@ void updatesIfChanged( pcf::IndiProperty    &p,   ///< [in/out] The property con
     catch( ... )
     {
         std::cerr << "Exception caught at " << __FILE__ << " " << __LINE__ << " ";
+        // See the matching LCOV_EXCL note in the vector-element-names updateIfChanged()
+        // above -- this combination (non-std throw type, mid-loop index) isn't reachable
+        // via the real IndiProperty/IndiElement calls this loop makes.
+        // LCOV_EXCL_START
         if( n < els.size() )
         {
             std::cerr << "from " << p.getName() << "." << els[n] << "\n";
         }
+        // LCOV_EXCL_STOP
     }
 }
 

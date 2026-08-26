@@ -86,7 +86,7 @@ struct ttmmod_params : public flatbuffer_log
 
       return msg;
 
-   }
+   } // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
 
    static std::string modState(void * msgBuffer  /**< [in] Buffer containing the flatbuffer serialized message.*/)
    {
@@ -104,7 +104,7 @@ struct ttmmod_params : public flatbuffer_log
       }
 
       return msg;
-   }
+   } // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
 
    static double modFreq(void * msgBuffer  /**< [in] Buffer containing the flatbuffer serialized message.*/)
    {

@@ -145,6 +145,8 @@ struct telem_observer : public flatbuffer_log
 
         msg += std::to_string( fbs->observing() );
 
+        // tgt_name is a required std::string in the only messageT constructor, always passed
+        // to builder.CreateString() -- tgt_name() is never nullptr.
         if( fbs->tgt_name() )
         {
             msg += " tgt: ";
@@ -153,7 +155,7 @@ struct telem_observer : public flatbuffer_log
         }
         else
         {
-            msg += " tgt: notimpl";
+            msg += " tgt: notimpl"; // LCOV_EXCL_LINE
         }
 
         if( fbs->operator_email() )
@@ -164,7 +166,7 @@ struct telem_observer : public flatbuffer_log
         }
 
         return msg;
-    }
+    } // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
 
     static std::string email( void *msgBuffer )
     {
@@ -174,7 +176,7 @@ struct telem_observer : public flatbuffer_log
             return std::string( fbs->email()->c_str() );
         }
         else
-            return "";
+            return ""; // LCOV_EXCL_LINE -- email is always created by the only constructor
     }
 
     static std::string obsName( void *msgBuffer )
@@ -185,7 +187,7 @@ struct telem_observer : public flatbuffer_log
             return std::string( fbs->obsName()->c_str() );
         }
         else
-            return "";
+            return ""; // LCOV_EXCL_LINE -- obsName is always created by the only constructor
     }
 
     static bool observing( void *msgBuffer )
@@ -202,7 +204,7 @@ struct telem_observer : public flatbuffer_log
             return std::string( fbs->tgt_name()->c_str() );
         }
         else
-            return "notimpl";
+            return "notimpl"; // LCOV_EXCL_LINE -- tgt_name is always created by the only constructor
     }
 
     static std::string operator_email( void *msgBuffer )
@@ -213,7 +215,7 @@ struct telem_observer : public flatbuffer_log
             return std::string( fbs->operator_email()->c_str() );
         }
         else
-            return "";
+            return ""; // LCOV_EXCL_LINE -- operator_email is always created by the only constructor
     }
 
     /// Get the logMetaDetail for a member by name

@@ -273,7 +273,11 @@ struct software_log : public flatbuffer_log
         }
         else
         {
-            ret += "????";
+            // file is a required const char* in every messageT constructor, always passed
+            // to builder.CreateString() -- file() is never nullptr. (Passing a null literal
+            // for file would itself be undefined behavior in CreateString, so this can't be
+            // exercised safely either.)
+            ret += "????"; // LCOV_EXCL_LINE
         }
 
         ret += std::format( " LINE: {}", rgs->line() );
@@ -296,7 +300,7 @@ struct software_log : public flatbuffer_log
             ret += rgs->explanation()->c_str();
         }
         return ret;
-    }
+    } // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
 
     /// Get an empty logMetaDetail because meta data doesn't make sense for this log
     /**

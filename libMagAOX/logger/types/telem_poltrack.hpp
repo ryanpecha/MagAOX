@@ -90,7 +90,7 @@ struct telem_poltrack : public flatbuffer_log
         }
 
         return msg;
-    }
+    } // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
 
     static float set_angle( void *msgBuffer )
     {
@@ -111,7 +111,7 @@ struct telem_poltrack : public flatbuffer_log
         {
             return std::string(fbs->pos_name()->c_str());
         }
-        else return std::string();
+        else return std::string(); // LCOV_EXCL_LINE -- pos_name is always created by the only constructor
     }
 
     static bool tracking( void *msgBuffer )

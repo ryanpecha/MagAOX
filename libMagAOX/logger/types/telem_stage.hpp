@@ -86,7 +86,7 @@ struct telem_stage : public flatbuffer_log
 
       return msg;
 
-   }
+   } // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
 
    static int moving( void * msgBuffer )
    {
@@ -107,7 +107,7 @@ struct telem_stage : public flatbuffer_log
       {
          return std::string(fbs->presetName()->c_str());
       }
-      else return std::string();
+      else return std::string(); // LCOV_EXCL_LINE -- presetName is always created by the only constructor
    }
 
    /// Get the logMetaDetail for a member by name

@@ -121,21 +121,30 @@ class xindiserver : public MagAOXApp<false>
 
 protected:
 
+   // Test-harness-accessed members are public below (the `friend class xindiserver_test`
+   // above doesn't actually apply -- the real test struct lives in a different, nested
+   // test namespace, so an unqualified friend declaration here doesn't bind to it).
+public:
    int indiserver_m {-1};  ///< The indiserver MB behind setting (passed to indiserver)
    bool indiserver_n {false}; ///< The indiserver ignore /tmp/noindi flag (passed to indiserver)
    int indiserver_p {-1}; ///< The indiserver port (passed to indiserver)
    int indiserver_v {-1}; ///< The indiserver verbosity (passed to indiserver)
    bool indiserver_x {false}; ///< The indiserver terminate after last exit flag (passed to indiserver)
 
+protected:
    std::string m_driverPath; ///< The path to the local drivers
+public:
    std::vector<std::string> m_local; ///< List of local drivers passed in by config
    std::vector<std::string> m_remote; ///< List of remote drivers passed in by config
+protected:
    std::unordered_set<std::string> m_driverNames; ///< List of driver names processed for command line, used to prevent duplication.
 
    std::vector<std::string> m_remoteServers; ///< List of other INDI server config files to read remote drivers from.
 
+public:
    tunnelMapT m_tunnels; ///< Map of the ssh tunnels, used for processing the remote drivers in m_remote.
 
+protected:
    std::vector<std::string> m_indiserverCommand; ///< The command line arguments to indiserver
 
    pid_t m_isPID {0}; ///< The PID of the indiserver process

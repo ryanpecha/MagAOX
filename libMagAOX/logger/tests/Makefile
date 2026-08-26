@@ -2,7 +2,11 @@
 ### Hide commands
 AT=@
 GEN_TEST_FILES = ./generated_tests/*_generated_tests.cpp
-C_STD=c++20
+# common.mk supplies the repo-standard CXXFLAGS (including the COVERAGE=1 flags,
+# previously duplicated here). python.mk supplies $(PYTHON): the test generator
+# uses syntax that needs Python >= 3.10, which the system python3 may not be.
+include ../../../Make/common.mk
+include ../../../Make/python.mk
 ### default entropy test settings
 # seed
 s=1
@@ -12,12 +16,6 @@ e=1
 n=2
 # types to use
 f=""
-
-ifeq ($(COVERAGE),1)
-  LDFLAGS += --coverage
-  CFLAGS += --coverage
-  CXXFLAGS += --coverage
-endif
 
 ########################################################################
 ### Generate code, run tests
@@ -49,10 +47,14 @@ coverage:
 generated_tests: $(GEN_TEST_FILES)
 
 $(GEN_TEST_FILES) :
-	$(AT)python3 generateTemplatedCatch2Tests.py
+	$(AT)$(PYTHON) generateTemplatedCatch2Tests.py
 
+# -lflatbuffers: the generated tests exercise logJsonFormat, whose schema reflection
+# (flatbuffers::Parser::Deserialize/GenText) lives in the flatbuffers library.
+# stateCodes.cpp: the generated per-type tests round-trip state_change logs, whose
+# formatters call stateCodes::codeText().
 catch2_tests: ../generated/binarySchemata.inc $(GEN_TEST_FILES) catch2_tests.cpp
-	$(AT)g++ -std=$(C_STD) $(CXXFLAGS) -I. -I./../types -I../../../flatlogs/include/ $(GEN_TEST_FILES) catch2_tests.cpp -o $@
+	$(AT)g++ $(CXXFLAGS) -I. -I./../types $(GEN_TEST_FILES) catch2_tests.cpp ../../app/stateCodes.cpp -o $@ -lflatbuffers
 
 do_catch2_test: catch2_tests
 	$(AT)./catch2_tests
@@ -60,8 +62,8 @@ do_catch2_test: catch2_tests
 ########################################################################
 ### Build and run Catch2 Entropy tests
 entropy_test: ../generated/binarySchemata.inc catch2_tests.cpp
-	$(AT)python3 generateEntropyTests.py -e $(e) -n $(n) -s $(s) -f $(f)
-	$(AT)g++ -std=$(C_STD) $(CXXFLAGS) -I. -I.. -I./../types -I../../../flatlogs/include/ -I./generated_tests gen_entropy_tests/generated_test_e$(e)_n$(n).cpp catch2_tests.cpp -o generated_entropy_test_e$(e)_n$(n)
+	$(AT)$(PYTHON) generateEntropyTests.py -e $(e) -n $(n) -s $(s) -f $(f)
+	$(AT)g++ $(CXXFLAGS) -I. -I.. -I./../types -I./generated_tests gen_entropy_tests/generated_test_e$(e)_n$(n).cpp catch2_tests.cpp ../../app/stateCodes.cpp -o generated_entropy_test_e$(e)_n$(n) -lflatbuffers
 
 do_entropy_test: entropy_test
 	$(AT)./generated_entropy_test_e$(e)_n$(n) "Scenario: test_e$(e)_n$(n)"

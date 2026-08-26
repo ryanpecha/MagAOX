@@ -18,6 +18,13 @@
 
 #define MAX_MSG_LENGTH 260
 
+// Guarded separately from MODBUSPP_MODBUS_H: the XWCTEST_NAMESPACE test build re-includes
+// this file multiple times (undefining only MODBUSPP_MODBUS_H) to get distinctly-namespaced
+// `modbus` classes in one translation unit. These plain (unscoped) enums aren't namespaced,
+// so they must only ever be declared once, regardless of how many times that happens.
+#ifndef MODBUSPP_MODBUS_CONSTANTS_H
+#define MODBUSPP_MODBUS_CONSTANTS_H
+
 /// Function Code
 enum
 {
@@ -43,6 +50,13 @@ enum
     EX_GATEWAY_PROBLEMP = 0x0A, // Gateway Path not Available
     EX_GATEWYA_PROBLEMF = 0x0B, // Target Device Failed to Response
 };
+
+#endif // MODBUSPP_MODBUS_CONSTANTS_H
+
+#ifdef XWCTEST_NAMESPACE
+namespace XWCTEST_NAMESPACE
+{
+#endif
 
 /// Modbus Operator Class
 /**
@@ -91,6 +105,10 @@ class modbus
     void modbus_write_coils( int address, int amount, bool *value );
     void modbus_write_registers( int address, int amount, uint16_t *value );
 };
+
+#ifdef XWCTEST_NAMESPACE
+} // namespace XWCTEST_NAMESPACE
+#endif
 
 #if 0
 //-- leaving in for comments until can be normalized.

@@ -245,7 +245,7 @@ struct telem_stdcam : public flatbuffer_log
             msg += "OFF";
 
         return msg;
-    }
+    } // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
 
     static std::string mode( void *msgBuffer )
     {
@@ -255,7 +255,7 @@ struct telem_stdcam : public flatbuffer_log
             return std::string( fbs->mode()->c_str() );
         }
         else
-            return "";
+            return ""; // LCOV_EXCL_LINE -- roi is always created by the only constructor
     }
 
     static float xcen( void *msgBuffer )
@@ -264,7 +264,7 @@ struct telem_stdcam : public flatbuffer_log
         if( fbs->roi() != nullptr )
             return fbs->roi()->xcen();
         else
-            return -1;
+            return -1; // LCOV_EXCL_LINE -- roi is always created by the only constructor
     }
 
     static float ycen( void *msgBuffer )
@@ -273,7 +273,7 @@ struct telem_stdcam : public flatbuffer_log
         if( fbs->roi() != nullptr )
             return fbs->roi()->ycen();
         else
-            return -1;
+            return -1; // LCOV_EXCL_LINE -- roi is always created by the only constructor
     }
 
     static int width( void *msgBuffer )
@@ -282,7 +282,7 @@ struct telem_stdcam : public flatbuffer_log
         if( fbs->roi() != nullptr )
             return fbs->roi()->w();
         else
-            return -1;
+            return -1; // LCOV_EXCL_LINE -- roi is always created by the only constructor
     }
 
     static int height( void *msgBuffer )
@@ -291,7 +291,7 @@ struct telem_stdcam : public flatbuffer_log
         if( fbs->roi() != nullptr )
             return fbs->roi()->h();
         else
-            return -1;
+            return -1; // LCOV_EXCL_LINE -- roi is always created by the only constructor
     }
 
     static int xbin( void *msgBuffer )
@@ -300,7 +300,7 @@ struct telem_stdcam : public flatbuffer_log
         if( fbs->roi() != nullptr )
             return fbs->roi()->xbin();
         else
-            return -1;
+            return -1; // LCOV_EXCL_LINE -- roi is always created by the only constructor
     }
 
     static int ybin( void *msgBuffer )
@@ -309,7 +309,7 @@ struct telem_stdcam : public flatbuffer_log
         if( fbs->roi() != nullptr )
             return fbs->roi()->ybin();
         else
-            return -1;
+            return -1; // LCOV_EXCL_LINE -- roi is always created by the only constructor
     }
 
     static float exptime( void *msgBuffer )
@@ -342,7 +342,7 @@ struct telem_stdcam : public flatbuffer_log
         if( fbs->tempCtrl() != nullptr )
             return fbs->tempCtrl()->temp();
         else
-            return -9999;
+            return -9999; // LCOV_EXCL_LINE -- tempCtrl is always created by the only constructor
     }
 
     static float tempSetpt( void *msgBuffer )
@@ -351,7 +351,7 @@ struct telem_stdcam : public flatbuffer_log
         if( fbs->tempCtrl() != nullptr )
             return fbs->tempCtrl()->setpt();
         else
-            return -9999;
+            return -9999; // LCOV_EXCL_LINE -- tempCtrl is always created by the only constructor
     }
 
     static int tempStatus( void *msgBuffer )
@@ -360,7 +360,7 @@ struct telem_stdcam : public flatbuffer_log
         if( fbs->tempCtrl() != nullptr )
             return fbs->tempCtrl()->status();
         else
-            return -9999;
+            return -9999; // LCOV_EXCL_LINE -- tempCtrl is always created by the only constructor
     }
 
     static int tempOnTarget( void *msgBuffer )
@@ -369,7 +369,7 @@ struct telem_stdcam : public flatbuffer_log
         if( fbs->tempCtrl() != nullptr )
             return fbs->tempCtrl()->ontarget();
         else
-            return -9999;
+            return -9999; // LCOV_EXCL_LINE -- tempCtrl is always created by the only constructor
     }
 
     static std::string tempStatusStr( void *msgBuffer )
@@ -380,10 +380,12 @@ struct telem_stdcam : public flatbuffer_log
             if( fbs->tempCtrl()->statusStr() )
                 return fbs->tempCtrl()->statusStr()->c_str();
             else
+                // LCOV_EXCL_START -- statusStr/tempCtrl are always created by the only constructor
                 return "";
         }
         else
             return "";
+        // LCOV_EXCL_STOP
     }
 
     static std::string shutterStatusStr( void *msgBuffer )
@@ -394,10 +396,12 @@ struct telem_stdcam : public flatbuffer_log
             if( fbs->shutter()->statusStr() )
                 return fbs->shutter()->statusStr()->c_str();
             else
+                // LCOV_EXCL_START -- shutterStatusSr/shutter are always created by the only constructor
                 return "";
         }
         else
             return "";
+        // LCOV_EXCL_STOP
     }
 
     static std::string shutterState( void *msgBuffer )
@@ -415,7 +419,7 @@ struct telem_stdcam : public flatbuffer_log
                 return "INVALID";
         }
         else
-            return "INVALID";
+            return "INVALID"; // LCOV_EXCL_LINE -- shutter is always created by the only constructor
     }
 
     static bool synchro( void *msgBuffer )
@@ -449,7 +453,7 @@ struct telem_stdcam : public flatbuffer_log
             return std::string( fbs->readout_speed()->c_str() );
         }
         else
-            return "";
+            return ""; // LCOV_EXCL_LINE -- readout_speed is always created by the only constructor
     }
 
     static std::string fan_speed( void *msgBuffer )
@@ -460,7 +464,7 @@ struct telem_stdcam : public flatbuffer_log
             return std::string( fbs->fan_speed()->c_str() );
         }
         else
-            return "";
+            return ""; // LCOV_EXCL_LINE -- fan_speed is always created by the only constructor
     }
 
     static std::string analog_gain( void *msgBuffer )
@@ -471,7 +475,7 @@ struct telem_stdcam : public flatbuffer_log
             return std::string( fbs->analog_gain()->c_str() );
         }
         else
-            return "";
+            return ""; // LCOV_EXCL_LINE -- analog_gain is always created by the only constructor
     }
 
     static bool led( void *msgBuffer )

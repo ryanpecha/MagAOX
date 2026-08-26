@@ -194,7 +194,7 @@ string IndiProperty::scrubName( const string &szName )
                    std::not1( std::ptr_fun( ::isalnum ) ), '_' );
 
   return szScrubbed;
-}
+} // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Compares one property with another instance. The values may not match,
@@ -376,7 +376,7 @@ string IndiProperty::createString() const
   ssOutput << "{ "
            << "\"device\" : \"" << m_szDevice << "\" , "
            << "\"name\" : \"" << m_szName << "\" , "
-           << "\"type\" : \"" << convertTypeToString( m_tType ) << "\" , "
+           << "\"type\" : \"" << convertTypeToString( m_tType ) << "\" , " // LCOV_EXCL_LINE -- demonstrably executes (output asserted in tests); gcov attributes only the string temporary's EH-cleanup block to this line of the stream chain
            << "\"group\" : \"" << m_szGroup << "\" , "
            << "\"label\" : \"" << m_szLabel << "\" , "
            << "\"timeout\" : \"" << m_xTimeout << "\" , "
@@ -1047,7 +1047,7 @@ string IndiProperty::getErrorMsg( const int &nErr )
       break;
   }
   return szMsg;
-}
+} // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Returns the enumerated type given the string type.
@@ -1090,7 +1090,7 @@ string IndiProperty::getBLOBEnableString( const BLOBEnableType &tType )
   }
 
   return szType;
-}
+} // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Returns the enumerated type given the string type.
@@ -1138,7 +1138,7 @@ string IndiProperty::getPropertyStateString( const PropertyStateType &tType )
   }
 
   return szType;
-}
+} // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Returns the enumerated type given the string type.
@@ -1181,7 +1181,7 @@ string IndiProperty::getSwitchRuleString( const SwitchRuleType &tType )
   }
 
   return szType;
-}
+} // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Returns the enumerated type given the string type.
@@ -1224,7 +1224,7 @@ string IndiProperty::getPropertyPermString( const PropertyPermType &tType )
   }
 
   return szType;
-}
+} // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Returns the string type given the enumerated type.
@@ -1256,7 +1256,7 @@ string IndiProperty::convertTypeToString( const Type &tType )
   }
 
   return szType;
-}
+} // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Returns the enumerated type given the tag.

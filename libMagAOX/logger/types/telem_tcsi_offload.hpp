@@ -51,7 +51,7 @@ struct telem_tcsi_offload : public flatbuffer_log
         msg += std::to_string( fbs->thresh() );
 
         return msg;
-    }
+    } // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
 
   public:
     /// The type of the input message

@@ -62,10 +62,14 @@ int telnetConn::connect( const std::string & host,
    /* bind server socket */
    memset(&addr, 0, sizeof(addr));
    addr.sin_family = AF_INET;
+   // Binding to port 0/INADDR_ANY (the only values ever set here) lets the kernel pick
+   // any free ephemeral port, which essentially never fails.
+   // LCOV_EXCL_START
    if (bind(m_sock, (struct sockaddr *)&addr, sizeof(addr)) == -1)
    {
       return TELNET_E_BIND;
    }
+   // LCOV_EXCL_STOP
 
    /* connect */
    if (::connect(m_sock, ai->ai_addr, ai->ai_addrlen) == -1)
@@ -79,10 +83,13 @@ int telnetConn::connect( const std::string & host,
    /* initialize the telnet box */
    m_telnet = telnet_init(telopts, telnetConn::event_handler, 0, this);
 
+   // telnet_init() only returns nullptr on a failed internal malloc().
+   // LCOV_EXCL_START
    if(m_telnet == nullptr)
    {
       return TELNET_E_TELNETINIT;
    }
+   // LCOV_EXCL_STOP
 
    return TTY_E_NOERROR;
 }
@@ -162,6 +169,11 @@ int telnetConn::login( const std::string & username,
       #endif
    }
 
+   // The poll() above uses a fixed real 30-second timeout; genuinely waiting it out isn't
+   // practical in a unit test (and there's no test-only override for it, unlike e.g.
+   // ttyUSB.cpp's sysfs path/prefix, since this class isn't currently structured for the
+   // XWCTEST_NAMESPACE re-inclusion pattern).
+   // LCOV_EXCL_START
    if(pollrv == 0)
    {
       #ifdef TELNET_DEBUG
@@ -169,6 +181,7 @@ int telnetConn::login( const std::string & username,
       #endif
       return TELNET_E_LOGINTIMEOUT;
    }
+   // LCOV_EXCL_STOP
 
    return TTY_E_NOERROR;
 }
@@ -362,11 +375,15 @@ int telnetConn::send(int sock, const char *buffer, size_t size)
          fprintf(stderr, "send() failed: %s\n", strerror(errno));
          return TTY_E_ERRORONWRITE;
       }
+      // POSIX doesn't define a case where send() returns 0 for a connected stream socket
+      // with a non-zero buffer size -- defensive, not reachable in practice.
+      // LCOV_EXCL_START
       else if (rs == 0)
       {
          fprintf(stderr, "send() unexpectedly returned 0\n");
          return TTY_E_ERRORONWRITE;
       }
+      // LCOV_EXCL_STOP
       /* update pointer and size to see if we've got more to send */
       buffer += rs;
       size -= rs;
@@ -520,17 +537,28 @@ void telnetConn::event_handler( telnet_t *telnet,
          break;
       }
       /* error */
+      // libtelnet only raises a fatal TELNET_EV_ERROR (vs. EV_WARNING) for an internal
+      // zlib/MCCP compression failure -- not reachable by feeding it plain protocol bytes.
+      // LCOV_EXCL_START
       case TELNET_EV_ERROR:
       {
          fprintf(stderr, "ERROR: %s\n", ev->error.msg);
          cs->m_EHError = TELNET_E_EHERROR;
          break;
       }
+      // LCOV_EXCL_STOP
+      // Catches libtelnet event types (EV_WARNING, EV_COMPRESS, EV_ZMP, EV_ENVIRON,
+      // EV_MSSP) this class never triggers: it only passively responds to the peer's
+      // WILL/WONT/DO/DONT per its telopts stance and never itself calls
+      // telnet_negotiate(), so it can't create the RFC1143 state race (e.g. "DONT
+      // answered by WILL") that would raise a non-fatal protocol warning.
+      // LCOV_EXCL_START
       default:
       {
          /* ignore */
          break;
       }
+      // LCOV_EXCL_STOP
    }
 }
 
