@@ -208,6 +208,31 @@ TEST_CASE( "telem_dmspeck, telem_sparkleclock, telem_fxngen, and telem_poltrack 
         REQUIRE( s.find( "SYNC OFF" ) != std::string::npos );
     }
 
+    SECTION( "a telem_fxngen message formats every waveform name on both channels" )
+    {
+        // msgString selects the waveform name with an if else chain on each channel.
+        // The generated per type test uses random field values, so it does not reach
+        // these branches reliably. Each case below drives one branch on both channels
+        // deterministically. The value 3 is not a defined waveform, so it takes the
+        // UNK branch. The output value 2 is not a defined output state, so it takes
+        // the UNK branch of the output chain. Sync is on, which the section above
+        // leaves uncovered.
+        struct
+        {
+            uint8_t     wvtp;
+            std::string expect;
+        } cases[] = { { 1, "SINE" }, { 2, "PULSE" }, { 3, "UNK" } };
+
+        for( auto &c : cases )
+        {
+            auto [buf, len] = makeLog<MagAOX::logger::telem_fxngen>( MagAOX::logger::telem_fxngen::messageT(
+                2, 1.0, 1.0, 1.0, 1.0, c.wvtp, 2, 1.0, 1.0, 1.0, 1.0, c.wvtp, (uint8_t)1, (uint8_t)1, 1.0, 1.0 ) );
+            std::string s = MagAOX::logger::telem_fxngen::msgString( flatlogs::logHeader::messageBuffer( buf ), len );
+            REQUIRE( s.find( "Ch 1: " + c.expect ) != std::string::npos );
+            REQUIRE( s.find( "Ch 2: " + c.expect ) != std::string::npos );
+        }
+    }
+
     SECTION( "a telem_poltrack message that is not tracking" )
     {
         auto [buf, len] =
