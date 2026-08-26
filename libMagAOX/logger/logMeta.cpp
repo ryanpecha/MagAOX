@@ -300,7 +300,7 @@ std::string logMeta::fitsKeyword() const
     }
 
     return keyw;
-}
+} // LCOV_EXCL_LINE: gcov charges this closing brace to the compiler-generated exception cleanup of the local std::string keyw. That cleanup runs only if an exception passes through the return. No realistic input causes that.
 
 logMeta::logMeta( const logMetaSpec &lms )
 {
@@ -346,7 +346,7 @@ int logMeta::setLog( const logMetaSpec &lms )
         case valTypes::Bool:
             m_spec.format = "%d";
             break;
-        case valTypes::Char:
+        case valTypes::Char: // LCOV_EXCL_START: No generated log type's getAccessor() produces Char, UChar, Short, or UShort. This was checked by grepping every types/*.hpp file. setLog() only sees real accessors.
             m_spec.format = "%d";
             break;
         case valTypes::UChar:
@@ -358,19 +358,19 @@ int logMeta::setLog( const logMetaSpec &lms )
         case valTypes::UShort:
             m_spec.format = "%u";
             break;
-        case valTypes::Int:
+        case valTypes::Int: // LCOV_EXCL_STOP
             m_spec.format = "%d";
             break;
         case valTypes::UInt:
             m_spec.format = "%u";
             break;
-        case valTypes::Long:
+        case valTypes::Long: // LCOV_EXCL_START: Long and ULong are also never produced. See the note on the Char case above.
             m_spec.format = "%ld";
             break;
         case valTypes::ULong:
             m_spec.format = "%lu";
             break;
-        case valTypes::Float:
+        case valTypes::Float: // LCOV_EXCL_STOP
             m_spec.format = "%G";
             break;
         case valTypes::Double:
@@ -987,7 +987,7 @@ std::string logMeta::valueString( logMap<verboseT>          &lm,
         std::cerr << "String type specified as something other than state\n";
     }
     return val;
-}
+} // LCOV_EXCL_LINE: gcov charges this closing brace to the compiler-generated exception cleanup of the local std::string val. That cleanup runs only if an exception passes through the return. No realistic input causes that.
 
 mx::fits::fitsHeaderCard<logMeta::verboseT> logMeta::unavailableCard() const
 {

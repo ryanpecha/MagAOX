@@ -98,7 +98,7 @@ struct telem_telpos : public flatbuffer_log
 
       return msg;
 
-   }
+   } // LCOV_EXCL_LINE gcov reports this closing brace as a separate line that only runs during exception cleanup
 
    static double epoch( void * msgBuffer )
    {

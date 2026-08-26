@@ -78,7 +78,7 @@ struct telem_pico : public flatbuffer_log
 
       return msg;
 
-   }
+   } // LCOV_EXCL_LINE gcov reports this closing brace as a separate line that only runs during exception cleanup
 
    static std::vector<long long int> counts( void * msgBuffer /**< [in] Buffer containing the flatbuffer serialized message.*/ )
    {
@@ -95,7 +95,7 @@ struct telem_pico : public flatbuffer_log
       }
 
       return countsvec;
-   }
+   } // LCOV_EXCL_LINE gcov reports this closing brace as a separate line that only runs during exception cleanup
 
    /// Get the logMetaDetail for a member by name
    /**

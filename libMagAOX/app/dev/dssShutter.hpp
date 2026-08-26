@@ -385,6 +385,10 @@ int dssShutter<derivedT>::appStartup()
    act.sa_mask = set;
 
    errno = 0;
+   // This block handles a failure of sigaction().
+   // sigaction() fails only for an invalid signal number or invalid flags.
+   // Both are fixed and valid here, so a test cannot reach this block.
+   // LCOV_EXCL_START
    if( sigaction(SIGUSR1, &act, 0) < 0 )
    {
       std::string logss = "Setting handler for SIGUSR1 failed. Errno says: ";
@@ -394,6 +398,7 @@ int dssShutter<derivedT>::appStartup()
 
       return -1;
    }
+   // LCOV_EXCL_STOP
 
    return 0;
 
@@ -446,15 +451,21 @@ int dssShutter<derivedT>::appShutdown()
       pthread_kill(m_shutThread.native_handle(), SIGUSR1);
    }
 
+   // The two catch blocks below handle a throw from join(). join() throws only if the
+   // thread was already joined. Forcing that needs a signal to race against the thread's
+   // blocking wait, and a recycled thread ID could then cause an abort.
+   // That is not practical in a test. See the same pattern in dm<>::appShutdown().
    if(m_openThread.joinable())
    {
       try
       {
          m_openThread.join(); //this will throw if it was already joined
       }
+      // LCOV_EXCL_START: see the join() note above.
       catch(...)
       {
       }
+      // LCOV_EXCL_STOP
    }
 
    if(m_shutThread.joinable())
@@ -463,9 +474,11 @@ int dssShutter<derivedT>::appShutdown()
       {
          m_shutThread.join(); //this will throw if it was already joined
       }
+      // LCOV_EXCL_START: see the join() note above.
       catch(...)
       {
       }
+      // LCOV_EXCL_STOP
    }
    return 0;
 }
