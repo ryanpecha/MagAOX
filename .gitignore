@@ -4,13 +4,12 @@
 *.a
 *.so
 *.log
+*.binlog
 doc/output
 local/
 !local/common.example.mk
 !local/config.example.mk
 **/a.out
-**/tests/*.binlog
-**/tests/**/**.binlog
 **/.*~
 **/*.stash
 **/*-swp
