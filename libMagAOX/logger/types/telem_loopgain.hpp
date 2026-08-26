@@ -79,7 +79,7 @@ struct telem_loopgain : public flatbuffer_log
         msg += std::to_string( fbs->limit() );
 
         return msg;
-    }
+    } // LCOV_EXCL_LINE gcov reports this closing brace as a separate line that only runs during exception cleanup
 
     static uint8_t state( void *msgBuffer )
     {

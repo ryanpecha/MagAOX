@@ -106,7 +106,7 @@ struct telem_telvane : public flatbuffer_log
 
       return msg;
 
-   }
+   } // LCOV_EXCL_LINE gcov reports this closing brace as a separate line that only runs during exception cleanup
 
    static double secz( void * msgBuffer  /**< [in] Buffer containing the flatbuffer serialized message.*/ )
    {

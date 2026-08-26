@@ -78,7 +78,7 @@ struct telem_zaber : public flatbuffer_log
 
       return msg;
 
-   }
+   } // LCOV_EXCL_LINE gcov reports this closing brace as a separate line that only runs during exception cleanup
 
    static float pos( void * msgBuffer )
    {

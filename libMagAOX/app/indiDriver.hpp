@@ -82,6 +82,29 @@ private:
      */
    std::mutex m_outGoingMutex;
 
+   #ifdef XWCTEST_INDIDRIVER_HOOKS
+   // clang-format off
+   /// Test-only fault hooks. They exist only when a unit test defines
+   /// XWCTEST_INDIDRIVER_HOOKS before including this header. Production builds
+   /// never define it. The hooks let a test reach branches that otherwise need a
+   /// real hardware or network failure. One example is a FIFO write that fails
+   /// after the FIFO opened. Another is the outgoing INDI client throwing or
+   /// disconnecting at one exact moment.
+   /// The hooks are static so a test can arm one before it constructs the
+   /// indiDriver under test. The constructor body must already see the fault.
+   public:
+   struct testHooks_t
+   {
+      bool forceCtrlWriteFail{false};
+      bool forceOutGoingNull{false};
+      bool forceSendNonStdThrow{false};
+      bool forceQuitAfterSend{false};
+   };
+   inline static testHooks_t xwcTestHooks;
+   private:
+   // clang-format on
+   #endif
+
 public:
 
    /// Public c'tor
@@ -173,6 +196,12 @@ indiDriver<parentT>::indiDriver ( parentT * parent,
    }
    char c = 0;
    int wrno = write(fd, &c, 1);
+   // clang-format off
+   #ifdef XWCTEST_INDIDRIVER_HOOKS
+   // Test hook. Pretends the write to the control FIFO failed.
+   if(xwcTestHooks.forceCtrlWriteFail) wrno = -1; // LCOV_EXCL_LINE
+   #endif
+   // clang-format on
    if(wrno < 0)
    {
       parentT::template log<logger::software_error>({__FILE__, __LINE__, errno, "Error writing to control INDI FIFO."});
@@ -181,7 +210,8 @@ indiDriver<parentT>::indiDriver ( parentT * parent,
 
 
    close(fd);
-}
+} // LCOV_EXCL_LINE gcc builds two copies of this constructor and only one ever runs.
+  // The unused copy puts its exit counter on this brace, so the brace can never be covered.
 
 template<class parentT>
 indiDriver<parentT>::~indiDriver()
@@ -258,6 +288,20 @@ int  indiDriver<parentT>::sendNewProperty( const pcf::IndiProperty &ipRecv )
          return -1;
       }
 
+      // clang-format off
+      #ifdef XWCTEST_INDIDRIVER_HOOKS
+      // Test hook. Drops the outgoing client so the null check below fails for real.
+      if(xwcTestHooks.forceOutGoingNull)
+      {
+         // LCOV_EXCL_START this runs only in the test build that defines the hooks
+         m_outGoing->deactivate();
+         delete m_outGoing;
+         m_outGoing = nullptr;
+         // LCOV_EXCL_STOP
+      }
+      #endif
+      // clang-format on
+
       if(m_outGoing == nullptr)
       {
          parentT::template log<logger::software_error>({__FILE__, __LINE__, "Failed to allocate IndiClient connection"});
@@ -269,7 +313,19 @@ int  indiDriver<parentT>::sendNewProperty( const pcf::IndiProperty &ipRecv )
 
    try
    {
+      // clang-format off
+      #ifdef XWCTEST_INDIDRIVER_HOOKS
+      // Test hook. Throws something that is not a std::exception inside the send.
+      if(xwcTestHooks.forceSendNonStdThrow) throw 42; // LCOV_EXCL_LINE
+      #endif
+      // clang-format on
       m_outGoing->sendNewProperty(ipRecv);
+      // clang-format off
+      #ifdef XWCTEST_INDIDRIVER_HOOKS
+      // Test hook. Marks the client as quit right after the send so the check below fires.
+      if(xwcTestHooks.forceQuitAfterSend) m_outGoing->quitProcess(); // LCOV_EXCL_LINE
+      #endif
+      // clang-format on
       if(m_outGoing->getQuitProcess())
       {
          parentT::template log<logger::software_error>({__FILE__, __LINE__, "INDI client appears to be disconnected -- NEW not sent."});

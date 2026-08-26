@@ -105,7 +105,7 @@ struct telem_teldata : public flatbuffer_log
         msg += std::to_string( fbs->domeStat() );
 
         return msg;
-    }
+    } // LCOV_EXCL_LINE gcov reports this closing brace as a separate line that only runs during exception cleanup
 
     static int roi( void *msgBuffer )
     {

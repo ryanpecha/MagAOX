@@ -64,8 +64,10 @@ struct string_log : public flatbuffer_log
 
         auto rgs = GetString_log_fb( msgBuffer );
 
+        // message is a required parameter in both messageT constructors.
+        // Both constructors pass it to builder.CreateString() so message() is never nullptr.
         if( rgs->message() == nullptr )
-            return "";
+            return ""; // LCOV_EXCL_LINE message() is never nullptr
         else
             return rgs->message()->c_str();
     }
@@ -74,14 +76,12 @@ struct string_log : public flatbuffer_log
     static std::string message( void *msgBuffer /**< [in] Buffer containing the flatbuffer serialized message.*/ )
     {
         auto rgs = GetString_log_fb( msgBuffer );
+        // message is a required parameter in both messageT constructors.
+        // Both constructors pass it to builder.CreateString() so message() is never nullptr.
         if( rgs->message() == nullptr )
-        {
-            return "";
-        }
+            return ""; // LCOV_EXCL_LINE message() is never nullptr
         else
-        {
             return rgs->message()->c_str();
-        }
     }
 
     /// Get the logMetaDetail for a member by name
@@ -92,14 +92,7 @@ struct string_log : public flatbuffer_log
     static logMetaDetail getAccessor( const std::string &member /**< [in] the name of the member */ )
     {
         if( member == "message" )
-        {
-            return logMetaDetail( { "MESSAGE",
-                                    "log message",
-                                    logMeta::valTypes::String,
-                                    logMeta::metaTypes::State,
-                                    reinterpret_cast<void *>( &message ),
-                                    false } );
-        }
+            return logMetaDetail( { "MESSAGE", "log message", logMeta::valTypes::String, logMeta::metaTypes::State, reinterpret_cast<void *>( &message ), false } );
         else
         {
             std::cerr << "No member " << member << " in string_log\n";
