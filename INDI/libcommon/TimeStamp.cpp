@@ -465,7 +465,7 @@ string TimeStamp::getFormattedIsoTimeStr() const
   }
 
   return szFormatted;
-}
+} // LCOV_EXCL_LINE Only exception cleanup code is charged to this brace. That code runs only if an exception is thrown.
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Generates the date and time formatted as "Sun Jun 24 19:38:12.234 2007".
@@ -503,7 +503,7 @@ string TimeStamp::getFormattedStr() const
   }
 
   return szFormatted;
-}
+} // LCOV_EXCL_LINE Only exception cleanup code is charged to this brace. That code runs only if an exception is thrown.
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Creates an iso-formatted date similar to:
@@ -544,7 +544,7 @@ string TimeStamp::getFormattedIso8601Str() const
   }
 
   return szFormatted;
-}
+} // LCOV_EXCL_LINE Only exception cleanup code is charged to this brace. That code runs only if an exception is thrown.
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Creates an iso-formatted date similar to: 20091230 based on the currently
@@ -570,7 +570,7 @@ string TimeStamp::getFormattedIsoDateStr() const
   }
 
   return szFormatted;
-}
+} // LCOV_EXCL_LINE Only exception cleanup code is charged to this brace. That code runs only if an exception is thrown.
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Calculates the number of milliseconds that have elapsed since this object's

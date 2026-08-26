@@ -79,13 +79,13 @@ class ReadWriteLock
     {
       int nErr = 0;
       if ( ( nErr = pthread_rwlock_init( &m_idLock, NULL ) ) != 0 )
-        throw std::runtime_error( std::string( "ReadWriteLock: " ) + strerror( nErr ) );
+        throw std::runtime_error( std::string( "ReadWriteLock: " ) + strerror( nErr ) ); // LCOV_EXCL_LINE pthread_rwlock_init with default attributes fails only when the system is out of resources. A test cannot cause that.
     }
     virtual ~ReadWriteLock() noexcept(false)
     {
       int nErr = 0;
       if ( ( nErr = pthread_rwlock_destroy( &m_idLock ) ) != 0 )
-        throw std::runtime_error( std::string( "ReadWriteLock: " ) + strerror( nErr ) );
+        throw std::runtime_error( std::string( "ReadWriteLock: " ) + strerror( nErr ) ); // LCOV_EXCL_LINE pthread_rwlock_destroy on a valid lock that is not held does not fail on glibc.
     }
 
   private:
@@ -115,13 +115,13 @@ class ReadWriteLock
     {
       int nErr = 0;
       if ( ( nErr = pthread_rwlock_unlock( &m_idLock ) ) != 0 )
-        throw std::runtime_error( std::string( "unlockRead: " ) + strerror( nErr ) );
+        throw std::runtime_error( std::string( "unlockRead: " ) + strerror( nErr ) ); // LCOV_EXCL_LINE glibc returns 0 when a rwlock is unlocked while not held. So a test cannot make this fail.
     }
     void unlockWrite()
     {
       int nErr = 0;
       if ( ( nErr = pthread_rwlock_unlock( &m_idLock ) ) != 0 )
-        throw std::runtime_error( std::string( "unlockWrite: " ) + strerror( nErr ) );
+        throw std::runtime_error( std::string( "unlockWrite: " ) + strerror( nErr ) ); // LCOV_EXCL_LINE glibc returns 0 when a rwlock is unlocked while not held. So a test cannot make this fail.
     }
 
     // Variables.

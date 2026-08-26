@@ -42,12 +42,16 @@ IndiClient::IndiClient( const string &szName,
 /// Copy constructor.
 /// \param icRhs Another version of the driver.
 
+// This copy constructor is private and nothing calls it.
+// It cannot run, so it is excluded from coverage.
+// LCOV_EXCL_START
 IndiClient::IndiClient( const IndiClient &icRhs ) : IndiConnection()
 //  : IndiConnection( icRhs )  // can't invoke - private
 {
     static_cast<void>( icRhs );
     // Empty because this is private.
 }
+// LCOV_EXCL_STOP
 
 ////////////////////////////////////////////////////////////////////////////////
 /// \brief IndiClient::operator =
@@ -55,6 +59,9 @@ IndiClient::IndiClient( const IndiClient &icRhs ) : IndiConnection()
 /// \param icRhs The right-hand side of the operation.
 /// \return This object.
 
+// This assignment operator is private and nothing calls it.
+// It cannot run, so it is excluded from coverage.
+// LCOV_EXCL_START
 const IndiClient &IndiClient::operator=( const IndiClient &icRhs )
 //  : IndiConnection::operator= ( icRhs )  // can't invoke - private
 {
@@ -62,6 +69,7 @@ const IndiClient &IndiClient::operator=( const IndiClient &icRhs )
     // Empty because this is private.
     return *this;
 }
+// LCOV_EXCL_STOP
 
 ////////////////////////////////////////////////////////////////////////////////
 /// \brief IndiClient::~IndiClient
@@ -89,12 +97,16 @@ void IndiClient::setup( const string &szIPAddr, const int &port )
         // Set them by default to an invalid value.
         detachFds();
 
+        // setup() is private. Each constructor calls it once, and at that
+        // point the socket is new and not yet valid. This branch never runs.
+        // LCOV_EXCL_START
         if( m_socClient.isValid() == true )
         {
             detachFds();
             m_socClient.close();
             Thread::msleep( 10 );
         }
+        // LCOV_EXCL_STOP
 
         // Config cfReader;
         m_socClient = SystemSocket( SystemSocket::Stream, port, szIPAddr.c_str() );
@@ -119,6 +131,15 @@ void IndiClient::setup( const string &szIPAddr, const int &port )
     {
         detachFds();
         m_socClient.close();
+        // A failed connect() closes its own socket before it throws.
+        // So the close() call above runs on a socket that is already
+        // invalid, and close() throws for an invalid socket.
+        // That throw leaves setup() before the two lines below can run.
+        // The runtime_error handler below is never reached either.
+        // SystemSocket::Error derives from runtime_error and is the only
+        // exception the try block throws in practice.
+        // The handler above catches it first.
+        // LCOV_EXCL_START
         Thread::msleep( 10 );
         return;
     }
@@ -129,6 +150,7 @@ void IndiClient::setup( const string &szIPAddr, const int &port )
         Thread::msleep( 10 );
         return;
     }
+    // LCOV_EXCL_STOP
 }
 
 ////////////////////////////////////////////////////////////////////////////////

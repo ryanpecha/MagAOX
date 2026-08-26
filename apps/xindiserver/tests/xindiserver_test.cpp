@@ -220,10 +220,6 @@ SCENARIO( "xindiserver constructs inserver options", "[xindiserver]" )
     }
 }
 
-} // namespace xindiserverTest
-
-} // namespace libXWCTest
-
 SCENARIO( "xindiserver constructs local driver arguments", "[xindiserver]" )
 {
     GIVEN( "A default constructed xindiserver" )
@@ -577,3 +573,7 @@ SCENARIO( "xindiserver constructs both local and remote driver arguments", "[xin
         }
     }
 }
+
+} // namespace xindiserverTest
+
+} // namespace libXWCTest

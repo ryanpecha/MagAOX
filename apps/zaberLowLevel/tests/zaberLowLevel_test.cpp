@@ -77,6 +77,11 @@ class zaberLowLevel_test : public zaberLowLevel
             stateOut << rawPos << '\n' << parked << '\n' << maxPos << '\n' << lastHomed << '\n';
         }
 
+        // appStartup() returns immediately while the state machine is still in its default
+        // UNINITIALIZED state. The real execute() sequence always moves to INITIALIZED right
+        // before calling appStartup(), so the harness does the same here.
+        state( stateCodes::INITIALIZED );
+
         if( appStartup() < 0 )
         {
             return -1;
@@ -122,7 +127,7 @@ class zaberLowLevel_test : public zaberLowLevel
     }
 
     /// Get the cached device address for a configured stage.
-    int deviceAddressFor( size_t stageIndex ) const
+    int deviceAddressFor( size_t stageIndex )
     {
         return m_stages.at( stageIndex ).deviceAddress();
     }
@@ -141,7 +146,7 @@ class zaberLowLevel_test : public zaberLowLevel
     }
 
     /// Get the FSM state for recovery tests.
-    stateCodes::stateCodeT appState() const
+    stateCodes::stateCodeT appState()
     {
         return state();
     }
@@ -189,9 +194,13 @@ class zaberLowLevel_test : public zaberLowLevel
     }
 
     /// Get the warning-switch property value for a stage.
+    /** The element of m_indiP_warn is a Switch, not a text or number element. The shared
+     * propertyValue() helper reads the generic string value, which for a switch is always
+     * "1" or "0" rather than the On or Off state. So this reads the switch state directly.
+     */
     std::string warnValue( const std::string &stageName ) const
     {
-        return propertyValue( m_indiP_warn, stageName );
+        return m_indiP_warn[stageName].getSwitchState() == pcf::IndiElement::On ? "On" : "Off";
     }
 
     /// Invoke the power-off handling under test.

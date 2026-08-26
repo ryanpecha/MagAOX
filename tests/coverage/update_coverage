@@ -65,20 +65,67 @@ else
     fi
 fi
 
-lcov --directory . --capture --output-file coverage.info
+# Notes on the lcov options used below.
+#
+# These options need lcov 2.0 or newer. The lcov 1.14 package in Rocky 9 EPEL
+# does not know them and exits with an error. If lcov --version reports 1.x,
+# install lcov 2.x from the lcov GitHub releases page.
+#
+# --ignore-errors takes the name of an error class. Naming a class once turns
+# that error into a warning that is still printed. Naming the same class twice,
+# for example inconsistent,inconsistent, also hides the warning.
+#
+# -j runs gcov on the .gcda files in parallel.
+#
+# inconsistent
+#   gcc sometimes reports line and function data that contradict each other.
+#   This shows up mostly on template code and function epilogues. lcov treats
+#   it as a fatal error by default. It is harmless for our report so it is
+#   hidden.
+#
+# path
+#   lcov stops when it finds a .gcda file that has no matching .gcno file.
+#   With this class ignored it skips that .gcda file and keeps going. Stale
+#   .gcda files left behind by an earlier build can cause this.
+lcov --directory . --capture -j $(nproc) --output-file coverage.info \
+         --ignore-errors inconsistent,inconsistent \
+         --ignore-errors path
 
-lcov --remove coverage.info "*/tests/*" "/usr/*" "/sys/*" "/tty/*" \
+# Remove test code and system headers from the report.
+#
+# Do not add "/sys/*" or "/tty/*" here. lcov matches these patterns anywhere in
+# the path, so they would also remove the production sources in libMagAOX/sys/
+# and libMagAOX/tty/ from the report.
+#
+# unused
+#   lcov stops if a remove pattern matches nothing. This happens when a partial
+#   run captured no /usr headers. Naming it twice hides the warning.
+#
+# inconsistent
+#   lcov reloads the trace file here and runs the same consistency checks as
+#   the capture step, so it needs the same treatment.
+#
+# path is not used here. Nothing in the remove step can raise that error.
+lcov --remove coverage.info "*/tests/*" "/usr/*" \
          --ignore-errors unused,unused \
          --ignore-errors inconsistent,inconsistent \
-         --ignore-errors path \
          --output-file coverage_filtered.info
 
-genhtml coverage_filtered.info --output-directory coverage_report \
+# Build the HTML report.
+#
+# --hierarchical keeps the source directory tree instead of one flat file list.
+# --filter function treats template and inline function aliases as one function.
+# --merge-aliases adds the hit counts of those aliases together.
+# --suppress-aliases hides the list of alias names in the function tables.
+# --filter brace,blank drops gcov records for lines that hold only a closing
+#   brace or nothing at all. gcc reports these for exception cleanup code.
+# --prefix strips the repo path from the file names shown in the report.
+genhtml coverage_filtered.info -j $(nproc) --output-directory coverage_report \
                                --title "MagAOX" \
                                --hierarchical \
                                --merge-aliases \
                                --suppress-aliases \
-                               --filter function \
+                               --filter function,brace,blank \
                                --prefix "$repo_root" \
                                --demangle-cpp \
                                --css-file tests/coverage/gcov.css

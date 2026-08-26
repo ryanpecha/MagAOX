@@ -119,7 +119,7 @@ string IndiMessage::convertTypeToString( const IndiMessage::Type &tType )
   }
 
   return szType;
-}
+} // LCOV_EXCL_LINE Only exception cleanup code is charged to this brace. That code runs only if an exception is thrown.
 
 ////////////////////////////////////////////////////////////////////////////////
 /// Returns the enumerated type given the tag.
