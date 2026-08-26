@@ -438,6 +438,45 @@ with `CXX="ccache g++"`) for near-instant rebuilds after edits, and a **faster l
 (`sudo dnf install -y lld`, then `LDFLAGS+=-fuse-ld=lld`) since each of ~120 tests links
 `libMagAOX.a`.
 
+### 9.7 After a coverage build, plain `make install` fails to link
+
+A coverage run (`make coverage` / `tests/coverage/make_coverage`) rebuilds `libMagAOX.a`,
+`INDI/libcommon/libcommon.a`, and `libs/libtelnet/libtelnet.a` **with gcov instrumentation**
+and leaves them that way. A later plain `make ALL_APPS=1` / `make install ALL_APPS=1` links
+apps *without* `--coverage` against those instrumented archives and dies with:
+
+```
+undefined reference to `__gcov_init' / `__gcov_exit' / `__gcov_merge_add'
+```
+
+(The first app alphabetically — `adcTracker` — is where it surfaces.) Two ways out:
+
+- **Staying in coverage work** (cheapest — no clean, incremental): pass `COVERAGE=1` to the
+  app build too, so the link line gains `--coverage`:
+
+  ```bash
+  make ALL_APPS=1 COVERAGE=1
+  make install ALL_APPS=1 COVERAGE=1
+  ```
+
+  The installed binaries are instrumented — running them drops `.gcda` files into the source
+  tree (harmless untracked clutter; never `git add -A`).
+
+- **Clean production install**: rebuild the instrumented archives without coverage first,
+  then redo the normal install. (The next `make_coverage` re-instruments them anyway, so
+  only do this if you actually need clean binaries now.)
+
+  ```bash
+  make -C libMagAOX clean && make -C libMagAOX
+  make -C INDI/libcommon clean
+  make -C libs/libtelnet clean
+  make ALL_APPS=1 && make install ALL_APPS=1
+  ```
+
+To check which state an archive is in: `nm libMagAOX/libMagAOX.a | grep -q __gcov_init && echo instrumented`.
+Note the coverage pipeline never uses the installed apps — if install isn't needed for what
+you're doing next, just skip it.
+
 ---
 
 ## 10. Rebuild after editing
@@ -457,6 +496,9 @@ make all ALL_APPS=1 && make install ALL_APPS=1     # whole tree, incremental
 
 No leading `sudo` on `make install` (see Step 7). Editing `libMagAOX` (header-only) recompiles its
 precompiled header and everything that includes it — expect a longer build.
+
+> `undefined reference to __gcov_init` at link → the libs are still in their coverage build
+> state from an earlier coverage run; see §9.7.
 
 ---
 
@@ -524,7 +566,8 @@ Then continue — `make` is incremental:
 ```bash
 cd /opt/MagAOX/source/MagAOX
 git pull
-make all ALL_APPS=1 && make install ALL_APPS=1
+make all ALL_APPS=1 && make install ALL_APPS=1   # add COVERAGE=1 to both if the libs are
+                                                 # still coverage-instrumented (§9.7)
 ```
 
 Optional: `docker update --restart unless-stopped magaox-dev` makes the container auto-start with
