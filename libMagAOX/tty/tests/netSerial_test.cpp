@@ -118,7 +118,7 @@ TEST_CASE( "netSerial::serialInit", "[libMagAOX::tty::netSerial]" )
         REQUIRE( setrlimit(RLIMIT_NOFILE, &tiny) == 0 );
 
         MagAOX::tty::netSerial ns;
-        int rv = ns.serialInit("127.0.0.1", 12345);
+        int rv = ns.serialInit("127.0.0.1", 12345); // arbitrary port. socket() fails before any connection is attempted
 
         REQUIRE( setrlimit(RLIMIT_NOFILE, &orig) == 0 );
 

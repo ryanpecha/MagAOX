@@ -243,7 +243,7 @@ TEST_CASE( "ttyOpenRaw opens a real tty device and configures it", "[libMagAOX::
       std::string devName = openPtySlaveName(masterFd);
 
       int fd = -1;
-      int rv = MagAOX::tty::ttyOpenRaw(fd, devName, (speed_t) 0xDEADBEEF);
+      int rv = MagAOX::tty::ttyOpenRaw(fd, devName, (speed_t) 0xDEADBEEF); // not a valid speed_t
 
       REQUIRE(rv == TTY_E_SETISPEED);
       REQUIRE(fd == 0);

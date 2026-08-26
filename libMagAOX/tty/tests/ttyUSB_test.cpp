@@ -63,7 +63,7 @@ namespace ttyUSBTest
 TEST_CASE( "ttyUSBDevName returns TTY_E_NODEVNAMES when no ttyUSB devices exist", "[libMagAOX::tty::ttyUSBDevName]" )
 {
     std::string devName = "unset";
-    int rv = MagAOX::tty::ttyUSBDevName( devName, "0403", "6001", "" );
+    int rv = MagAOX::tty::ttyUSBDevName( devName, "0403", "6001", "" ); // FTDI FT232 vendor and product ids
 
     REQUIRE( rv == TTY_E_NODEVNAMES );
     REQUIRE( devName == "" );
@@ -74,7 +74,7 @@ TEST_CASE( "ttyUSBDevName returns TTY_E_NODEVNAMES when no ttyUSB devices exist"
 TEST_CASE( "ttyUSBDevNames returns TTY_E_NODEVNAMES when no ttyUSB devices exist", "[libMagAOX::tty::ttyUSBDevNames]" )
 {
     std::vector<std::string> devNames = { "stale", "entries" };
-    int rv = MagAOX::tty::ttyUSBDevNames( devNames, "0403", "6001" );
+    int rv = MagAOX::tty::ttyUSBDevNames( devNames, "0403", "6001" ); // FTDI FT232 vendor and product ids
 
     REQUIRE( rv == TTY_E_NODEVNAMES );
     REQUIRE( devNames.size() == 0 );
@@ -112,7 +112,7 @@ TEST_CASE( "ttyUSBDevName reports device-not-found when a syspath entry isn't a 
     xwcTestTtyUsbScratchDir = scratch.dir.string() + "/";
 
     std::string devName = "unset";
-    int rv = MagAOX::tty::XWCTEST_TTYUSB_NOSYSPATH_ns::ttyUSBDevName( devName, "0403", "6001", "" );
+    int rv = MagAOX::tty::XWCTEST_TTYUSB_NOSYSPATH_ns::ttyUSBDevName( devName, "0403", "6001", "" ); // FTDI FT232 vendor and product ids
 
     REQUIRE( rv == TTY_E_DEVNOTFOUND );
     REQUIRE( devName == "" );
@@ -126,7 +126,7 @@ TEST_CASE( "ttyUSBDevNames reports device-not-found when a syspath entry isn't a
     xwcTestTtyUsbScratchDir = scratch.dir.string() + "/";
 
     std::vector<std::string> devNames = { "stale" };
-    int rv = MagAOX::tty::XWCTEST_TTYUSB_NOSYSPATH_ns::ttyUSBDevNames( devNames, "0403", "6001" );
+    int rv = MagAOX::tty::XWCTEST_TTYUSB_NOSYSPATH_ns::ttyUSBDevNames( devNames, "0403", "6001" ); // FTDI FT232 vendor and product ids
 
     REQUIRE( rv == TTY_E_DEVNOTFOUND );
     REQUIRE( devNames.size() == 0 );
@@ -138,7 +138,7 @@ TEST_CASE( "ttyUSBDevName reports device-not-found for a real tty device with no
            "[libMagAOX::tty::ttyUSBDevName]" )
 {
     std::string devName = "unset";
-    int rv = MagAOX::tty::XWCTEST_TTYUSB_NOUSBPARENT_ns::ttyUSBDevName( devName, "0403", "6001", "" );
+    int rv = MagAOX::tty::XWCTEST_TTYUSB_NOUSBPARENT_ns::ttyUSBDevName( devName, "0403", "6001", "" ); // FTDI FT232 vendor and product ids
 
     REQUIRE( rv == TTY_E_DEVNOTFOUND );
     REQUIRE( devName == "" );
@@ -149,7 +149,7 @@ TEST_CASE( "ttyUSBDevNames reports device-not-found for a real tty device with n
            "[libMagAOX::tty::ttyUSBDevNames]" )
 {
     std::vector<std::string> devNames = { "stale" };
-    int rv = MagAOX::tty::XWCTEST_TTYUSB_NOUSBPARENT_ns::ttyUSBDevNames( devNames, "0403", "6001" );
+    int rv = MagAOX::tty::XWCTEST_TTYUSB_NOUSBPARENT_ns::ttyUSBDevNames( devNames, "0403", "6001" ); // FTDI FT232 vendor and product ids
 
     REQUIRE( rv == TTY_E_DEVNOTFOUND );
     REQUIRE( devNames.size() == 0 );

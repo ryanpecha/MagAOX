@@ -128,7 +128,7 @@ TEST_CASE( "telnetConn::connect", "[libMagAOX::tty::telnetConn]" )
       REQUIRE( setrlimit(RLIMIT_NOFILE, &tiny) == 0 );
 
       MagAOX::tty::telnetConn tc;
-      int rv = tc.connect("127.0.0.1", "12345");
+      int rv = tc.connect("127.0.0.1", "12345"); // arbitrary port. socket() fails before any connection is attempted
 
       REQUIRE( setrlimit(RLIMIT_NOFILE, &orig) == 0 );
 

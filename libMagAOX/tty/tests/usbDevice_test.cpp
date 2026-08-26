@@ -82,7 +82,7 @@ TEST_CASE( "usbDevice::loadConfig reads vendor/product/serial/baud and rejects a
         mx::app::writeConfigFile( "/tmp/usbDevice_test.conf",
                                   { "usb", "usb", "usb", "usb" },
                                   { "idVendor", "idProduct", "serial", "baud" },
-                                  { "ffff", "ffff", "XWCTEST-NO-SUCH-SERIAL", "9600" } );
+                                  { "ffff", "ffff", "XWCTEST-NO-SUCH-SERIAL", "9600" } ); // ids and serial that no attached device has
 
         mx::app::appConfigurator config;
         MagAOX::tty::usbDevice   dev;
@@ -103,7 +103,7 @@ TEST_CASE( "usbDevice::loadConfig reads vendor/product/serial/baud and rejects a
 
     SECTION( "an unrecognized baud rate is rejected before getDeviceName() is even tried" )
     {
-        mx::app::writeConfigFile( "/tmp/usbDevice_test.conf", { "usb" }, { "baud" }, { "1234567" } );
+        mx::app::writeConfigFile( "/tmp/usbDevice_test.conf", { "usb" }, { "baud" }, { "1234567" } ); // not a valid baud rate
 
         mx::app::appConfigurator config;
         MagAOX::tty::usbDevice   dev;
