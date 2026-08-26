@@ -36,6 +36,28 @@
 #endif
 
 
+#undef XWCTEST_IF_MAGAOXAPP_EXEC_LOG_DEATH
+#ifdef XWCTEST_MAGAOXAPP_EXEC_LOG_DEATH
+#define XWCTEST_IF_MAGAOXAPP_EXEC_LOG_DEATH(line) \
+/* clang-format off */ \
+{ line ; } /* LCOV_EXCL_LINE */ \
+/* clang-format on */
+#else
+#define XWCTEST_IF_MAGAOXAPP_EXEC_LOG_DEATH(line) do {} while(0)
+#endif
+
+
+#undef XWCTEST_IF_MAGAOXAPP_SIGTERMH_ERR
+#ifdef XWCTEST_MAGAOXAPP_SIGTERMH_ERR
+#define XWCTEST_IF_MAGAOXAPP_SIGTERMH_ERR(line) \
+/* clang-format off */ \
+{ line ; } /* LCOV_EXCL_LINE */ \
+/* clang-format on */
+#else
+#define XWCTEST_IF_MAGAOXAPP_SIGTERMH_ERR(line) do {} while(0)
+#endif
+
+
 #undef XWCTEST_IF_MAGAOXAPP_PID_LOCKED
 #ifdef XWCTEST_MAGAOXAPP_PID_LOCKED
 #define XWCTEST_IF_MAGAOXAPP_PID_LOCKED(line) \
@@ -55,6 +77,17 @@
 /* clang-format on */
 #else
 #define XWCTEST_IF_MAGAOXAPP_PID_WRITE_FAIL(line) do {} while(0)
+#endif
+
+
+#undef XWCTEST_IF_MAGAOXAPP_PID_UNLOCK_ERR
+#ifdef XWCTEST_MAGAOXAPP_PID_UNLOCK_ERR
+#define XWCTEST_IF_MAGAOXAPP_PID_UNLOCK_ERR(line) \
+/* clang-format off */ \
+{ line ; } /* LCOV_EXCL_LINE */ \
+/* clang-format on */
+#else
+#define XWCTEST_IF_MAGAOXAPP_PID_UNLOCK_ERR(line) do {} while(0)
 #endif
 
 
