@@ -83,7 +83,7 @@ SCENARIO( "xindiserver constructs inserver options", "[xindiserver]" )
     GIVEN( "A default constructed xindiserver" )
     {
         xindiserver      xi;
-        xindiserver_test xi_test;
+        libXWCTest::xindiserverTest::xindiserver_test xi_test;
 
         int rv;
 
@@ -229,7 +229,7 @@ SCENARIO( "xindiserver constructs local driver arguments", "[xindiserver]" )
     GIVEN( "A default constructed xindiserver" )
     {
         xindiserver      xi;
-        xindiserver_test xi_test;
+        libXWCTest::xindiserverTest::xindiserver_test xi_test;
 
         int rv;
 
@@ -319,7 +319,7 @@ SCENARIO( "xindiserver constructs remote driver arguments", "[xindiserver]" )
     GIVEN( "A default constructed xindiserver" )
     {
         xindiserver      xi;
-        xindiserver_test xi_test;
+        libXWCTest::xindiserverTest::xindiserver_test xi_test;
 
         int rv;
 
@@ -515,7 +515,7 @@ SCENARIO( "xindiserver constructs both local and remote driver arguments", "[xin
     GIVEN( "A default constructed xindiserver" )
     {
         xindiserver      xi;
-        xindiserver_test xi_test;
+        libXWCTest::xindiserverTest::xindiserver_test xi_test;
 
         int rv;
 

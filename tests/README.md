@@ -22,6 +22,23 @@ Two generators are involved. Both are Python plus a jinja2 template.
 | per log type Catch2 tests, needs Python 3.12 | `libMagAOX/logger/types/*.hpp` and `*.fbs` | `libMagAOX/logger/tests/generateTemplatedCatch2Tests.py` + `catch2TestTemplate.jinja2` | `libMagAOX/logger/tests/generated_tests/*.cpp`, ignored by git | `make` in `libMagAOX/logger/tests`, see [flatlogs.md](../libMagAOX/logger/tests/flatlogs.md) |
 | entropy tests | the generated tests above | `generateEntropyTests.py` + `entropyTestTemplate.jinja2` | `gen_entropy_tests/`, ignored by git | same Makefile |
 
+## Test harnesses for the dev:: mixins
+
+The mixins in `libMagAOX/app/dev/` are CRTP templates that reach into the derived class, so
+a test has to build a small app around each one. The conventions:
+
+- The harness lives in `libMagAOX/app/dev/tests/<mixin>_test.hpp`, the tests in
+  `<mixin>_test.cpp`.
+- Every harness derives from `MagAOX::app::dev::testHarness::appHarnessBase` in
+  `libMagAOX/app/dev/tests/testHarnessCommon.hpp` (or `appHarnessBaseT<true>` when the mixin
+  needs `MagAOXApp<true>`), plus the mixin bases and the friend declarations the mixin
+  documents. The base supplies the config name constructor, `setupRealDriver()` for a
+  FIFO-less INDI driver, and `m_regFailAt` to make the n-th INDI property registration fail.
+- Variants that differ only by constants are one class template with a small caps or traits
+  struct, for example `stdCameraHarness<capsT>`, `dmHarness<realT>`, `fgHarness<capsT>`.
+- A forwarder that exposes a protected member exists only when the branch it reaches has no
+  path through the lifecycle functions, the public API, or an INDI callback. Each one says why.
+
 ## Other support files here
 
 - `catch2/catch.hpp` is the single header Catch2 used by every test.

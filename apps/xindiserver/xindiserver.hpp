@@ -108,6 +108,23 @@ int loadSSHTunnelConfigs( tunnelMapT & tmap, ///< [out] the tunnel map which wil
 #define XINDISERVER_E_BADSERVERSPEC (-110)
 
 
+} // namespace app
+} // namespace MagAOX
+
+// Forward declaration for the test harness friendship below.
+namespace libXWCTest
+{
+namespace xindiserverTest
+{
+struct xindiserver_test;
+}
+} // namespace libXWCTest
+
+namespace MagAOX
+{
+namespace app
+{
+
 /** The INDI Server wrapper application class.
   *
   * \ingroup xindiserver
@@ -117,7 +134,7 @@ class xindiserver : public MagAOXApp<false>
 {
 
    //Give the test harness access.
-   friend class xindiserver_test;
+   friend struct libXWCTest::xindiserverTest::xindiserver_test;
 
 protected:
 

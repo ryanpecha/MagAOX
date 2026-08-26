@@ -32,6 +32,22 @@ class tcsInterface_test : public tcsInterface
 {
 
   public:
+    // The callbacks are protected in tcsInterface. The XWCTEST_INDI_NEW_CALLBACK macros call
+    // them on this harness from the test body, so they are made public here.
+    using tcsInterface::newCallBack_m_indiP_pyrNudge;
+    using tcsInterface::newCallBack_m_indiP_acqFromGuider;
+    using tcsInterface::newCallBack_m_indiP_labMode;
+    using tcsInterface::newCallBack_m_indiP_offlTTenable;
+    using tcsInterface::newCallBack_m_indiP_offlTTdump;
+    using tcsInterface::newCallBack_m_indiP_offlTTavgInt;
+    using tcsInterface::newCallBack_m_indiP_offlTTgain;
+    using tcsInterface::newCallBack_m_indiP_offlTTthresh;
+    using tcsInterface::newCallBack_m_indiP_offlFenable;
+    using tcsInterface::newCallBack_m_indiP_offlFdump;
+    using tcsInterface::newCallBack_m_indiP_offlFavgInt;
+    using tcsInterface::newCallBack_m_indiP_offlFgain;
+    using tcsInterface::newCallBack_m_indiP_offlFthresh;
+
     tcsInterface_test( const std::string device )
     {
         m_configName = device;

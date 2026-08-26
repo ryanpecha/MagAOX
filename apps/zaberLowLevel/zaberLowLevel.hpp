@@ -997,13 +997,15 @@ int zaberLowLevel::appLogic()
                 updateIfChanged( m_indiP_curr_state, m_stages[i].name(), std::string( "NODEVICE" ) );
             }
 
+            // Bug fix. updateIfChanged() streams the switch state into the element value, so
+            // the switch itself never changed. updateSwitchIfChanged() sets the switch state.
             if( m_stages[i].warn() )
             {
-                updateIfChanged( m_indiP_warn, m_stages[i].name(), pcf::IndiElement::On );
+                updateSwitchIfChanged( m_indiP_warn, m_stages[i].name(), pcf::IndiElement::On );
             }
             else
             {
-                updateIfChanged( m_indiP_warn, m_stages[i].name(), pcf::IndiElement::Off );
+                updateSwitchIfChanged( m_indiP_warn, m_stages[i].name(), pcf::IndiElement::Off );
             }
 
             if( m_stages[i].updateTemp( m_port ) < 0 )
@@ -1118,7 +1120,7 @@ inline int zaberLowLevel::onPowerOff()
                                ( m_stages[i].ledEnabled() ? pcf::IndiElement::On : pcf::IndiElement::Off ) );
         updateIfChanged( m_indiP_temp, m_stages[i].name(), std::string( "" ) );
         updateIfChanged( m_indiP_curr_state, m_stages[i].name(), std::string( "POWEROFF" ) );
-        updateIfChanged( m_indiP_warn, m_stages[i].name(), pcf::IndiElement::Off );
+        updateSwitchIfChanged( m_indiP_warn, m_stages[i].name(), pcf::IndiElement::Off ); // Bug fix. See appLogic().
     }
 
     return 0;
