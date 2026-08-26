@@ -1,4 +1,25 @@
 // #define CATCH_CONFIG_MAIN
+/** \file dm_test.cpp
+  * \brief Catch2 tests for the MagAOX::app::dev::dm device mixin.
+  *
+  * The component under test is the CRTP mixin in libMagAOX/app/dev/dm.hpp. It manages the
+  * deformable mirror channels, flats, test patterns, and saturation monitoring.
+  *
+  * The tests drive the real mixin through the dmTest harness declared in dm_test.hpp. The
+  * harness is a MagAOXApp<false> with a real shmimMonitor base. The hardware hooks initDM(),
+  * zeroDM(), releaseDM(), and commandDM() are stubs whose return values a test can set. Real
+  * milk shared memory image streams are created under /tmp/dmtest/shm by setting
+  * MILK_SHM_DIR. Real FITS flat and test files are written under /tmp/dmtest_calibs. INDI
+  * callbacks are driven directly with hand-built pcf::IndiProperty objects. No INDI server is
+  * needed. Some tests install a FIFO-less INDI driver so the property update code runs. Two
+  * tests install a SIGUSR1 handler and start the real saturation thread.
+  *
+  * A few tests force real operating system failures by making /tmp/dmtest/shm unwritable.
+  * milk caches the shm directory the first time it is resolved in a process, so every test in
+  * this file must use /tmp/dmtest/shm.
+  *
+  * \ingroup dm_tests
+  */
 #include "../../../../tests/catch2/catch.hpp"
 
 #include <mx/sys/timeUtils.hpp>
@@ -13,9 +34,9 @@
  * \ingroup app_dev_unit_tests
  */
 
-/// Test MagAOXApp<false>::setupBasicConfig()'s critical-shutdown branch for power
-/// management enabled without INDI -- dmTest is a convenient MagAOXApp<false>-based
-/// harness for this, since MagAOXApp_test.cpp only instantiates MagAOXApp<true>.
+/// Verify that MagAOXApp<false>::setupBasicConfig() requests a critical shutdown when power
+/// management is enabled without INDI. dmTest is a convenient MagAOXApp<false> harness for this.
+/// MagAOXApp_test.cpp only instantiates MagAOXApp<true>, so the branch is unreachable there.
 /**
  * \ingroup dm_tests
  */
@@ -29,8 +50,8 @@ TEST_CASE( "Test MagAOXApp<false> setupBasicConfig rejects power mgt without IND
     REQUIRE( pdt.shutdown() != 0 );
 }
 
-/// Test MagAOXApp<false>::startINDI()'s trivial-success branch when _useINDI is false,
-/// unreachable from MagAOXApp_test.cpp (which only instantiates MagAOXApp<true>).
+/// Verify that MagAOXApp<false>::startINDI() trivially succeeds when _useINDI is false.
+/// This branch is unreachable from MagAOXApp_test.cpp, which only instantiates MagAOXApp<true>.
 /**
  * \ingroup dm_tests
  */
@@ -40,14 +61,19 @@ TEST_CASE( "Test MagAOXApp<false> startINDI trivially succeeds", "[dev::dm]" )
     REQUIRE( pdt.startINDI() == 0 );
 }
 
+/// Verify that MagAOXApp<false>::createINDIFIFOS() trivially succeeds when INDI is compiled out.
+/**
+ * \ingroup dm_tests
+ */
 TEST_CASE( "Test MagAOXApp<false> createINDIFIFOS trivially succeeds", "[dev::dm]" )
 {
     dm_tests::dmTest pdt( "xx", false );
     REQUIRE( pdt.callCreateINDIFIFOS() == 0 );
 }
 
-/// Test MagAOXApp<false>::handleGetProperties()/handleNewProperty()/handleSetProperty()'s
-/// constexpr !m_useINDI early-return branches, also unreachable from MagAOXApp_test.cpp.
+/// Verify that the MagAOXApp<false> callbacks handleGetProperties(), handleNewProperty(), and
+/// handleSetProperty() return immediately when m_useINDI is false. These constexpr early-return
+/// branches are also unreachable from MagAOXApp_test.cpp.
 /**
  * \ingroup dm_tests
  */
@@ -65,8 +91,9 @@ TEST_CASE( "Test MagAOXApp<false> INDI handle* callbacks are no-ops", "[dev::dm]
     REQUIRE( true );
 }
 
-/// Test MagAOXApp<false>::registerIndiPropertyNew()'s type/perm/state-building overloads
-/// (with and without an explicit switch rule), also unreachable from MagAOXApp_test.cpp.
+/// Verify the MagAOXApp<false>::registerIndiPropertyNew() overloads that build the property from
+/// a type, a permission, and a state. One overload takes an explicit switch rule and one does
+/// not. Both are also unreachable from MagAOXApp_test.cpp.
 /**
  * \ingroup dm_tests
  */
@@ -79,6 +106,10 @@ TEST_CASE( "Test MagAOXApp<false> registerIndiPropertyNew type/perm/state overlo
     REQUIRE( pdt.callRegisterIndiPropertyNewWithRule( prop2, "otherprop" ) == 0 );
 }
 
+/// Verify that MagAOXApp<false>::sendNewStandardIndiToggle() trivially succeeds when INDI is compiled out.
+/**
+ * \ingroup dm_tests
+ */
 TEST_CASE( "Test MagAOXApp<false> sendNewStandardIndiToggle trivially succeeds", "[dev::dm]" )
 {
     dm_tests::dmTest pdt( "xx", false );
@@ -309,8 +340,8 @@ TEST_CASE( "Test dmcomb detection, configuration, and manipulation", "[dev::dm]"
     sum = pdt.totalFlat().sum();
     REQUIRE(sum == (50*50)*(1+2+5));
 
-    // exercise processImage()'s own makeDelta() call site (distinct from calling
-    // makeDelta() directly above), since m_deltaChannels is non-empty here.
+    // Exercise the makeDelta() call inside processImage(). This is a different call site from
+    // the direct makeDelta() call above. It runs because m_deltaChannels is not empty here.
     pdt.initSatSemaphoreForTest();
     std::vector<float> srcbuf( 50 * 50, 0.0f );
     REQUIRE( pdt.processImage( srcbuf.data(), MagAOX::app::dev::shmimT() ) == 0 );
@@ -324,8 +355,8 @@ TEST_CASE( "Test dmcomb detection, configuration, and manipulation", "[dev::dm]"
 
 }
 
-/// Test makeDelta()'s trivial-success branch when every channel is configured as a
-/// delta channel (m_notDeltas is empty).
+/// Verify that makeDelta() trivially succeeds when every channel is configured as a delta
+/// channel. In that case m_notDeltas is empty.
 /**
  * \ingroup dm_tests
  */
@@ -367,7 +398,8 @@ TEST_CASE( "Test dm makeDelta with no non-delta channels", "[dev::dm]" )
     REQUIRE( pdt.makeDelta() == 0 );
 }
 
-/// Test that appStartup() rejects an unsupported ImageStreamIO data type.
+/// Verify that appStartup() rejects an unsupported ImageStreamIO data type. The dmTestBadType
+/// harness uses int as the DM data type, which has no ImageStreamIO type code.
 /**
  * \ingroup dm_tests
  */
@@ -392,7 +424,8 @@ TEST_CASE( "Test dm appStartup rejects unsupported data type", "[dev::dm]" )
     REQUIRE( rv == -1 );
 }
 
-/// Test the allocate() size and data-type mismatch error branches.
+/// Verify that allocate() fails when the incoming stream width, height, or data type does not
+/// match the configured DM.
 /**
  * \ingroup dm_tests
  */
@@ -442,7 +475,7 @@ TEST_CASE( "Test dm allocate size and type mismatches", "[dev::dm]" )
     }
 }
 
-/// Test findDMChannels() when no channels are found for the configured shmimName.
+/// Verify that findDMChannels() fails when no channels exist for the configured shmimName.
 /**
  * \ingroup dm_tests
  */
@@ -473,7 +506,7 @@ TEST_CASE( "Test dm findDMChannels with no channels found", "[dev::dm]" )
     REQUIRE( pdt.findDMChannels() == -1 );
 }
 
-/// Test findDMChannels()'s fallback to the hardcoded default "/milk/shm" when
+/// Verify that findDMChannels() falls back to the hardcoded default "/milk/shm" when
 /// MILK_SHM_DIR is unset.
 /**
  * \ingroup dm_tests
@@ -494,16 +527,17 @@ TEST_CASE( "Test dm findDMChannels falls back to the default shm dir when MILK_S
     REQUIRE( pdt.loadConfig( config ) == 0 );
 
     unsetenv( "MILK_SHM_DIR" );
-    // this will find no channels (or fail outright) in the real default "/milk/shm",
-    // which is not expected to exist/contain this test's shmim on a test runner --
-    // either way is a real, non-mocked exercise of the fallback-path lookup itself.
+    // This finds no channels in the real default "/milk/shm", or fails outright if that
+    // directory does not exist. A test runner is not expected to have this test's shmim there.
+    // Either way the fallback lookup itself runs for real, without mocking.
     REQUIRE( pdt.findDMChannels() == -1 );
 }
 
-/// Test findDMChannels()'s "exception opening" catch, forced by a real corrupt file
-/// (matching the channel naming pattern so getFileNames() finds it, but with content
-/// ImageStreamIO can't parse) -- the same real-OS-fault-injection technique used by
-/// frameGrabber_test.cpp's "corrupt shmim file" test.
+/// Verify the catch block in findDMChannels() that logs an exception while opening a channel.
+/// The exception is forced with a real corrupt file. Its name matches the channel naming
+/// pattern so getFileNames() finds it, but its content cannot be parsed by ImageStreamIO. This
+/// is the same real fault injection technique used by the corrupt shmim file test in
+/// frameGrabber_test.cpp.
 /**
  * \ingroup dm_tests
  */
@@ -533,14 +567,16 @@ TEST_CASE( "Test dm findDMChannels logs an exception opening a corrupt channel f
     fwrite( junk, 1, sizeof( junk ), f );
     fclose( f );
 
-    // findDMChannels() logs the exception and continues (leaving that channel's
-    // pointer null) rather than failing outright, since m_numChannels is still >0.
+    // findDMChannels() logs the exception and continues. It leaves that channel's pointer
+    // null rather than failing outright, because m_numChannels is still greater than zero.
     REQUIRE( pdt.findDMChannels() == 0 );
 
     unlink( path );
 }
 
-/// Test flat file discovery, loading, setting, and zeroing, including error branches.
+/// Verify flat file discovery, loading, setting, and zeroing, including the error branches.
+/// Real FITS flat files are written under /tmp/dmtest_calibs/flattest and a real milk channel
+/// is created for setFlat() to write into.
 /**
  * \ingroup dm_tests
  */
@@ -548,8 +584,8 @@ TEST_CASE( "Test dm flat file management", "[dev::dm]" )
 {
     setenv( "MILK_SHM_DIR", "/tmp/dmtest/shm", 1 );
     mx::ioutils::createDirectories( "/tmp/dmtest/shm" );
-    // Remove any leftovers from a previous run first -- this test creates more flat
-    // files as it goes, and checkFlats() counts whatever is on disk.
+    // Remove any leftovers from a previous run first. This test creates more flat files as it
+    // goes, and checkFlats() counts whatever is on disk.
     std::filesystem::remove_all( "/tmp/dmtest_calibs/flattest" );
     mx::ioutils::createDirectories( "/tmp/dmtest_calibs/flattest/flats" );
 
@@ -577,8 +613,8 @@ TEST_CASE( "Test dm flat file management", "[dev::dm]" )
     s.push_back( "dm" );
     k.push_back( "shmimName" );
     v.push_back( "dmflat" );
-    // exercises checkFlats()'s "default" element ON branch below (m_flatCurrent starts
-    // out as "default" whenever dm.flatDefault is configured).
+    // Configuring dm.flatDefault makes m_flatCurrent start out as "default". That exercises
+    // the branch in checkFlats() that turns the "default" element On.
     s.push_back( "dm" );
     k.push_back( "flatDefault" );
     v.push_back( "flatA" );
@@ -598,45 +634,45 @@ TEST_CASE( "Test dm flat file management", "[dev::dm]" )
     REQUIRE( rv == 0 );
 
     pdt.prepIndiForCallbackTests();
-    // a real (FIFO-less) INDI driver so checkFlats()'s m_indiDriver!=nullptr branch
-    // (sendDelProperty()/erase() on the "changed" path) gets exercised too.
+    // Install a real INDI driver without FIFOs. This makes checkFlats() take its
+    // m_indiDriver != nullptr branch, which calls sendDelProperty() and erase() when the flat
+    // list has changed.
     pdt.setConfigNameWithDriver( pdt.configName() );
 
     REQUIRE( pdt.checkFlats() == 0 );
     REQUIRE( pdt.numFlatCommands() == 3 );
 
-    // actuator mask mismatch (flatBad is 3x3, actMask is 6x6)
+    // Actuator mask mismatch. flatBad is 3x3 but the actuator mask is 6x6.
     REQUIRE( pdt.loadFlat( "flatBad" ) == -1 );
 
-    // not found
+    // Not found.
     REQUIRE( pdt.loadFlat( "doesNotExist" ) == -1 );
 
-    // loading "default" (which resolves to flatA.fits via dm.flatDefault) sets
-    // m_flatCurrent to the literal string "default" -- exercises the
-    // m_indiP_flats["default"]==On branch.
+    // Loading "default" resolves to flatA.fits through dm.flatDefault. It sets m_flatCurrent
+    // to the literal string "default", which exercises the branch that turns
+    // m_indiP_flats["default"] On.
     REQUIRE( pdt.loadFlat( "default" ) == 0 );
     REQUIRE( pdt.flatCurrent() == "default" );
 
-    // successful load
+    // Successful load.
     REQUIRE( pdt.loadFlat( "flatA" ) == 0 );
     REQUIRE( pdt.flatLoaded() == true );
     REQUIRE( pdt.flatCurrent() == "flatA" );
 
-    // m_flatCurrent is now "flatA" (not "default"). checkFlats() only rebuilds the INDI
-    // property (and so only re-evaluates the "default" element branch) when something
-    // actually changed on disk, so add one more flat file to force that here --
-    // exercises checkFlats()'s "default" element Off branch, the mirror image of the ON
-    // branch exercised above.
+    // m_flatCurrent is now "flatA" rather than "default". checkFlats() only rebuilds the INDI
+    // property when something changed on disk, and only then re-evaluates the "default"
+    // element. Adding one more flat file forces the rebuild. This exercises the branch that
+    // turns the "default" element Off, the mirror image of the On branch exercised above.
     ff.write( "/tmp/dmtest_calibs/flattest/flats/flatC.fits", flatA );
     REQUIRE( pdt.checkFlats() == 0 );
     REQUIRE( pdt.numFlatCommands() == 4 );
 
-    // not READY/OPERATING yet
+    // Not READY or OPERATING yet.
     REQUIRE( pdt.setFlat() == -1 );
 
     pdt.state( MagAOX::app::stateCodes::READY );
 
-    // channel doesn't exist yet (remove any stale shmim left from a previous test run)
+    // The channel does not exist yet. Remove any stale shmim left from a previous test run.
     std::remove( "/tmp/dmtest/shm/dmflat00.im.shm" );
     REQUIRE( pdt.setFlat() == -1 );
 
@@ -648,10 +684,10 @@ TEST_CASE( "Test dm flat file management", "[dev::dm]" )
     REQUIRE( pdt.state() == MagAOX::app::stateCodes::OPERATING );
     REQUIRE( flatChan().sum() == 6 * 6 * 2 );
 
-    // update==true path
+    // The update == true path.
     REQUIRE( pdt.setFlat( true ) == 0 );
 
-    // switching flats while set re-applies automatically
+    // Switching flats while the flat is set re-applies it automatically.
     REQUIRE( pdt.loadFlat( "flatB" ) == 0 );
     REQUIRE( pdt.flatCurrent() == "flatB" );
     REQUIRE( pdt.flatIsSet() == true );
@@ -662,7 +698,7 @@ TEST_CASE( "Test dm flat file management", "[dev::dm]" )
     REQUIRE( pdt.state() == MagAOX::app::stateCodes::READY );
     REQUIRE( flatChan().sum() == 0 );
 
-    // exercise the newCallBack_setFlat and newCallBack_flats INDI paths
+    // Exercise the newCallBack_setFlat() and newCallBack_flats() INDI paths.
     pcf::IndiProperty ipSetFlat = pdt.indiP_setFlat();
     ipSetFlat["toggle"].setSwitchState( pcf::IndiElement::On );
     REQUIRE( pdt.newCallBack_setFlat( ipSetFlat ) == 0 );
@@ -674,15 +710,15 @@ TEST_CASE( "Test dm flat file management", "[dev::dm]" )
 
     pcf::IndiProperty ipFlats = pdt.indiP_flats();
     REQUIRE( ipFlats.find( "flatA" ) == true );
-    // a real client sends the full new selection state, so clear all others before setting
-    // the target -- otherwise the previously-current selection (flatB) is still On too.
+    // A real client sends the full new selection state, so clear all other elements before
+    // setting the target. Otherwise the previous selection, flatB, is still On too.
     ipFlats["flatA"].setSwitchState( pcf::IndiElement::On );
     ipFlats["flatB"].setSwitchState( pcf::IndiElement::Off );
     ipFlats["flatBad"].setSwitchState( pcf::IndiElement::Off );
     REQUIRE( pdt.newCallBack_flats( ipFlats ) == 0 );
     REQUIRE( pdt.flatCurrent() == "flatA" );
 
-    // selecting "default" resolves to loadFlat("default")
+    // Selecting "default" resolves to loadFlat("default").
     pcf::IndiProperty ipFlatsDefault = pdt.indiP_flats();
     ipFlatsDefault["default"].setSwitchState( pcf::IndiElement::On );
     ipFlatsDefault["flatA"].setSwitchState( pcf::IndiElement::Off );
@@ -691,7 +727,7 @@ TEST_CASE( "Test dm flat file management", "[dev::dm]" )
     REQUIRE( pdt.newCallBack_flats( ipFlatsDefault ) == 0 );
     REQUIRE( pdt.flatCurrent() == "default" );
 
-    // selecting more than one flat at once is an error
+    // Selecting more than one flat at once is an error.
     pcf::IndiProperty ipFlatsTwo = pdt.indiP_flats();
     ipFlatsTwo["default"].setSwitchState( pcf::IndiElement::Off );
     ipFlatsTwo["flatA"].setSwitchState( pcf::IndiElement::On );
@@ -699,7 +735,7 @@ TEST_CASE( "Test dm flat file management", "[dev::dm]" )
     ipFlatsTwo["flatBad"].setSwitchState( pcf::IndiElement::Off );
     REQUIRE( pdt.newCallBack_flats( ipFlatsTwo ) == -1 );
 
-    // selecting none at all is a (trivial) no-op
+    // Selecting none at all is a trivial no-op.
     pcf::IndiProperty ipFlatsNone = pdt.indiP_flats();
     ipFlatsNone["default"].setSwitchState( pcf::IndiElement::Off );
     ipFlatsNone["flatA"].setSwitchState( pcf::IndiElement::Off );
@@ -707,8 +743,8 @@ TEST_CASE( "Test dm flat file management", "[dev::dm]" )
     ipFlatsNone["flatBad"].setSwitchState( pcf::IndiElement::Off );
     REQUIRE( pdt.newCallBack_flats( ipFlatsNone ) == 0 );
 
-    // a property that only reports a subset of the known flat elements (as opposed to
-    // the full current state) exercises the per-element "not present" skip branch.
+    // A property that only reports a subset of the known flat elements, rather than the full
+    // current state, exercises the per-element skip branch for elements that are not present.
     pcf::IndiProperty ipFlatsPartial( pcf::IndiProperty::Switch );
     ipFlatsPartial.setDevice( ipFlats.getDevice() );
     ipFlatsPartial.setName( ipFlats.getName() );
@@ -716,16 +752,17 @@ TEST_CASE( "Test dm flat file management", "[dev::dm]" )
     REQUIRE( pdt.newCallBack_flats( ipFlatsPartial ) == 0 );
     REQUIRE( pdt.flatCurrent() == "flatA" );
 
-    // wrong key
+    // Wrong device and property name.
     pcf::IndiProperty ipWrong( pcf::IndiProperty::Switch );
     ipWrong.setDevice( "somethingelse" );
     ipWrong.setName( "notflat" );
     REQUIRE( pdt.newCallBack_setFlat( ipWrong ) == -1 );
 }
 
-/// Test checkFlats()'s default-file exclusion, its "keep only the 5 most recent
-/// non-default files" trim, and (via repeated calls) the tracked-command-map's
-/// reset/already-tracked/stale-removal bookkeeping.
+/// Verify three parts of checkFlats(). It excludes the default file from the trim. It keeps
+/// only the 5 most recent non-default files. Repeated calls exercise the bookkeeping of the
+/// tracked command map, which is the per-call reset, the already-tracked case, and stale
+/// removal.
 /**
  * \ingroup dm_tests
  */
@@ -740,11 +777,11 @@ TEST_CASE( "Test dm checkFlats file-count trimming and stale-removal", "[dev::dm
     flat.setConstant( 1 );
     mx::fits::fitsFile<float> ff;
 
-    // a "default" file must be excluded from the timestamp-based trim below
+    // A "default" file must be excluded from the timestamp-based trim below.
     ff.write( "/tmp/dmtest_calibs/flattrim/flats/default.fits", flat );
 
-    // 6 timestamped files -- more than the hardcoded keep-5-most-recent limit, so the
-    // single oldest (f1) must be trimmed on the first call.
+    // Write 6 timestamped files. That is more than the hardcoded limit of 5 most recent
+    // files, so the single oldest file, f1, must be trimmed on the first call.
     std::vector<std::string> names = { "f1", "f2", "f3", "f4", "f5", "f6" };
     for( size_t n = 0; n < names.size(); ++n )
     {
@@ -777,28 +814,29 @@ TEST_CASE( "Test dm checkFlats file-count trimming and stale-removal", "[dev::dm
     config.readConfig( "/tmp/dm_test_flattrim.conf" );
     REQUIRE( pdt.loadConfig( config ) == 0 );
 
-    // first call: exercises the "remove default" and ">=5 trim" branches, keeping the
-    // 5 most recent of f1..f6 (f1 is oldest, and is dropped).
+    // First call. This exercises the branch that removes the default file and the branch that
+    // trims to 5 files. It keeps the 5 most recent of f1 through f6. f1 is the oldest and is
+    // dropped.
     REQUIRE( pdt.checkFlats() == 0 );
     REQUIRE( pdt.numFlatCommands() == 5 );
 
-    // second call with the same files still on disk: exercises the per-call reset loop
-    // and the "already tracked" (else) branch of the insert loop.
+    // Second call with the same files still on disk. This exercises the per-call reset loop
+    // and the else branch of the insert loop for files that are already tracked.
     REQUIRE( pdt.checkFlats() == 0 );
     REQUIRE( pdt.numFlatCommands() == 5 );
 
-    // Remove one previously-tracked file (f6), then call again: exercises the
-    // stale-entry removal branch. f1 (already excluded by the trim above, but still on
-    // disk until now) must also be removed here -- otherwise dropping to 5 files on
-    // disk re-admits f1 into the timestamp-based trim window and the intended stale
-    // removal of f6 is masked by f1 simply taking its place.
+    // Remove one previously tracked file, f6, then call again. This exercises the stale entry
+    // removal branch. f1 was already excluded by the trim above but is still on disk until
+    // now, and it must also be removed here. Otherwise dropping to 5 files on disk re-admits
+    // f1 into the trim window, and f1 taking the place of f6 would mask the intended stale
+    // removal.
     std::filesystem::remove( "/tmp/dmtest_calibs/flattrim/flats/f6.fits" );
     std::filesystem::remove( "/tmp/dmtest_calibs/flattrim/flats/f1.fits" );
     REQUIRE( pdt.checkFlats() == 0 );
     REQUIRE( pdt.numFlatCommands() == 4 );
 }
 
-/// Test the width/height mismatch branch of setFlat() against the actual channel.
+/// Verify the width and height mismatch branches of setFlat() against the real channel.
 /**
  * \ingroup dm_tests
  */
@@ -836,7 +874,7 @@ TEST_CASE( "Test dm setFlat channel size mismatch", "[dev::dm]" )
     REQUIRE( pdt2.loadConfig( config2 ) == 0 );
     pdt2.state( MagAOX::app::stateCodes::READY );
 
-    // channel is 3x3, but configured DM is 6x6 -> width mismatch (checked first)
+    // The channel is 3x3 but the configured DM is 6x6. The width mismatch is checked first.
     mx::improc::milkImage<float> flatChanBad;
     flatChanBad.create( "dmflatmm00", 3, 3 );
 
@@ -845,13 +883,15 @@ TEST_CASE( "Test dm setFlat channel size mismatch", "[dev::dm]" )
 
     REQUIRE( pdt2.setFlat() == -1 );
 
-    // channel width now matches (6) but height doesn't (3) -> exercises the separate
-    // height-mismatch branch, which the width mismatch above never reaches.
+    // The channel width now matches at 6 but the height is 3. This exercises the separate
+    // height mismatch branch, which the width mismatch above never reaches.
     flatChanBad.create( "dmflatmm00", 6, 3 );
     REQUIRE( pdt2.setFlat() == -1 );
 }
 
-/// Test test-pattern file discovery, loading, setting, and zeroing.
+/// Verify test pattern file discovery, loading, setting, and zeroing. Real FITS files are
+/// written under /tmp/dmtest_calibs/testtest and a real milk channel is created for setTest()
+/// to write into.
 /**
  * \ingroup dm_tests
  */
@@ -859,8 +899,8 @@ TEST_CASE( "Test dm test pattern file management", "[dev::dm]" )
 {
     setenv( "MILK_SHM_DIR", "/tmp/dmtest/shm", 1 );
     mx::ioutils::createDirectories( "/tmp/dmtest/shm" );
-    // Remove any leftovers from a previous run first -- this test creates more test
-    // pattern files as it goes, and checkTests() counts whatever is on disk.
+    // Remove any leftovers from a previous run first. This test creates more test pattern
+    // files as it goes, and checkTests() counts whatever is on disk.
     std::filesystem::remove_all( "/tmp/dmtest_calibs/testtest" );
     mx::ioutils::createDirectories( "/tmp/dmtest_calibs/testtest/tests" );
 
@@ -885,8 +925,8 @@ TEST_CASE( "Test dm test pattern file management", "[dev::dm]" )
     s.push_back( "dm" );
     k.push_back( "shmimName" );
     v.push_back( "dmtst" );
-    // exercises checkTests()'s/loadTest()'s "default" element ON branch below
-    // (m_testCurrent starts out as "default" whenever dm.testDefault is configured).
+    // Configuring dm.testDefault makes m_testCurrent start out as "default". That exercises
+    // the branches in checkTests() and loadTest() that turn the "default" element On.
     s.push_back( "dm" );
     k.push_back( "testDefault" );
     v.push_back( "testA" );
@@ -906,33 +946,34 @@ TEST_CASE( "Test dm test pattern file management", "[dev::dm]" )
     REQUIRE( rv == 0 );
 
     pdt.prepIndiForCallbackTests();
-    // a real (FIFO-less) INDI driver so checkTests()'s m_indiDriver!=nullptr branch
-    // (sendDelProperty()/erase() on the "changed" path) gets exercised too.
+    // Install a real INDI driver without FIFOs. This makes checkTests() take its
+    // m_indiDriver != nullptr branch, which calls sendDelProperty() and erase() when the test
+    // list has changed.
     pdt.setConfigNameWithDriver( pdt.configName() );
 
     REQUIRE( pdt.checkTests() == 0 );
     REQUIRE( pdt.numTestCommands() == 2 );
 
-    // second call with the same files still on disk: exercises the per-call reset loop
-    // and the "already tracked" (else) branch of the insert loop.
+    // Second call with the same files still on disk. This exercises the per-call reset loop
+    // and the else branch of the insert loop for files that are already tracked.
     REQUIRE( pdt.checkTests() == 0 );
     REQUIRE( pdt.numTestCommands() == 2 );
 
-    // remove one previously-tracked file, then call again: exercises the stale-entry
+    // Remove one previously tracked file, then call again. This exercises the stale entry
     // removal branch.
     std::filesystem::remove( "/tmp/dmtest_calibs/testtest/tests/testB.fits" );
     REQUIRE( pdt.checkTests() == 0 );
     REQUIRE( pdt.numTestCommands() == 1 );
 
-    // re-create testB.fits (used again below by loadTest("testB")).
+    // Re-create testB.fits. It is used again below by loadTest("testB").
     ff.write( "/tmp/dmtest_calibs/testtest/tests/testB.fits", testB );
     REQUIRE( pdt.checkTests() == 0 );
     REQUIRE( pdt.numTestCommands() == 2 );
 
     REQUIRE( pdt.loadTest( "doesNotExist" ) == -1 );
 
-    // a real, unparseable file -- checkTests() tracks it by filename alone, but
-    // loadTest()'s real (not mocked) FITS read then genuinely fails on its content.
+    // Write a real file that cannot be parsed. checkTests() tracks it by file name alone, but
+    // the real FITS read in loadTest() then fails on its content. Nothing is mocked.
     {
         std::ofstream corrupt( "/tmp/dmtest_calibs/testtest/tests/corrupt.fits" );
         corrupt << "not a fits file";
@@ -943,9 +984,9 @@ TEST_CASE( "Test dm test pattern file management", "[dev::dm]" )
         REQUIRE( pdt.checkTests() == 0 );
     }
 
-    // loading "default" (which resolves to testA.fits via dm.testDefault) sets
-    // m_testCurrent to the literal string "default" -- exercises the
-    // m_indiP_tests["default"]==On branch.
+    // Loading "default" resolves to testA.fits through dm.testDefault. It sets m_testCurrent
+    // to the literal string "default", which exercises the branch that turns
+    // m_indiP_tests["default"] On.
     REQUIRE( pdt.loadTest( "default" ) == 0 );
     REQUIRE( pdt.testCurrent() == "default" );
 
@@ -953,15 +994,15 @@ TEST_CASE( "Test dm test pattern file management", "[dev::dm]" )
     REQUIRE( pdt.testLoaded() == true );
     REQUIRE( pdt.testCurrent() == "testA" );
 
-    // m_testCurrent is now "testA" (not "default"); force checkTests() to rebuild the
-    // INDI property again (by adding a new file) to exercise the "default" element Off
-    // branch, the mirror image of the ON branch exercised by the first checkTests() call
-    // above (where m_testCurrent was still "default").
+    // m_testCurrent is now "testA" rather than "default". Adding a new file forces
+    // checkTests() to rebuild the INDI property again. This exercises the branch that turns
+    // the "default" element Off, the mirror image of the On branch exercised by the first
+    // checkTests() call above, when m_testCurrent was still "default".
     ff.write( "/tmp/dmtest_calibs/testtest/tests/testC.fits", testA );
     REQUIRE( pdt.checkTests() == 0 );
     REQUIRE( pdt.numTestCommands() == 3 );
 
-    // channel doesn't exist yet (remove any stale shmim left from a previous test run)
+    // The channel does not exist yet. Remove any stale shmim left from a previous test run.
     std::remove( "/tmp/dmtest/shm/dmtst02.im.shm" );
     REQUIRE( pdt.setTest() == -1 );
 
@@ -975,9 +1016,9 @@ TEST_CASE( "Test dm test pattern file management", "[dev::dm]" )
     REQUIRE( pdt.loadTest( "testB" ) == 0 );
     REQUIRE( testChan().sum() == 6 * 6 * 7 );
 
-    // unlike loadFlat(), loadTest() does not validate the loaded file's size against
-    // anything -- so a mismatched test file loads successfully, and it's setTest()
-    // that must catch the mismatch against the real channel/configured DM size.
+    // Unlike loadFlat(), loadTest() does not validate the size of the loaded file. A
+    // mismatched test file therefore loads successfully. setTest() must catch the mismatch
+    // against the real channel and the configured DM size.
     mx::improc::eigenImage<float> testBadW( 3, 6 ), testBadH( 6, 3 );
     testBadW.setConstant( 9 );
     testBadH.setConstant( 9 );
@@ -991,7 +1032,7 @@ TEST_CASE( "Test dm test pattern file management", "[dev::dm]" )
     REQUIRE( pdt.loadTest( "testBadH" ) == 0 );
     REQUIRE( pdt.setTest() == -1 );
 
-    // restore a valid current test before the zeroTest()/INDI checks below.
+    // Restore a valid current test before the zeroTest() and INDI checks below.
     REQUIRE( pdt.loadTest( "testB" ) == 0 );
     REQUIRE( pdt.setTest() == 0 );
 
@@ -999,7 +1040,7 @@ TEST_CASE( "Test dm test pattern file management", "[dev::dm]" )
     REQUIRE( pdt.testIsSet() == false );
     REQUIRE( testChan().sum() == 0 );
 
-    // INDI paths
+    // Exercise the newCallBack_setTest() and newCallBack_tests() INDI paths.
     pcf::IndiProperty ipSetTest = pdt.indiP_setTest();
     ipSetTest["toggle"].setSwitchState( pcf::IndiElement::On );
     REQUIRE( pdt.newCallBack_setTest( ipSetTest ) == 0 );
@@ -1011,13 +1052,13 @@ TEST_CASE( "Test dm test pattern file management", "[dev::dm]" )
 
     pcf::IndiProperty ipTests = pdt.indiP_tests();
     REQUIRE( ipTests.find( "testA" ) == true );
-    // clear other selections before setting the target (see the flats case above)
+    // Clear other selections before setting the target. See the flats case above.
     ipTests["testA"].setSwitchState( pcf::IndiElement::On );
     ipTests["testB"].setSwitchState( pcf::IndiElement::Off );
     REQUIRE( pdt.newCallBack_tests( ipTests ) == 0 );
     REQUIRE( pdt.testCurrent() == "testA" );
 
-    // selecting "default" resolves to loadTest("default")
+    // Selecting "default" resolves to loadTest("default").
     pcf::IndiProperty ipTestsDefault = pdt.indiP_tests();
     ipTestsDefault["default"].setSwitchState( pcf::IndiElement::On );
     ipTestsDefault["testA"].setSwitchState( pcf::IndiElement::Off );
@@ -1025,22 +1066,22 @@ TEST_CASE( "Test dm test pattern file management", "[dev::dm]" )
     REQUIRE( pdt.newCallBack_tests( ipTestsDefault ) == 0 );
     REQUIRE( pdt.testCurrent() == "default" );
 
-    // selecting more than one test at once is an error
+    // Selecting more than one test at once is an error.
     pcf::IndiProperty ipTestsTwo = pdt.indiP_tests();
     ipTestsTwo["default"].setSwitchState( pcf::IndiElement::Off );
     ipTestsTwo["testA"].setSwitchState( pcf::IndiElement::On );
     ipTestsTwo["testB"].setSwitchState( pcf::IndiElement::On );
     REQUIRE( pdt.newCallBack_tests( ipTestsTwo ) == -1 );
 
-    // selecting none at all is a (trivial) no-op
+    // Selecting none at all is a trivial no-op.
     pcf::IndiProperty ipTestsNone = pdt.indiP_tests();
     ipTestsNone["default"].setSwitchState( pcf::IndiElement::Off );
     ipTestsNone["testA"].setSwitchState( pcf::IndiElement::Off );
     ipTestsNone["testB"].setSwitchState( pcf::IndiElement::Off );
     REQUIRE( pdt.newCallBack_tests( ipTestsNone ) == 0 );
 
-    // a property that only reports a subset of the known test elements (as opposed to
-    // the full current state) exercises the per-element "not present" skip branch.
+    // A property that only reports a subset of the known test elements, rather than the full
+    // current state, exercises the per-element skip branch for elements that are not present.
     pcf::IndiProperty ipTestsPartial( pcf::IndiProperty::Switch );
     ipTestsPartial.setDevice( ipTests.getDevice() );
     ipTestsPartial.setName( ipTests.getName() );
@@ -1048,16 +1089,17 @@ TEST_CASE( "Test dm test pattern file management", "[dev::dm]" )
     REQUIRE( pdt.newCallBack_tests( ipTestsPartial ) == 0 );
     REQUIRE( pdt.testCurrent() == "testA" );
 
+    // Wrong device and property name.
     pcf::IndiProperty ipWrong( pcf::IndiProperty::Switch );
     ipWrong.setDevice( "somethingelse" );
     ipWrong.setName( "nottest" );
     REQUIRE( pdt.newCallBack_setTest( ipWrong ) == -1 );
 }
 
-/// Test that setTest() attempts (and, on failure, reports) an internal auto-load when
-/// called before any explicit loadTest(), on a fresh dm<> with no test target
-/// configured -- the internal load fails (empty target not found), and setTest() then
-/// reports "no test loaded".
+/// Verify that setTest() attempts an internal auto-load when called before any explicit
+/// loadTest(), and reports the failure. The dm<> is fresh with no test target configured. The
+/// internal load fails because the empty target is not found, and setTest() then reports that
+/// no test is loaded.
 /**
  * \ingroup dm_tests
  */
@@ -1088,14 +1130,15 @@ TEST_CASE( "Test dm setTest internal auto-load failure", "[dev::dm]" )
     mx::improc::milkImage<float> testChan;
     testChan.create( "dmtstauto02", 4, 4 );
 
-    // m_testLoaded is false and m_testCurrent is empty -- setTest() tries to load it
-    // internally, that fails (no such target), and setTest() reports no test loaded.
+    // m_testLoaded is false and m_testCurrent is empty. setTest() tries to load the test
+    // internally. That fails because there is no such target, and setTest() reports no test
+    // loaded.
     REQUIRE( pdt.testLoaded() == false );
     REQUIRE( pdt.setTest() == -1 );
 }
 
-/// Test the width/height mismatch branches of setTest()/zeroTest() against the actual
-/// channel (as opposed to a mismatch in the in-memory test command, covered above).
+/// Verify the width and height mismatch branches of setTest() and zeroTest() against the real
+/// channel. A mismatch in the in-memory test command is covered above.
 /**
  * \ingroup dm_tests
  */
@@ -1136,24 +1179,24 @@ TEST_CASE( "Test dm setTest and zeroTest channel size mismatch", "[dev::dm]" )
     REQUIRE( pdt.checkTests() == 0 );
     REQUIRE( pdt.loadTest( "testOK" ) == 0 );
 
-    // channel doesn't exist yet (remove any stale shmim left from a previous test run)
+    // The channel does not exist yet. Remove any stale shmim left from a previous test run.
     std::remove( "/tmp/dmtest/shm/dmtstmm02.im.shm" );
     REQUIRE( pdt.setTest() == -1 );
     REQUIRE( pdt.zeroTest() == -1 );
 
-    // width mismatch (checked first)
+    // Width mismatch. It is checked first.
     mx::improc::milkImage<float> testChanBad;
     testChanBad.create( "dmtstmm02", 3, 6 );
     REQUIRE( pdt.setTest() == -1 );
     REQUIRE( pdt.zeroTest() == -1 );
 
-    // width now matches (6) but height doesn't (3)
+    // The width now matches at 6 but the height is 3.
     testChanBad.create( "dmtstmm02", 6, 3 );
     REQUIRE( pdt.setTest() == -1 );
     REQUIRE( pdt.zeroTest() == -1 );
 }
 
-/// Test zeroAll() and clearSat() using real dmcomb-style shmim channels.
+/// Verify zeroAll() and clearSat() using real dmcomb-style shmim channels.
 /**
  * \ingroup dm_tests
  */
@@ -1195,15 +1238,15 @@ TEST_CASE( "Test dm zeroAll and clearSat", "[dev::dm]" )
 
     pdt.prepIndiForCallbackTests();
 
-    // clearSat() with no shmimSat configured -> trivial success
+    // clearSat() with no shmimSat configured trivially succeeds.
     REQUIRE( pdt.clearSat() == 0 );
 
     pdt.setSize( 4, 4, IMAGESTRUCT_FLOAT );
     REQUIRE( pdt.allocate( MagAOX::app::dev::shmimT() ) == 0 );
     REQUIRE( pdt.numChannels() == 2 );
 
-    // clearSat(): sat shmims don't exist yet -> warning, returns 0 (remove any stale
-    // shmim left from a previous test run)
+    // The saturation shmims do not exist yet, so clearSat() logs a warning and returns 0.
+    // Remove any stale shmim left from a previous test run first.
     std::remove( ( std::string( "/tmp/dmtest/shm/" ) + pdt.shmimSat() + ".im.shm" ).c_str() );
     std::remove( ( std::string( "/tmp/dmtest/shm/" ) + pdt.shmimSatPerc() + ".im.shm" ).c_str() );
     REQUIRE( pdt.clearSat() == 0 );
@@ -1223,49 +1266,50 @@ TEST_CASE( "Test dm zeroAll and clearSat", "[dev::dm]" )
     REQUIRE( ch0().sum() == 0 );
     REQUIRE( ch1().sum() == 0 );
 
-    // zeroAll() while OPERATING transitions back to READY
+    // zeroAll() while OPERATING transitions back to READY.
     pdt.state( MagAOX::app::stateCodes::OPERATING );
     REQUIRE( pdt.zeroAll() == 0 );
     REQUIRE( pdt.state() == MagAOX::app::stateCodes::READY );
 
-    // a missing channel is skipped (logged, but not fatal) as long as it can't be opened
+    // A missing channel that cannot be opened is skipped. It is logged but not fatal.
     std::remove( "/tmp/dmtest/shm/dmza01.im.shm" );
     REQUIRE( pdt.zeroAll() == 0 );
-    ch1.create( "dmza01", 4, 4 ); // recreate for the mismatch checks below
+    ch1.create( "dmza01", 4, 4 ); // Recreate it for the mismatch checks below.
 
-    // zeroAll() propagates a clearSat() failure (real size mismatch on a sat channel)
+    // zeroAll() propagates a clearSat() failure. Here the failure is a real size mismatch on a
+    // saturation channel.
     mx::improc::milkImage<uint8_t> satChanBad;
     satChanBad.create( pdt.shmimSat(), 3, 3 );
     REQUIRE( pdt.zeroAll() == -1 );
 
-    // width now matches (4) but height doesn't (3) -> exercises clearSat()'s separate
-    // height-mismatch branch.
+    // The width now matches at 4 but the height is 3. This exercises the separate height
+    // mismatch branch in clearSat().
     satChanBad.create( pdt.shmimSat(), 4, 3 );
     REQUIRE( pdt.zeroAll() == -1 );
 
-    satChanBad.create( pdt.shmimSat(), 4, 4 ); // restore for the checks below
+    satChanBad.create( pdt.shmimSat(), 4, 4 ); // Restore it for the checks below.
 
-    // zeroAll() INDI callback path
+    // The zeroAll() INDI callback path.
     pdt.state( MagAOX::app::stateCodes::READY );
     pcf::IndiProperty ipZeroAll = pdt.indiP_zeroAll();
     ipZeroAll["request"].setSwitchState( pcf::IndiElement::On );
     REQUIRE( pdt.newCallBack_zeroAll( ipZeroAll ) == 0 );
 
-    // zeroAll() propagates a width mismatch between a real channel and the configured DM
+    // zeroAll() propagates a width mismatch between a real channel and the configured DM.
     ch1.create( "dmza01", 3, 4 );
     REQUIRE( pdt.zeroAll() == -1 );
 
-    // zeroAll() propagates a height mismatch between a real channel and the configured DM
+    // zeroAll() propagates a height mismatch between a real channel and the configured DM.
     ch1.create( "dmza01", 4, 5 );
     REQUIRE( pdt.zeroAll() == -1 );
 
-    // baseReleaseDM() propagates that same zeroAll() failure
+    // baseReleaseDM() propagates that same zeroAll() failure.
     pdt.state( MagAOX::app::stateCodes::READY );
     REQUIRE( pdt.baseReleaseDM() == -1 );
     REQUIRE( pdt.state() == MagAOX::app::stateCodes::ERROR );
 }
 
-/// Test zeroAll() with no shmimName configured (trivial success branch).
+/// Verify that zeroAll() trivially succeeds when no shmimName is configured.
 /**
  * \ingroup dm_tests
  */
@@ -1279,19 +1323,20 @@ TEST_CASE( "Test dm zeroAll with no shmimName configured", "[dev::dm]" )
     REQUIRE( pdtEmpty.loadConfig( configEmpty ) == 0 );
     REQUIRE( pdtEmpty.zeroAll() == 0 );
 
-    // m_shmimFlat/m_shmimTest are also empty when no shmimName is configured -- both
-    // setFlat()/setTest() trivially succeed without touching any real channel.
+    // m_shmimFlat and m_shmimTest are also empty when no shmimName is configured. setFlat()
+    // and setTest() both trivially succeed without touching any real channel.
     REQUIRE( pdtEmpty.setFlat() == 0 );
     REQUIRE( pdtEmpty.setTest() == 0 );
     REQUIRE( pdtEmpty.zeroTest() == 0 );
 
-    // clearSat()'s own empty-name/zero-size trivial-success branch (distinct from
-    // zeroAll()'s own early return above, which never reaches clearSat() at all when
-    // m_shmimName=="").
+    // clearSat() has its own trivial success branch for an empty name or zero size. This is
+    // distinct from the early return in zeroAll() above, which never reaches clearSat() at all
+    // when m_shmimName is empty.
     REQUIRE( pdtEmpty.clearSat() == 0 );
 }
 
-/// Test baseInitDM() and baseReleaseDM() state-machine transitions and error paths.
+/// Verify the baseInitDM() and baseReleaseDM() state machine transitions and error paths. The
+/// harness forces initDM() and releaseDM() to fail through m_initDMRV and m_releaseDMRV.
 /**
  * \ingroup dm_tests
  */
@@ -1309,7 +1354,7 @@ TEST_CASE( "Test dm baseInitDM and baseReleaseDM", "[dev::dm]" )
 
     pdt.prepIndiForCallbackTests();
 
-    // wrong state (UNINITIALIZED, not NOTHOMED)
+    // Wrong state. The app is UNINITIALIZED, not NOTHOMED.
     REQUIRE( pdt.baseInitDM() == -1 );
     REQUIRE( pdt.state() == MagAOX::app::stateCodes::ERROR );
 
@@ -1317,25 +1362,26 @@ TEST_CASE( "Test dm baseInitDM and baseReleaseDM", "[dev::dm]" )
     REQUIRE( pdt.baseInitDM() == 0 );
     REQUIRE( pdt.state() == MagAOX::app::stateCodes::HOMING );
 
-    // baseInitDM() propagates an initDM() failure
+    // baseInitDM() propagates an initDM() failure.
     pdt.state( MagAOX::app::stateCodes::NOTHOMED );
     pdt.m_initDMRV = -1;
     REQUIRE( pdt.baseInitDM() == -1 );
     REQUIRE( pdt.state() == MagAOX::app::stateCodes::ERROR );
     pdt.m_initDMRV = 0;
 
-    // baseReleaseDM() propagates a releaseDM() failure
+    // baseReleaseDM() propagates a releaseDM() failure.
     pdt.state( MagAOX::app::stateCodes::READY );
     pdt.m_releaseDMRV = -1;
     REQUIRE( pdt.baseReleaseDM() == -1 );
     REQUIRE( pdt.state() == MagAOX::app::stateCodes::ERROR );
     pdt.m_releaseDMRV = 0;
 
-    // baseReleaseDM from a non-POWEROFF state moves to NOTHOMED, then calls releaseDM/zeroAll
+    // baseReleaseDM() from a state other than POWEROFF moves to NOTHOMED, then calls
+    // releaseDM() and zeroAll().
     pdt.state( MagAOX::app::stateCodes::READY );
     REQUIRE( pdt.baseReleaseDM() == 0 );
 
-    // INDI callbacks for init/zero/release
+    // INDI callbacks for init, zero, and release.
     pcf::IndiProperty ipInit = pdt.indiP_init();
     ipInit["request"].setSwitchState( pcf::IndiElement::Off );
     REQUIRE( pdt.newCallBack_init( ipInit ) == 0 );
@@ -1345,7 +1391,7 @@ TEST_CASE( "Test dm baseInitDM and baseReleaseDM", "[dev::dm]" )
     REQUIRE( pdt.newCallBack_init( ipInit ) == 0 );
     REQUIRE( pdt.state() == MagAOX::app::stateCodes::HOMING );
 
-    // newCallBack_init() propagates a baseInitDM()/initDM() failure
+    // newCallBack_init() propagates an initDM() failure through baseInitDM().
     pdt.state( MagAOX::app::stateCodes::NOTHOMED );
     pdt.m_initDMRV = -1;
     REQUIRE( pdt.newCallBack_init( ipInit ) == -1 );
@@ -1359,7 +1405,7 @@ TEST_CASE( "Test dm baseInitDM and baseReleaseDM", "[dev::dm]" )
     ipRelease["request"].setSwitchState( pcf::IndiElement::On );
     REQUIRE( pdt.newCallBack_release( ipRelease ) == 0 );
 
-    // wrong-key errors
+    // Wrong device and property name errors.
     pcf::IndiProperty ipWrong( pcf::IndiProperty::Switch );
     ipWrong.setDevice( "somethingelse" );
     ipWrong.setName( "notinit" );
@@ -1369,7 +1415,7 @@ TEST_CASE( "Test dm baseInitDM and baseReleaseDM", "[dev::dm]" )
     REQUIRE( pdt.newCallBack_zeroAll( ipWrong ) == -1 );
 }
 
-/// Test onPowerOff() and whilePowerOff().
+/// Verify that onPowerOff() and whilePowerOff() succeed on a configured harness.
 /**
  * \ingroup dm_tests
  */
@@ -1389,8 +1435,8 @@ TEST_CASE( "Test dm onPowerOff and whilePowerOff", "[dev::dm]" )
     REQUIRE( pdt.whilePowerOff() == 0 );
 }
 
-/// Test the full appStartup/appLogic/appShutdown lifecycle, including the
-/// saturation-processing thread, processImage(), intervalSatTrip(), and updateINDI().
+/// Verify the full appStartup(), appLogic(), and appShutdown() lifecycle. This includes the
+/// real saturation processing thread, processImage(), intervalSatTrip(), and updateINDI().
 /**
  * \ingroup dm_tests
  */
@@ -1443,9 +1489,9 @@ TEST_CASE( "Test dm full lifecycle with saturation thread", "[dev::dm]" )
     s.push_back( "dm" );
     k.push_back( "satTriggerProperty" );
     v.push_back( "someProperty" );
-    // exercise appStartup()'s loadFlat("default")/loadTest("default") calls; the
-    // targets don't need to actually exist -- loadFlat()/loadTest() safely log and
-    // return -1 on a missing file, and appStartup() doesn't check their return value.
+    // Exercise the loadFlat("default") and loadTest("default") calls in appStartup(). The
+    // targets do not need to exist. loadFlat() and loadTest() safely log and return -1 on a
+    // missing file, and appStartup() does not check their return values.
     s.push_back( "dm" );
     k.push_back( "flatDefault" );
     v.push_back( "nosuchflat" );
@@ -1468,19 +1514,20 @@ TEST_CASE( "Test dm full lifecycle with saturation thread", "[dev::dm]" )
 
     REQUIRE( pdt.appStartup() == 0 );
 
-    // let the saturation thread reach steady state
+    // Let the saturation thread reach steady state.
     mx::sys::milliSleep( 300 );
 
-    // without a driver first (m_indiDriver==nullptr branch) ...
+    // First without a driver, which is the m_indiDriver == nullptr branch.
     REQUIRE( pdt.updateINDI() == 0 );
 
-    // ... then with a real (FIFO-less) one, so updateINDI()'s m_indiDriver!=nullptr
-    // branch is exercised too (both branches trivially return 0).
+    // Then with a real driver without FIFOs, so the m_indiDriver != nullptr branch of
+    // updateINDI() is exercised too. Both branches trivially return 0.
     pdt.setConfigNameWithDriver( pdt.configName() );
     REQUIRE( pdt.updateINDI() == 0 );
     REQUIRE( pdt.appLogic() == 0 );
 
-    // drive commandDM()/processImage() to saturate every actuator and trip the interval trigger
+    // Drive processImage() and commandDM() to saturate every actuator and trip the interval
+    // trigger.
     pdt.m_testSatValue = 1;
     float srcbuf[16]   = { 0 };
     for( int i = 0; i < 10; ++i )
@@ -1489,16 +1536,16 @@ TEST_CASE( "Test dm full lifecycle with saturation thread", "[dev::dm]" )
         mx::sys::milliSleep( 50 );
     }
 
-    // give the sat thread time to compute stats and set m_intervalSatTrip
+    // Give the saturation thread time to compute statistics and set m_intervalSatTrip.
     mx::sys::milliSleep( 500 );
 
-    // this should now call intervalSatTrip(), which will try (and safely fail) to send an
-    // INDI property to "someDevice", silently caught internally.
+    // This should now call intervalSatTrip(). It tries to send an INDI property to
+    // "someDevice" and safely fails. The failure is caught internally.
     REQUIRE( pdt.appLogic() == 0 );
 
-    // verify the sat shmims got created and updated. Use CHECK (not REQUIRE) so that
-    // appShutdown() below always runs and cleanly joins the saturation thread even if
-    // this timing-sensitive check should ever fail.
+    // Verify that the saturation shmims were created and updated. Use CHECK rather than
+    // REQUIRE so that appShutdown() below always runs and cleanly joins the saturation
+    // thread, even if this timing-sensitive check should ever fail.
     mx::improc::milkImage<uint8_t> satChan;
     bool                           opened = false;
     try
@@ -1514,10 +1561,10 @@ TEST_CASE( "Test dm full lifecycle with saturation thread", "[dev::dm]" )
     REQUIRE( pdt.appShutdown() == 0 );
 }
 
-/// Test satThreadExec()'s averaging-interval "keep accumulating" branch (a nonzero
-/// dm.satAvgInt means several semaphore posts arrive before the interval elapses) and
-/// its "reset the exceeds counter" branch (accumulated saturation stays below
-/// dm.percThreshold), using a real background thread the same way the full lifecycle
+/// Verify two branches of satThreadExec(). The first keeps accumulating during the averaging
+/// interval. A nonzero dm.satAvgInt means several semaphore posts arrive before the interval
+/// elapses. The second resets the exceeds counter, because the accumulated saturation stays
+/// below dm.percThreshold. A real background thread is used, the same way the full lifecycle
 /// test above does.
 /**
  * \ingroup dm_tests
@@ -1547,12 +1594,13 @@ TEST_CASE( "Test dm satThreadExec averaging interval and reset branches", "[dev:
     s.push_back( "dm" );
     k.push_back( "height" );
     v.push_back( "2" );
-    // wide enough that several ~50ms-spaced posts below arrive before it elapses.
+    // The interval is wide enough that several posts below, spaced about 50 ms apart, arrive
+    // before it elapses.
     s.push_back( "dm" );
     k.push_back( "satAvgInt" );
     v.push_back( "300" );
-    // above the always-zero instSatMap value used below, so accumulated saturation
-    // never counts as "over threshold".
+    // The threshold is above the always-zero instSatMap value used below, so the accumulated
+    // saturation never counts as over threshold.
     s.push_back( "dm" );
     k.push_back( "percThreshold" );
     v.push_back( "1" );
@@ -1575,13 +1623,13 @@ TEST_CASE( "Test dm satThreadExec averaging interval and reset branches", "[dev:
     REQUIRE( pdt.allocate( MagAOX::app::dev::shmimT() ) == 0 );
 
     REQUIRE( pdt.appStartup() == 0 );
-    // wait comfortably past threadStart()'s worst-case ~1 second startup handshake
-    // (see dmPokeWFS_test.cpp for the identical rationale) so the saturation thread is
-    // guaranteed to already be waiting on its semaphore before we start posting.
+    // Wait comfortably past the worst-case startup handshake in threadStart(), which is about
+    // 1 second. See dmPokeWFS_test.cpp for the same rationale. This guarantees that the
+    // saturation thread is already waiting on its semaphore before posting starts.
     mx::sys::milliSleep( 1200 );
 
-    // m_testSatValue defaults to 0 -- every post below accumulates an all-zero
-    // instSatMap, so the accumulated saturation never exceeds dm.percThreshold.
+    // m_testSatValue defaults to 0. Every post below accumulates an all-zero instSatMap, so
+    // the accumulated saturation never exceeds dm.percThreshold.
     float srcbuf[4] = { 0 };
     for( int i = 0; i < 8; ++i )
     {
@@ -1589,15 +1637,14 @@ TEST_CASE( "Test dm satThreadExec averaging interval and reset branches", "[dev:
         mx::sys::milliSleep( 50 );
     }
 
-    // give the thread time to complete at least one full averaging interval and reset
+    // Give the thread time to complete at least one full averaging interval and reset.
     mx::sys::milliSleep( 300 );
 
     REQUIRE( pdt.appShutdown() == 0 );
 }
 
-/// Additional branch coverage for the INDI static callback trampolines, the
-/// "missing element" early-return branches, and the wrong-key branches of
-/// newCallBack_flats()/newCallBack_tests().
+/// Verify the INDI static callback trampolines, the early-return branches for a missing
+/// element, and the wrong-key branches of newCallBack_flats() and newCallBack_tests().
 /**
  * \ingroup dm_tests
  */
@@ -1640,8 +1687,8 @@ TEST_CASE( "Test dm INDI static callback trampolines and edge branches", "[dev::
     REQUIRE( pdt.checkFlats() == 0 );
     REQUIRE( pdt.checkTests() == 0 );
 
-    // put the DM in a state where zeroFlat()/zeroTest() (invoked via the toggle==Off
-    // path below) will succeed, with real channels to zero.
+    // Put the DM in a state where zeroFlat() and zeroTest() will succeed, with real channels
+    // to zero. They are invoked below through the toggle == Off path.
     pdt.state( MagAOX::app::stateCodes::READY );
     mx::improc::milkImage<float> flatChanXc, testChanXc;
     flatChanXc.create( "dmxc00", 4, 4 );
@@ -1649,7 +1696,7 @@ TEST_CASE( "Test dm INDI static callback trampolines and edge branches", "[dev::
 
     typedef MAPPNS::dm<dm_tests::dmTest, float> dmT;
 
-    // static trampolines
+    // The static trampolines forward to the member callbacks.
     pcf::IndiProperty ipInit = pdt.indiP_init();
     ipInit["request"].setSwitchState( pcf::IndiElement::Off );
     REQUIRE( dmT::st_newCallBack_init( &pdt, ipInit ) == 0 );
@@ -1681,7 +1728,8 @@ TEST_CASE( "Test dm INDI static callback trampolines and edge branches", "[dev::
     pcf::IndiProperty ipTests = pdt.indiP_tests();
     REQUIRE( dmT::st_newCallBack_tests( &pdt, ipTests ) == 0 );
 
-    // "missing element" early-return branches: same device/name, but no elements added
+    // Early-return branches for a missing element. The device and name match, but no elements
+    // are added.
     pcf::IndiProperty ipInitBare( pcf::IndiProperty::Switch );
     ipInitBare.setDevice( ipInit.getDevice() );
     ipInitBare.setName( ipInit.getName() );
@@ -1712,7 +1760,7 @@ TEST_CASE( "Test dm INDI static callback trampolines and edge branches", "[dev::
     ipSetTestBare.setName( ipSetTest.getName() );
     REQUIRE( pdt.newCallBack_setTest( ipSetTestBare ) == 0 );
 
-    // wrong-key branches of newCallBack_flats()/newCallBack_tests()
+    // Wrong-key branches of newCallBack_flats() and newCallBack_tests().
     pcf::IndiProperty ipWrong( pcf::IndiProperty::Switch );
     ipWrong.setDevice( "somethingelse" );
     ipWrong.setName( "notflats" );
@@ -1720,8 +1768,8 @@ TEST_CASE( "Test dm INDI static callback trampolines and edge branches", "[dev::
     REQUIRE( pdt.newCallBack_tests( ipWrong ) == -1 );
 }
 
-/// Test that processImage() propagates a commandDM() failure, and that a broken
-/// saturation semaphore is handled (sem_post() error branch).
+/// Verify that processImage() propagates a commandDM() failure. The harness forces the failure
+/// through m_commandDMFail.
 /**
  * \ingroup dm_tests
  */
@@ -1737,14 +1785,14 @@ TEST_CASE( "Test dm processImage error branches", "[dev::dm]" )
 
     float srcbuf[4] = { 0 };
 
-    // commandDM() failure
+    // commandDM() failure.
     pdt.m_commandDMFail = true;
     REQUIRE( pdt.processImage( srcbuf, MagAOX::app::dev::shmimT() ) == -1 );
     pdt.m_commandDMFail = false;
 }
 
-/// Test that allocate() propagates a findDMChannels() failure when the size/type
-/// checks pass but no channels exist for the configured shmimName.
+/// Verify that allocate() propagates a findDMChannels() failure when the size and type checks
+/// pass but no channels exist for the configured shmimName.
 /**
  * \ingroup dm_tests
  */
@@ -1772,10 +1820,10 @@ TEST_CASE( "Test dm allocate propagates findDMChannels failure", "[dev::dm]" )
     config.readConfig( "/tmp/dm_test_xcnochan.conf" );
     REQUIRE( pdt.loadConfig( config ) == 0 );
 
-    // loadConfig() unconditionally creates a "dmxcnochan_actmask" shmim (since width/height
-    // are set), and findDMChannels()'s loose prefix search would otherwise pick that (and
-    // the shape/delta/diff streams created later) up as a "channel". Remove any such
-    // same-prefixed shmims so the "no channels found" branch can actually be reached.
+    // loadConfig() unconditionally creates a "dmxcnochan_actmask" shmim because width and
+    // height are set. The loose prefix search in findDMChannels() would otherwise pick that up
+    // as a channel, along with the shape, delta, and diff streams created later. Remove every
+    // shmim with that prefix so the branch for no channels found can be reached.
     for( const auto &entry : std::filesystem::directory_iterator( "/tmp/dmtest/shm" ) )
     {
         if( entry.path().filename().string().rfind( "dmxcnochan", 0 ) == 0 )
@@ -1788,22 +1836,20 @@ TEST_CASE( "Test dm allocate propagates findDMChannels failure", "[dev::dm]" )
     REQUIRE( pdt.allocate( MagAOX::app::dev::shmimT() ) == -1 );
 }
 
-/// Test that allocate() propagates an exception from creating the output shape shmim.
-/// milkImage::create() throws a real (not mocked) exception when it can't open the shm
-/// file for writing -- forced here the same way runCommand_test.cpp forces real OS-level
-/// resource failures: by making the target directory genuinely unwritable, rather than by
-/// mocking milkImage.
+/// Verify that allocate() propagates an exception from creating the output shape shmim.
+/// milkImage::create() throws a real exception when it cannot open the shm file for writing.
+/// Nothing is mocked. The failure is forced by making the target directory unwritable, the
+/// same way runCommand_test.cpp forces real operating system resource failures.
 ///
-/// NOTE: this must target "/tmp/dmtest/shm" specifically -- milk's
-/// ImageStreamIO_filename() resolves and caches its shm directory (from MILK_SHM_DIR) in
-/// a function-local static the first time it's called in this process, and an earlier
-/// test in this file has already triggered that resolution against "/tmp/dmtest/shm".
-/// A later setenv() to any *other* directory (as this test previously did, to its own
-/// "/tmp/dmtest_shapefail/shm") has no effect on where milkImage::create() actually
-/// writes -- it silently still uses "/tmp/dmtest/shm" -- so chmod'ing a different,
-/// unrelated directory doesn't block anything and this test was passing for the wrong
-/// reason (findDMChannels() failing to find the channel that was actually created in
-/// "/tmp/dmtest/shm", rather than the intended shmim-creation exception).
+/// NOTE: this test must target "/tmp/dmtest/shm" specifically. The milk function
+/// ImageStreamIO_filename() resolves its shm directory from MILK_SHM_DIR and caches it in a
+/// function-local static the first time it is called in this process. An earlier test in this
+/// file has already triggered that resolution against "/tmp/dmtest/shm". A later setenv() to
+/// any other directory has no effect on where milkImage::create() writes. It silently still
+/// uses "/tmp/dmtest/shm". This test previously set its own "/tmp/dmtest_shapefail/shm"
+/// directory. Changing the permissions of that unrelated directory blocked nothing, so the
+/// test passed for the wrong reason. findDMChannels() failed to find the channel that was
+/// created in "/tmp/dmtest/shm", which is not the intended shmim creation exception.
 /**
  * \ingroup dm_tests
  */
@@ -1811,10 +1857,10 @@ TEST_CASE( "Test dm allocate propagates an output shape shmim creation exception
 {
     setenv( "MILK_SHM_DIR", "/tmp/dmtest/shm", 1 );
     mx::ioutils::createDirectories( "/tmp/dmtest/shm" );
-    // Start from a clean set of files every run -- a stale shmim left over from a
-    // previous run (same name, still writable) would let create() reuse/open it instead
-    // of needing a fresh, directory-write-permission-gated open(O_CREAT), silently
-    // defeating the fault injection below.
+    // Start from a clean set of files every run. A stale shmim with the same name left over
+    // from a previous run would still be writable. create() would reuse it instead of needing
+    // a fresh open() with O_CREAT, which is what the directory permission blocks. That would
+    // silently defeat the fault injection below.
     std::filesystem::remove( "/tmp/dmtest/shm/dmshapefail00.im.shm" );
     std::filesystem::remove( "/tmp/dmtest/shm/dmshapefail_actmask.im.shm" );
     std::filesystem::remove( "/tmp/dmtest/shm/dmshapefail_shape.im.shm" );
@@ -1843,8 +1889,8 @@ TEST_CASE( "Test dm allocate propagates an output shape shmim creation exception
     mx::improc::milkImage<float> chan0;
     chan0.create( "dmshapefail00", 4, 4 );
 
-    // Now make the shm directory itself unwritable, so milkImage::create() genuinely
-    // fails (real EACCES from the OS) the next time it tries to create a new shmim.
+    // Now make the shm directory itself unwritable. milkImage::create() then fails with a real
+    // EACCES from the operating system the next time it tries to create a new shmim.
     REQUIRE( chmod( "/tmp/dmtest/shm", 0555 ) == 0 );
 
     pdt.setSize( 4, 4, IMAGESTRUCT_FLOAT );
@@ -1855,11 +1901,11 @@ TEST_CASE( "Test dm allocate propagates an output shape shmim creation exception
     REQUIRE( rv == -1 );
 }
 
-/// Test appLogic()'s "saturation thread has exited" branch by directly substituting an
-/// already-completed dummy thread for m_satThread -- without ever starting the real
-/// saturation thread via appStartup() -- so pthread_tryjoin_np() reaps a thread that
-/// was never blocking on anything, avoiding the real-thread-teardown hazards of
-/// racing a signal against a live sem_timedwait().
+/// Verify the branch in appLogic() that detects that the saturation thread has exited. The
+/// test substitutes an already completed dummy thread for m_satThread and never starts the
+/// real saturation thread through appStartup(). pthread_tryjoin_np() then reaps a thread that
+/// was never blocking on anything. This avoids the teardown hazard of racing a signal against
+/// a live sem_timedwait() in a real thread.
 /**
  * \ingroup dm_tests
  */
@@ -1875,8 +1921,8 @@ TEST_CASE( "Test dm appLogic saturation thread exited", "[dev::dm]" )
     pdt.abandonSatThread();
 }
 
-/// Test setFlat()'s internal auto-load-on-demand path (when called before any explicit
-/// loadFlat()), both the success case and the case where the internal load fails.
+/// Verify the internal auto-load path of setFlat() when it is called before any explicit
+/// loadFlat(). This test covers the success case. The failure case is the next test.
 /**
  * \ingroup dm_tests
  */
@@ -1914,7 +1960,7 @@ TEST_CASE( "Test dm setFlat internal auto-load", "[dev::dm]" )
     config.readConfig( "/tmp/dm_test_autoload.conf" );
     REQUIRE( pdt.loadConfig( config ) == 0 );
 
-    // checkFlats() auto-selects the (only) flat as current, but does not load it into memory
+    // checkFlats() auto-selects the only flat as current, but does not load it into memory.
     REQUIRE( pdt.checkFlats() == 0 );
     REQUIRE( pdt.flatLoaded() == false );
     REQUIRE( pdt.flatCurrent() == "flatY" );
@@ -1925,14 +1971,14 @@ TEST_CASE( "Test dm setFlat internal auto-load", "[dev::dm]" )
 
     pdt.state( MagAOX::app::stateCodes::READY );
 
-    // setFlat() internally loads the current flat since it isn't loaded yet
+    // setFlat() internally loads the current flat because it is not loaded yet.
     REQUIRE( pdt.setFlat() == 0 );
     REQUIRE( pdt.flatLoaded() == true );
     REQUIRE( flatChan().sum() == 5 * 5 * 4 );
 }
 
-/// Test setFlat()'s internal auto-load failure path (the on-demand loadFlat() call
-/// inside setFlat() fails because the configured default flat file doesn't exist).
+/// Verify the internal auto-load failure path of setFlat(). The on-demand loadFlat() call
+/// inside setFlat() fails because the configured default flat file does not exist.
 /**
  * \ingroup dm_tests
  */
@@ -1975,12 +2021,13 @@ TEST_CASE( "Test dm setFlat internal auto-load failure", "[dev::dm]" )
 
     pdt.state( MagAOX::app::stateCodes::READY );
 
-    // missingdefault.fits does not exist, so the internal loadFlat("default") call fails
+    // missingdefault.fits does not exist, so the internal loadFlat("default") call fails.
     REQUIRE( pdt.setFlat() == -1 );
     REQUIRE( pdt.flatLoaded() == false );
 }
 
-/// Test zeroFlat()'s state/connect/size-mismatch error branches.
+/// Verify the zeroFlat() error branches for a wrong state, a missing channel, and a size
+/// mismatch.
 /**
  * \ingroup dm_tests
  */
@@ -1989,7 +2036,7 @@ TEST_CASE( "Test dm zeroFlat error branches", "[dev::dm]" )
     setenv( "MILK_SHM_DIR", "/tmp/dmtest/shm", 1 );
     mx::ioutils::createDirectories( "/tmp/dmtest/shm" );
 
-    // empty m_shmimFlat (no shmimName configured) -> trivial success
+    // An empty m_shmimFlat, from no configured shmimName, trivially succeeds.
     {
         mx::app::writeConfigFile( "/tmp/dm_test_zf_empty.conf", { "none" }, { "nada" }, { "0" } );
         mx::app::appConfigurator config;
@@ -2019,27 +2066,27 @@ TEST_CASE( "Test dm zeroFlat error branches", "[dev::dm]" )
     config.readConfig( "/tmp/dm_test_zf.conf" );
     REQUIRE( pdt.loadConfig( config ) == 0 );
 
-    // wrong state
+    // Wrong state.
     REQUIRE( pdt.zeroFlat() == -1 );
 
     pdt.state( MagAOX::app::stateCodes::READY );
 
-    // channel doesn't exist
+    // The channel does not exist.
     std::remove( "/tmp/dmtest/shm/dmzf00.im.shm" );
     REQUIRE( pdt.zeroFlat() == -1 );
 
-    // width mismatch (checked first)
+    // Width mismatch. It is checked first.
     mx::improc::milkImage<float> flatChanBad;
     flatChanBad.create( "dmzf00", 3, 3 );
     REQUIRE( pdt.zeroFlat() == -1 );
 
-    // width now matches (5) but height doesn't (3) -> exercises the separate
-    // height-mismatch branch.
+    // The width now matches at 5 but the height is 3. This exercises the separate height
+    // mismatch branch.
     flatChanBad.create( "dmzf00", 5, 3 );
     REQUIRE( pdt.zeroFlat() == -1 );
 
-    // matching-size channel -> zeroFlat() proceeds; force zeroDM()/clearSat() failures
-    // (both are logged but non-fatal, so zeroFlat() itself still returns 0).
+    // With a matching-size channel zeroFlat() proceeds. Force zeroDM() and clearSat()
+    // failures. Both are logged but not fatal, so zeroFlat() itself still returns 0.
     flatChanBad.create( "dmzf00", 5, 5 );
     pdt.m_zeroDMRV = -1;
     REQUIRE( pdt.zeroFlat() == 0 );
@@ -2051,19 +2098,18 @@ TEST_CASE( "Test dm zeroFlat error branches", "[dev::dm]" )
     REQUIRE( pdt.zeroFlat() == 0 );
 }
 
-/// Test that loadConfig() propagates a real (not mocked) exception from creating the
-/// actuator-mask shmim, forced by making the shm directory genuinely unwritable.
+/// Verify that loadConfig() propagates a real exception from creating the actuator mask
+/// shmim. Nothing is mocked. The exception is forced by making the shm directory unwritable.
 ///
-/// NOTE: milk's ImageStreamIO_filename() resolves and *caches* its shm directory (from
-/// MILK_SHM_DIR) in a function-local static the first time it's called in a process --
-/// every later call, no matter what MILK_SHM_DIR is subsequently set to, reuses that
-/// first-resolved directory. Since some earlier test in this same binary has already
-/// triggered that resolution against "/tmp/dmtest/shm", this test (and any other in
-/// this file needing a real milkImage::create() to target a specific directory) must
-/// use that same already-cached directory rather than trying to set its own --
-/// otherwise the fault-injecting chmod() below would silently target an unrelated,
-/// still-writable directory and the real shmim would end up created in
-/// "/tmp/dmtest/shm" regardless.
+/// NOTE: the milk function ImageStreamIO_filename() resolves its shm directory from
+/// MILK_SHM_DIR and caches it in a function-local static the first time it is called in a
+/// process. Every later call reuses that first directory, no matter what MILK_SHM_DIR is set
+/// to afterwards. Some earlier test in this same binary has already triggered that resolution
+/// against "/tmp/dmtest/shm". This test must therefore use that same cached directory rather
+/// than setting its own. The same applies to any other test in this file that needs a real
+/// milkImage::create() to target a specific directory. Otherwise the fault-injecting chmod()
+/// below would silently target an unrelated, still writable directory, and the real shmim
+/// would be created in "/tmp/dmtest/shm" regardless.
 /**
  * \ingroup dm_tests
  */
@@ -2071,9 +2117,9 @@ TEST_CASE( "Test dm loadConfig propagates an actMask shmim creation exception", 
 {
     setenv( "MILK_SHM_DIR", "/tmp/dmtest/shm", 1 );
     mx::ioutils::createDirectories( "/tmp/dmtest/shm" );
-    // remove any stray file from a previous run of this test, so create() can't reuse
-    // an already-open, still-writable file instead of needing a fresh open(O_CREAT)
-    // blocked by the chmod below.
+    // Remove any stray file from a previous run of this test. Otherwise create() could reuse
+    // a still writable file instead of needing a fresh open() with O_CREAT, which is what the
+    // chmod below blocks.
     std::filesystem::remove( "/tmp/dmtest/shm/dmactmaskfail_actmask.im.shm" );
 
     std::vector<std::string> s, k, v;
@@ -2101,9 +2147,10 @@ TEST_CASE( "Test dm loadConfig propagates an actMask shmim creation exception", 
     REQUIRE( rv == -1 );
 }
 
-/// Test loadConfig()'s dm.testDefault and dm.actMaskPath handling: the default test name
-/// gets its path/extension stripped, and a configured actuator mask file is loaded and
-/// validated against dm.width/dm.height (both matching and mismatched cases).
+/// Verify how loadConfig() handles dm.testDefault and dm.actMaskPath. The default test name
+/// has its path and extension stripped. A configured actuator mask file is loaded and
+/// validated against dm.width and dm.height. Both the matching and the mismatched cases are
+/// covered.
 /**
  * \ingroup dm_tests
  */

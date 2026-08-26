@@ -1,8 +1,10 @@
 /** \file ttyIOUtils_test.cpp
-  * \brief Catch2 tests for the tty I/O helpers (libMagAOX/tty/ttyIOUtils.cpp).
+  * \brief Catch2 tests for the tty I/O helpers in libMagAOX/tty/ttyIOUtils.cpp.
   *
-  * Uses real pty pairs (openpty) as the serial device, so open/read/write/timeout and
-  * error paths run against genuine terminal file descriptors -- no mocks.
+  * No mocks are used. The open tests use real pseudo terminal pairs from openpty() as the
+  * serial device, so the device setup runs against genuine terminal file descriptors. The
+  * read, write, timeout, and error tests use real AF_UNIX socket pairs and closed
+  * descriptors so the poll and errno paths are exercised by the kernel.
   */
 #include "../../../tests/catch2/catch.hpp"
 
@@ -162,6 +164,9 @@ SCENARIO( "A string needs to be telnet-ified", "[libMagAOX::tty]" )
    }
 }
 
+// Verifies that isEndOfTrans() only reports a match when the end-of-transmission string is
+// exactly the tail of the read buffer, including the edge cases of a too-short buffer and
+// empty inputs.
 TEST_CASE( "isEndOfTrans checks the tail of the read buffer against the eot string", "[libMagAOX::tty::isEndOfTrans]" )
 {
    REQUIRE( MagAOX::tty::isEndOfTrans( "hello> ", "> " ) == true );
@@ -170,7 +175,10 @@ TEST_CASE( "isEndOfTrans checks the tail of the read buffer against the eot stri
    REQUIRE( MagAOX::tty::isEndOfTrans( "", "" ) == true ); // both empty
 }
 
-/// Opens a fresh pty pair, closing the slave end (ttyOpenRaw will reopen it by path).
+/// Opens a fresh pseudo terminal pair and returns the slave device path.
+/** The slave end is closed right away because ttyOpenRaw() reopens it by path. The caller
+  * owns the master descriptor and must close it.
+  */
 static std::string openPtySlaveName( int & masterFd )
 {
    int slaveFd;
@@ -182,6 +190,9 @@ static std::string openPtySlaveName( int & masterFd )
    return std::string(name);
 }
 
+// Verifies ttyOpenRaw() against a real pseudo terminal slave. The success path checks that a
+// descriptor is returned. The failure paths use a regular file, a missing path, and an invalid
+// baud rate to reach the TTY_E_TCGETATTR and TTY_E_SETISPEED error codes.
 TEST_CASE( "ttyOpenRaw opens a real tty device and configures it", "[libMagAOX::tty::ttyOpenRaw]" )
 {
    SECTION("succeeds on a real pty slave device")
@@ -241,8 +252,11 @@ TEST_CASE( "ttyOpenRaw opens a real tty device and configures it", "[libMagAOX::
    }
 }
 
-/// Makes a non-blocking write-end of a socketpair whose kernel send buffer is filled up so
-/// subsequent writes/polls-for-POLLOUT will not be ready. Returns the (still-open) fds.
+/// Fills the kernel send buffer of a socket descriptor so later writes cannot proceed.
+/** The descriptor is switched to non-blocking mode, written to until write() fails, and then
+  * restored to its original flags. After this a poll for POLLOUT on the descriptor will not
+  * become ready until the peer drains the buffer. The descriptor stays open.
+  */
 static void fillSendBuffer( int fd )
 {
    int flags = fcntl(fd, F_GETFL, 0);
@@ -259,6 +273,9 @@ static void fillSendBuffer( int fd )
    fcntl(fd, F_SETFL, flags);
 }
 
+// Verifies ttyWrite() on a real socket pair. The success path reads the bytes back from the
+// peer. The error paths use a closed descriptor, a zero timeout, and a full send buffer to
+// reach each write error code.
 TEST_CASE( "ttyWrite writes to a file descriptor", "[libMagAOX::tty::ttyWrite]" )
 {
    SECTION("succeeds writing to a socket that's ready and being drained")
@@ -319,6 +336,9 @@ TEST_CASE( "ttyWrite writes to a file descriptor", "[libMagAOX::tty::ttyWrite]" 
    }
 }
 
+// Verifies ttyReadRaw() on a real socket pair. It checks that available bytes are returned
+// with the correct count, that silence produces a poll timeout, and that a closed descriptor
+// produces a read error.
 TEST_CASE( "ttyReadRaw reads a raw buffer of bytes from a file descriptor", "[libMagAOX::tty::ttyReadRaw]" )
 {
    SECTION("succeeds reading available bytes")
@@ -370,6 +390,9 @@ TEST_CASE( "ttyReadRaw reads a raw buffer of bytes from a file descriptor", "[li
    }
 }
 
+// Verifies the byte-count overload of ttyRead() on a real socket pair. A sender thread
+// delivers the data in separate chunks to prove that the reader accumulates across reads.
+// The timeout and closed-descriptor error paths are also checked.
 TEST_CASE( "ttyRead(bytes) reads until a specific number of bytes have arrived", "[libMagAOX::tty::ttyRead]" )
 {
    SECTION("succeeds, accumulating across multiple sends")
@@ -413,11 +436,11 @@ TEST_CASE( "ttyRead(bytes) reads until a specific number of bytes have arrived",
 
    SECTION("returns TTY_E_TIMEOUTONREADPOLL when the byte count is never reached")
    {
-      // Once the initial bytes are consumed, the subsequent poll for more data blocks for
-      // the remaining budget and times out -- the overall TTY_E_TIMEOUTONREAD check only
-      // fires if the budget is already exhausted at the top of a loop iteration, which
-      // can't happen deterministically here since the preceding poll is itself bounded by
-      // that same budget.
+      // Once the initial bytes are consumed, the next poll for more data blocks for the
+      // remaining time budget and times out. The overall TTY_E_TIMEOUTONREAD check only fires
+      // if the budget is already exhausted at the top of a loop iteration. That cannot happen
+      // deterministically here because the preceding poll is bounded by the same budget. So
+      // the expected result is the poll timeout code.
       int sp[2];
       REQUIRE( ::socketpair(AF_UNIX, SOCK_STREAM, 0, sp) == 0 );
 
@@ -445,6 +468,9 @@ TEST_CASE( "ttyRead(bytes) reads until a specific number of bytes have arrived",
    }
 }
 
+// Verifies the end-of-transmission overload of ttyRead() on a real socket pair. A sender
+// thread delivers the reply in two chunks so the terminator arrives in a later read. The
+// timeout, missing-terminator, and closed-descriptor error paths are also checked.
 TEST_CASE( "ttyRead(eot) reads until an end-of-transmission string is seen", "[libMagAOX::tty::ttyRead]" )
 {
    SECTION("succeeds, accumulating across multiple sends until the eot arrives")
@@ -515,6 +541,9 @@ TEST_CASE( "ttyRead(eot) reads until an end-of-transmission string is seen", "[l
    }
 }
 
+// Verifies ttyWriteRead() on a real socket pair with a device thread standing in for the
+// serial peer. The echo-swallowing path models a console that echoes each command before
+// replying. Write errors and read timeouts during the echo swallow are also checked.
 TEST_CASE( "ttyWriteRead writes then reads a reply, optionally swallowing the echo", "[libMagAOX::tty::ttyWriteRead]" )
 {
    SECTION("succeeds with echo swallowing, as a real echoing console would behave")
@@ -526,16 +555,17 @@ TEST_CASE( "ttyWriteRead writes then reads a reply, optionally swallowing the ec
 
       std::thread device([sp, strWrite]()
       {
-         // Read the command the console echoes back to us.
+         // Receive the command that ttyWriteRead() sends.
          char buff[256];
          ssize_t n = ::recv(sp[1], buff, sizeof(buff), 0);
          REQUIRE(n == (ssize_t) strWrite.size());
 
-         // Echo it back. The swallow loop reads while totrv <= strWrite.size(), so it
-         // always consumes one byte beyond the echo itself and discards whatever chunk
-         // that byte arrived in -- send a throwaway filler byte on its own (separated by a
-         // sleep so it isn't coalesced with the echo or the real reply into one read()),
-         // then send the real reply afterward for the subsequent ttyRead() to pick up.
+         // Echo the command back. The swallow loop in ttyWriteRead() reads while
+         // totrv <= strWrite.size(), so it always consumes one byte beyond the echo and
+         // discards whatever chunk that byte arrived in. A single throwaway filler byte is
+         // sent on its own for that purpose. The sleeps keep the echo, the filler, and the
+         // real reply from being coalesced into one read(). The real reply is sent last so
+         // the following ttyRead() picks it up.
          ::send(sp[1], strWrite.c_str(), strWrite.size(), 0);
          std::this_thread::sleep_for(std::chrono::milliseconds(20));
          ::send(sp[1], "X", 1, 0);

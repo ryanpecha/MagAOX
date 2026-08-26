@@ -71,7 +71,7 @@ struct telem_modalgainopt : public flatbuffer_log
         msg += std::to_string( fbs->gain_leak() );
 
         return msg;
-    } // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
+    } // LCOV_EXCL_LINE gcov reports this closing brace as a separate line that only runs during exception cleanup
 
     static bool updateAuto( void *msgBuffer )
     {

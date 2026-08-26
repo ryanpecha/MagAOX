@@ -119,10 +119,10 @@ void Thread::setupPipe()
         for( uint64_t ii = 0; ii < 2; ii++ )
         {
             int iFlags = 0;
-            // fcntl F_GETFL/F_SETFL on a just-created pipe fd cannot fail, so these
-            // two cleanup blocks are unreachable defensive code.
+            // fcntl on a pipe descriptor that was just created does not fail.
+            // The two cleanup blocks below are defensive code that never runs.
             if( ( iFlags = ::fcntl( m_pfdPipe[ii], F_GETFL ) ) == -1 )
-            // LCOV_EXCL_START
+            // LCOV_EXCL_START F_GETFL on a new pipe descriptor does not fail.
             {
                 ::close( m_pfdPipe[0] );
                 ::close( m_pfdPipe[1] );
@@ -133,7 +133,7 @@ void Thread::setupPipe()
             // LCOV_EXCL_STOP
             iFlags |= O_NONBLOCK;
             if( ::fcntl( m_pfdPipe[ii], F_SETFL, iFlags ) == -1 )
-            // LCOV_EXCL_START
+            // LCOV_EXCL_START F_SETFL on a new pipe descriptor does not fail.
             {
                 ::close( m_pfdPipe[0] );
                 ::close( m_pfdPipe[1] );
@@ -488,8 +488,8 @@ void Thread::runLoop()
                 // Read the single char sent.
                 char ch;
                 int  rv = ::read( m_pfdPipe[0], &ch, 1 );
-                if( rv < 0 ) // select just reported the fd readable, so the read cannot fail
-                    std::cerr << __FILE__ << " " << __LINE__ << " " << strerror( errno ) << "\n"; // LCOV_EXCL_LINE
+                if( rv < 0 ) // select() just reported this descriptor readable.
+                    std::cerr << __FILE__ << " " << __LINE__ << " " << strerror( errno ) << "\n"; // LCOV_EXCL_LINE The read() above does not fail after that, so this message never prints.
             }
         }
 

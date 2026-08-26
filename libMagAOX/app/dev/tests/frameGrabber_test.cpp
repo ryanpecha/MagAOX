@@ -1,6 +1,17 @@
 /** \file frameGrabber_test.cpp
  * \brief Catch2 tests for the MagAOX::app::dev::frameGrabber CRTP mixin.
  *
+ * The tests drive the real frameGrabber code through small MagAOXApp<true> harness
+ * classes. The harness classes stub the derived-class hooks that a camera would
+ * provide, such as configureAcquisition() and acquireAndCheckValid(), and count how
+ * often each hook is called. The acquisition loop fgThreadExec() is usually run on the
+ * calling thread so every branch can be reached deterministically.
+ *
+ * The tests use real ImageStreamIO shared memory streams and real semaphores. They
+ * point MILK_SHM_DIR at /tmp/frameGrabber_test/shm before any stream is created and
+ * write config files under /tmp. The last TEST_CASE in this file leaks its harness on
+ * purpose. See the comment above it for why it must remain last.
+ *
  * \ingroup app_dev_unit_tests
  */
 
@@ -13,8 +24,9 @@
 #include <thread>
 #include <unistd.h>
 
-// Flip protected to public for this whole translation unit so the tests can poke
-// directly at MagAOXApp/frameGrabber internals without a pile of accessor wrappers.
+// Turn protected into public for this whole translation unit. This lets the tests
+// read and write MagAOXApp and frameGrabber internals directly without adding
+// accessor wrappers to the harness classes.
 #define protected public
 #include "../../MagAOXApp.hpp"
 #include "../telemeter.hpp"
@@ -28,12 +40,13 @@ using namespace MagAOX::app;
 namespace frameGrabber_tests
 {
 
-// ImageStreamIO caches the shared memory directory the first time it is queried
-// (a static local in ImageStreamIO_shmdirname), so MILK_SHM_DIR must be set before
-// any ImageStreamIO call happens anywhere in this process.  Doing this in a
-// namespace-scope static initializer guarantees it runs before any TEST_CASE body.
+// ImageStreamIO caches the shared memory directory the first time it is queried.
+// The cache is a static local in ImageStreamIO_shmdirname. So MILK_SHM_DIR must be
+// set before any ImageStreamIO call happens anywhere in this process. Doing this in
+// a namespace-scope static initializer guarantees it runs before any TEST_CASE body.
 const std::string g_shmDir = "/tmp/frameGrabber_test/shm";
 
+/// Create the shared memory directory and point MILK_SHM_DIR at it.
 int setupShmDir()
 {
     mx::ioutils::createDirectories( g_shmDir );
@@ -50,8 +63,9 @@ std::string uniqueShmimName( const std::string &suffix )
     return "frameGrabber_test_" + suffix + "_" + std::to_string( ::getpid() ) + "_" + std::to_string( counter );
 }
 
-/// RAII wrapper for a temporary ImageStreamIO stream created out-of-band from the
-/// frameGrabber under test (used to simulate a shmim owned by another process).
+/// RAII wrapper for a temporary ImageStreamIO stream created outside the frameGrabber
+/// under test. It simulates a shmim owned by another process. The stream is destroyed
+/// in the destructor unless dismiss() has been called.
 class tempStream
 {
   public:
@@ -95,8 +109,8 @@ class tempStream
         return &m_image;
     }
 
-    /// Release destruction ownership (e.g. after handing the stream to a frameGrabber
-    /// under test that will destroy it itself).
+    /// Release destruction ownership. Call this after handing the stream to a
+    /// frameGrabber under test that will destroy it itself.
     void dismiss()
     {
         m_owner = false;
@@ -115,7 +129,11 @@ using namespace frameGrabber_tests;
 namespace frameGrabber_tests
 {
 
-/// Test harness exposing `dev::frameGrabber` without an optional post-publish hook.
+/// Test harness exposing `dev::frameGrabber` without the optional post-publish hook.
+/// It stubs every derived-class hook the mixin calls. Each stub counts its calls and
+/// can be told to fail a set number of times. acquireAndCheckValid() pops its return
+/// values from a queue and requests shutdown when the queue is empty, which is how
+/// the tests end the acquisition loop.
 struct fgTest : public MagAOX::app::MagAOXApp<true>,
                 public dev::frameGrabber<fgTest>,
                 public dev::telemeter<fgTest>
@@ -140,10 +158,10 @@ struct fgTest : public MagAOX::app::MagAOXApp<true>,
     int startAcquisitionFailCount{ 0 };
 
     // ---- acquireAndCheckValid() controls ---------------------------------------
-    std::deque<int> acquireResults; ///< Popped in call order; empty queue shuts the app down.
+    std::deque<int> acquireResults; ///< Popped in call order. An empty queue shuts the app down.
     int             acquireCalls{ 0 };
     bool            setReconfigOnNextAcquire{ false };
-    int             bumpFpsAfterCall{ -1 }; ///< If >=0, fpsValue changes right after this call count is reached.
+    int             bumpFpsAfterCall{ -1 }; ///< If 0 or more, fpsValue changes right after this call count is reached.
     float           bumpedFpsValue{ 0 };
 
     // ---- loadImageIntoStream() controls ----------------------------------------
@@ -162,9 +180,9 @@ struct fgTest : public MagAOX::app::MagAOXApp<true>,
     {
     }
 
-    // Constructs a real (but FIFO-less) indiDriver so m_indiDriver != nullptr -- the same
-    // pattern MagAOXApp_test.hpp's setConfigName() uses. indi::updateIfChanged() catches
-    // its own send failures, so this doesn't need a live, connected INDI server.
+    // Construct a real indiDriver with no FIFOs so m_indiDriver is not nullptr. This is
+    // the same pattern setConfigName() in MagAOXApp_test.hpp uses. indi::updateIfChanged()
+    // catches its own send failures, so this does not need a live, connected INDI server.
     void setConfigNameWithDriver( const std::string &cn )
     {
         m_configName = cn;
@@ -172,9 +190,10 @@ struct fgTest : public MagAOX::app::MagAOXApp<true>,
             this, m_configName );
     }
 
-    // MagAOXApp's pure virtuals -- tests call frameGrabberT::appStartup()/appLogic()/
-    // appShutdown() explicitly, so these trivial overrides just satisfy instantiability
-    // and disambiguate unqualified lookup between MagAOXApp and dev::frameGrabber.
+    // Overrides of the MagAOXApp pure virtuals. The tests call frameGrabberT::appStartup(),
+    // frameGrabberT::appLogic(), and frameGrabberT::appShutdown() explicitly. These
+    // trivial overrides only make the class instantiable and disambiguate unqualified
+    // lookup between MagAOXApp and dev::frameGrabber.
     int appStartup()
     {
         return 0;
@@ -272,12 +291,15 @@ struct fgTest : public MagAOX::app::MagAOXApp<true>,
     int reconfig()
     {
         ++reconfigCalls;
-        m_shutdown = 1; // end the outer loop cleanly once reconfig has been exercised
+        m_shutdown = 1; // End the outer loop cleanly once reconfig has been exercised.
         return 0;
     }
 };
 
-/// Test harness exposing `dev::frameGrabber` WITH the optional post-publish hook.
+/// Test harness exposing `dev::frameGrabber` with the optional post-publish hook.
+/// It is a reduced copy of fgTest that also defines frameGrabberPostPublish(). The hook
+/// counts its calls and returns postPublishReturn, so a test can make it abort the
+/// acquisition loop.
 struct fgTestHook : public MagAOX::app::MagAOXApp<true>,
                     public dev::frameGrabber<fgTestHook>,
                     public dev::telemeter<fgTestHook>
@@ -394,7 +416,8 @@ struct fgTestHook : public MagAOX::app::MagAOXApp<true>,
     }
 };
 
-/// Minimal test harness for the non-flippable configuration option.
+/// Minimal test harness for the non-flippable configuration option. Every hook is a
+/// trivial stub. acquireAndCheckValid() always requests shutdown.
 struct fgTestNoFlip : public MagAOX::app::MagAOXApp<true>,
                       public dev::frameGrabber<fgTestNoFlip>,
                       public dev::telemeter<fgTestNoFlip>
@@ -463,7 +486,8 @@ struct fgTestNoFlip : public MagAOX::app::MagAOXApp<true>,
 };
 
 /// Put a `fgTest`-like harness into the state where `fgThreadExec` will proceed
-/// straight through its startup wait loops without blocking.
+/// straight through its startup wait loops without blocking. The app is marked as
+/// powered on and OPERATING, and the thread-init handshake is skipped.
 template <class appT> void primeForSyncExec( appT &app )
 {
     app.m_fgThreadInit    = false;
@@ -475,14 +499,16 @@ template <class appT> void primeForSyncExec( appT &app )
 }
 
 /// Start a short-lived dummy framegrabber thread so `frameGrabber::appLogic()` has a
-/// live, joinable thread to check (its first line always calls `pthread_tryjoin_np`
-/// on `m_fgThread`, which is undefined behavior on a never-started `std::thread`).
+/// live, joinable thread to check. Its first line always calls `pthread_tryjoin_np`
+/// on `m_fgThread`. That is undefined behavior on a never-started `std::thread`.
 template <class appT> void startDummyFgThread( appT &app, int sleepMs = 200 )
 {
     app.m_fgThread = std::thread( [sleepMs]() { std::this_thread::sleep_for( std::chrono::milliseconds( sleepMs ) ); } );
 }
 
-/// RAII helper that joins a dummy framegrabber thread on scope exit.
+/// RAII helper that starts a dummy framegrabber thread and joins it on scope exit.
+/// This keeps a failed REQUIRE from destroying the harness while the thread is still
+/// joinable, which would call std::terminate.
 template <class appT> struct fgThreadScope
 {
     appT &m_app;
@@ -503,8 +529,9 @@ template <class appT> struct fgThreadScope
 
 using namespace frameGrabber_tests;
 
-/// setupConfig()/loadConfig() cover the flippable and non-flippable configuration
-/// paths, along with every input-validation branch in loadConfig().
+/// Verify that setupConfig() and loadConfig() handle the flippable and non-flippable
+/// configurations and every input-validation branch in loadConfig(). Config files are
+/// written under /tmp and read back through a real appConfigurator.
 /**
  * \ingroup app_dev_unit_tests
  */
@@ -554,7 +581,7 @@ TEST_CASE( "frameGrabber setupConfig and loadConfig manage every configurable op
             config.readConfig( path );
             REQUIRE( app.loadConfig( config ) == 0 );
             REQUIRE( app.m_shmimName == "myshmim" );
-            REQUIRE( app.m_circBuffLength == 1 ); // corrected up from 0
+            REQUIRE( app.m_circBuffLength == 1 ); // Corrected up from the configured 0.
             REQUIRE( app.m_defaultFlip == c.expected );
         }
     }
@@ -586,8 +613,9 @@ TEST_CASE( "frameGrabber setupConfig and loadConfig manage every configurable op
     }
 }
 
-/// configCircBuffs() covers the zero-length, negative-fps, and normal clamping
-/// branches.
+/// Verify that configCircBuffs() sizes the latency circular buffers from the fps and
+/// the configured limits. It covers the zero-length, negative-fps, upper clamp, and
+/// lower floor branches.
 /**
  * \ingroup app_dev_unit_tests
  */
@@ -615,7 +643,7 @@ TEST_CASE( "frameGrabber configCircBuffs configures or clamps the latency buffer
         fgTest app;
         app.m_latencyCircBuffMaxLength = 10;
         app.m_latencyCircBuffMaxTime   = 5;
-        app.fpsValue                   = 1000; // 2*5*1000 = 10000, clamps down to 10
+        app.fpsValue                   = 1000; // 2*5*1000 = 10000 entries requested. This clamps down to 10.
         REQUIRE( app.configCircBuffs() == 0 );
         REQUIRE( app.m_atimes.maxEntries() == 10 );
     }
@@ -631,7 +659,9 @@ TEST_CASE( "frameGrabber configCircBuffs configures or clamps the latency buffer
     }
 }
 
-/// loadImageIntoStreamCopy() covers the non-flippable shortcut and every flip case.
+/// Verify that loadImageIntoStreamCopy() takes the plain memcpy shortcut when the
+/// harness is not flippable and dispatches on m_defaultFlip when it is. An unknown flip
+/// value must return nullptr.
 /**
  * \ingroup app_dev_unit_tests
  */
@@ -663,13 +693,14 @@ TEST_CASE( "frameGrabber loadImageIntoStreamCopy dispatches on the flip setting"
         app.m_defaultFlip = fgTest::fgFlipUDLR;
         REQUIRE( app.loadImageIntoStreamCopy( dest, src, 2, 2, 1 ) != nullptr );
 
-        app.m_defaultFlip = 99; // unknown value
+        app.m_defaultFlip = 99; // An unknown flip value.
         REQUIRE( app.loadImageIntoStreamCopy( dest, src, 2, 2, 1 ) == nullptr );
     }
 }
 
-/// openShmim() covers a missing shmim, a not-yet-ready shmim, a corrupt shmim, and a
-/// fully valid shmim with both 2D and 3D geometry.
+/// Verify that openShmim() attaches to a shmim created by another process and reports
+/// why it could not. Real streams are created with tempStream. The cases are a missing
+/// shmim, a not-yet-ready shmim, a corrupt shmim, and valid 1D, 2D, and 3D shmims.
 /**
  * \ingroup app_dev_unit_tests
  */
@@ -680,7 +711,7 @@ TEST_CASE( "frameGrabber openShmim attaches to an external shmim or reports why 
         fgTest app;
         app.m_shmimName = uniqueShmimName( "missing" );
         REQUIRE( app.openShmim() == 1 );
-        REQUIRE( app.openShmim() == 1 ); // second call exercises the "already logged" branch
+        REQUIRE( app.openShmim() == 1 ); // The second call exercises the "already logged" branch.
     }
 
     SECTION( "a pre-existing local stream is closed before attaching" )
@@ -689,7 +720,7 @@ TEST_CASE( "frameGrabber openShmim attaches to an external shmim or reports why 
         app.m_shmimName = uniqueShmimName( "replace" );
         app.m_imageStream = reinterpret_cast<IMAGE *>( malloc( sizeof( IMAGE ) ) );
         *app.m_imageStream = IMAGE{};
-        REQUIRE( app.openShmim() == 1 ); // still missing on disk, but the old handle was freed first
+        REQUIRE( app.openShmim() == 1 ); // Still missing on disk, but the old handle was freed first.
         REQUIRE( app.m_imageStream == nullptr );
     }
 
@@ -699,7 +730,7 @@ TEST_CASE( "frameGrabber openShmim attaches to an external shmim or reports why 
         std::string name = uniqueShmimName( "notready" );
         app.m_shmimName  = name;
 
-        // Create the stream with fewer semaphores than SEMAPHORE_MAXVAL directly, since
+        // Create the stream with fewer semaphores than SEMAPHORE_MAXVAL. The field
         // `.md[0].sem` reflects the number requested at creation time.
         tempStream ext( name, 3, 4, 4, 2, _DATATYPE_UINT8, 1 );
 
@@ -790,7 +821,7 @@ TEST_CASE( "frameGrabber openShmim attaches to an external shmim or reports why 
     }
 }
 
-/// updateINDI() is a no-op without a live INDI driver.
+/// Verify that updateINDI() returns 0 and does nothing when no INDI driver exists.
 /**
  * \ingroup app_dev_unit_tests
  */
@@ -801,9 +832,9 @@ TEST_CASE( "frameGrabber updateINDI is a no-op without an active INDI driver", "
     REQUIRE( app.updateINDI() == 0 );
 }
 
-/// updateINDI() with a real (FIFO-less) indiDriver connected exercises its
-/// indi::updateIfChanged() publishing calls (already covered directly in
-/// indiUtils_test.cpp for the send-failure paths those calls take internally).
+/// Verify that updateINDI() publishes its properties when a real indiDriver with no
+/// FIFOs is attached. This exercises the indi::updateIfChanged() calls. The send-failure
+/// paths those calls take internally are covered directly in indiUtils_test.cpp.
 /**
  * \ingroup app_dev_unit_tests
  */
@@ -814,8 +845,8 @@ TEST_CASE( "frameGrabber updateINDI publishes properties with an active INDI dri
 
     REQUIRE( app.frameGrabberT::appStartup() == 0 );
 
-    // Non-zero latency stats (as appLogic() would compute from real frames) so
-    // updateINDI() also exercises its fps-from-mean-latency divisions.
+    // Set non-zero latency statistics like the ones appLogic() would compute from real
+    // frames. This makes updateINDI() also exercise its fps-from-mean-latency divisions.
     app.m_mna = 0.01;
     app.m_mnw = 0.02;
 
@@ -825,8 +856,9 @@ TEST_CASE( "frameGrabber updateINDI publishes properties with an active INDI dri
     REQUIRE( app.frameGrabberT::appShutdown() == 0 );
 }
 
-/// appStartup() registers the shmimName, frameSize, and timing properties and starts
-/// the framegrabber thread; each property registration failure is reported.
+/// Verify that appStartup() registers the shmimName, frameSize, and timing INDI
+/// properties and starts the framegrabber thread. Each property registration failure
+/// is forced by registering a duplicate first, and each must fail startup.
 /**
  * \ingroup app_dev_unit_tests
  */
@@ -871,12 +903,12 @@ TEST_CASE( "frameGrabber appStartup registers INDI properties and starts its thr
         REQUIRE( app.frameGrabberT::appStartup() == 0 );
         REQUIRE( app.m_fgThread.joinable() );
 
-        // The thread is parked waiting for a READY/OPERATING state; release it.
+        // The thread is parked waiting for a READY or OPERATING state. Release it.
         app.m_shutdown = 1;
         REQUIRE( app.frameGrabberT::appShutdown() == 0 );
         REQUIRE( !app.m_fgThread.joinable() );
 
-        // A second call is a no-op (nothing left to join).
+        // A second call is a no-op because nothing is left to join.
         REQUIRE( app.frameGrabberT::appShutdown() == 0 );
     }
 
@@ -887,8 +919,8 @@ TEST_CASE( "frameGrabber appStartup registers INDI properties and starts its thr
 
         REQUIRE( app.frameGrabberT::appStartup() < 0 );
 
-        // The thread itself did start (threadStart() only fails afterward, while trying
-        // to move it into the cpuset), so it still needs to be released and joined.
+        // The thread itself did start. threadStart() only fails afterward, while trying
+        // to move it into the cpuset. So the thread still needs to be released and joined.
         app.m_shutdown = 1;
         if( app.m_fgThread.joinable() )
         {
@@ -897,9 +929,11 @@ TEST_CASE( "frameGrabber appStartup registers INDI properties and starts its thr
     }
 }
 
-/// appLogic() covers the thread-exited error path, the idle reset path, the
-/// insufficient-history reset path, the normal statistics path, and the
-/// non-monotonic-write-time error path.
+/// Verify that appLogic() computes latency statistics from the acquisition and write
+/// time circular buffers, or resets them when it cannot. The buffers are filled by hand.
+/// A dummy thread stands in for the framegrabber thread so the liveness check passes.
+/// The cases are the idle reset path, the insufficient-history reset path, the normal
+/// statistics path, and the non-monotonic-write-time error path.
 /**
  * \ingroup app_dev_unit_tests
  */
@@ -919,7 +953,7 @@ TEST_CASE( "frameGrabber appLogic computes latency statistics or reports why it 
         fgTest        app;
         fgThreadScope<fgTest> thr( app );
         app.state( stateCodes::OPERATING );
-        app.m_powerMgtEnabled = false; // powerState() always returns 1
+        app.m_powerMgtEnabled = false; // With power management off, powerState() always returns 1.
         app.fpsValue          = 100;
 
         timespec ts{ 1, 0 };
@@ -931,7 +965,8 @@ TEST_CASE( "frameGrabber appLogic computes latency statistics or reports why it 
         app.m_atimes.nextEntry( ts );
         app.m_wtimes.nextEntry( ts );
 
-        // A vanishingly small max time forces latTime (and thus usedEntries) below 2.
+        // A vanishingly small max time forces latTime below 2. That forces usedEntries
+        // below 2 as well, which is the insufficient-history condition.
         app.m_latencyCircBuffMaxTime = 0.0000001;
         app.m_cbFPS                  = 100;
 
@@ -949,11 +984,11 @@ TEST_CASE( "frameGrabber appLogic computes latency statistics or reports why it 
         app.m_cbFPS           = 100;
         app.m_latencyCircBuffMaxTime = 5;
 
-        // The refEntry/usedEntries math in frameGrabber::appLogic() assumes the
-        // buffers are filled to capacity (as they would be in steady-state operation),
-        // so maxEntries here matches the number of entries pushed below exactly. Two
-        // extra entries beyond capacity also wrap the circular index (m_latest ends up
-        // less than usedEntries), exercising the `refEntry = maxEntries() + ...` branch.
+        // The refEntry and usedEntries math in frameGrabber::appLogic() assumes the
+        // buffers are filled to capacity, as they would be in steady-state operation.
+        // So the loop below pushes at least maxEntries entries to fill the buffers. Two
+        // extra entries beyond capacity also wrap the circular index, so m_latest ends up
+        // less than usedEntries. That exercises the `refEntry = maxEntries() + ...` branch.
         app.m_atimes.maxEntries( 6 );
         app.m_wtimes.maxEntries( 6 );
 
@@ -972,7 +1007,7 @@ TEST_CASE( "frameGrabber appLogic computes latency statistics or reports why it 
 
         // Also exercise recordFGTimings() and updateINDI() with real statistics.
         REQUIRE( app.recordFGTimings() == 0 );
-        REQUIRE( app.recordFGTimings( true ) == 0 ); // force a repeat record
+        REQUIRE( app.recordFGTimings( true ) == 0 ); // Force a repeat record.
         REQUIRE( app.updateINDI() == 0 );
     }
 
@@ -1003,7 +1038,8 @@ TEST_CASE( "frameGrabber appLogic computes latency statistics or reports why it 
 
 }
 
-/// onPowerOff() resets frame-size and latency-statistics state and requests a reconfig.
+/// Verify that onPowerOff() resets the frame size and the latency statistics and
+/// requests a reconfiguration.
 /**
  * \ingroup app_dev_unit_tests
  */
@@ -1023,8 +1059,11 @@ TEST_CASE( "frameGrabber onPowerOff resets state and requests a reconfiguration"
     REQUIRE( app.m_reconfig == true );
 }
 
-/// The framegrabber thread's main acquisition loop, driven synchronously (not on a
-/// background thread) so every branch can be reached deterministically.
+/// Verify the main acquisition loop of the framegrabber thread, fgThreadExec(). Most
+/// sections call it on the test thread rather than on a background thread so every
+/// branch can be reached deterministically. The harness ends the loop by requesting
+/// shutdown once its queue of acquire results is empty. Sections that need to change
+/// the harness while the loop sleeps run it on a background thread instead.
 /**
  * \ingroup app_dev_unit_tests
  */
@@ -1035,20 +1074,20 @@ TEST_CASE( "frameGrabber fgThreadExec drives the full acquisition loop", "[frame
         fgTest app;
         app.m_fgThreadInit    = false;
         app.m_powerMgtEnabled = true;
-        app.m_powerState      = 0; // not powered, so the state-wait loop must sleep and retry
+        app.m_powerState      = 0; // Not powered, so the state-wait loop must sleep and retry.
         app.m_shutdown        = 0;
         app.m_shmimName       = uniqueShmimName( "waitstate" );
 
         std::thread runner( [&app]() { app.fgThreadExec(); } );
 
-        // Give the state-wait loop a chance to log/sleep at least once before asking it
+        // Give the state-wait loop a chance to log and sleep at least once. Then ask it
         // to shut down without ever becoming ready.
         std::this_thread::sleep_for( std::chrono::milliseconds( 1200 ) );
         app.m_shutdown = 1;
 
         runner.join();
 
-        REQUIRE( app.configureAcquisitionCalls == 0 ); // never got past the state wait
+        REQUIRE( app.configureAcquisitionCalls == 0 ); // The loop never got past the state wait.
     }
 
     SECTION( "a single frame is created, published, and cleaned up (owned shmim, no circ. buff.)" )
@@ -1066,7 +1105,7 @@ TEST_CASE( "frameGrabber fgThreadExec drives the full acquisition loop", "[frame
         REQUIRE( app.configureAcquisitionCalls == 1 );
         REQUIRE( app.startAcquisitionCalls == 1 );
         REQUIRE( app.loadImageIntoStreamCalls == 1 );
-        REQUIRE( app.m_imageStream == nullptr ); // destroyed on shutdown, since it was owned
+        REQUIRE( app.m_imageStream == nullptr ); // Destroyed on shutdown because it was owned.
     }
 
     SECTION( "multiple frames wrap the circular buffer index" )
@@ -1094,7 +1133,7 @@ TEST_CASE( "frameGrabber fgThreadExec drives the full acquisition loop", "[frame
 
         app.fgThreadExec();
 
-        REQUIRE( app.acquireCalls == 4 ); // 1, 1, 0, then the empty-queue shutdown call
+        REQUIRE( app.acquireCalls == 4 ); // Results 1, 1, 0, then the empty-queue shutdown call.
         REQUIRE( app.loadImageIntoStreamCalls == 1 );
     }
 
@@ -1148,9 +1187,9 @@ TEST_CASE( "frameGrabber fgThreadExec drives the full acquisition loop", "[frame
         app.m_shmimName              = uniqueShmimName( "reconfig" );
         app.m_circBuffLength         = 1;
         app.acquireResults           = { 0 };
-        // m_reconfig is set as part of publishing the first frame; the inner loop's
-        // condition check then sees it and exits so `reconfig()` gets called (which
-        // itself sets m_shutdown=1 to end the outer loop cleanly).
+        // The harness sets m_reconfig while acquiring the first frame. The inner loop
+        // condition then sees it and exits, so `reconfig()` gets called. The harness
+        // version of reconfig() sets m_shutdown to 1 to end the outer loop cleanly.
         app.setReconfigOnNextAcquire = true;
 
         app.fgThreadExec();
@@ -1178,7 +1217,7 @@ TEST_CASE( "frameGrabber fgThreadExec drives the full acquisition loop", "[frame
         primeForSyncExec( app );
         app.m_shmimName      = uniqueShmimName( "hookok" );
         app.m_circBuffLength = 3;
-        app.acquireResults   = { 1, 0, 0, 0, 0 }; // includes one "no data yet" retry
+        app.acquireResults   = { 1, 0, 0, 0, 0 }; // Includes one "no data yet" retry.
 
         app.fgThreadExec();
 
@@ -1245,10 +1284,10 @@ TEST_CASE( "frameGrabber fgThreadExec drives the full acquisition loop", "[frame
 
         tempStream ext( name, 2, 4, 4, _DATATYPE_UINT8 );
 
-        // Attach an independent handle to the externally-owned shmim; frameGrabber's
-        // cleanup will `free()` this handle struct itself once it closes it (as it does
-        // for every m_imageStream, owned or not), so it must be its own malloc'd IMAGE,
-        // separate from `ext`'s own handle which `ext`'s destructor will clean up.
+        // Attach an independent handle to the externally-owned shmim. The frameGrabber
+        // cleanup will `free()` this handle struct itself once it closes it. It does that
+        // for every m_imageStream, owned or not. So the handle must be its own malloc'd
+        // IMAGE, separate from the handle inside `ext` that the `ext` destructor cleans up.
         app.m_imageStream = reinterpret_cast<IMAGE *>( malloc( sizeof( IMAGE ) ) );
         REQUIRE( ImageStreamIO_openIm( app.m_imageStream, name.c_str() ) == 0 );
         app.m_ownShmim       = false;
@@ -1260,7 +1299,7 @@ TEST_CASE( "frameGrabber fgThreadExec drives the full acquisition loop", "[frame
         app.fgThreadExec();
 
         REQUIRE( app.loadImageIntoStreamCalls == 1 );
-        REQUIRE( app.m_imageStream == nullptr ); // closed, not destroyed, since it was not owned
+        REQUIRE( app.m_imageStream == nullptr ); // Closed but not destroyed because it was not owned.
     }
 
     SECTION( "an already-connected 3D stream with matching geometry is reused" )
@@ -1295,8 +1334,8 @@ TEST_CASE( "frameGrabber fgThreadExec drives the full acquisition loop", "[frame
         tempStream ext( name, 2, 4, 4, _DATATYPE_UINT8 );
 
         // On the first configureAcquisition() call, report a mismatched size so the
-        // "wrong size" branch (and its one-time log) is exercised; flipping the
-        // geometry mid-flight lets the retry converge and publish one frame.
+        // "wrong size" branch and its one-time log are exercised. Changing the geometry
+        // to match while the loop runs lets the retry converge and publish one frame.
         app.nextWidth  = 8;
         app.nextHeight = 8;
         app.m_imageStream = reinterpret_cast<IMAGE *>( malloc( sizeof( IMAGE ) ) );
@@ -1305,8 +1344,8 @@ TEST_CASE( "frameGrabber fgThreadExec drives the full acquisition loop", "[frame
         app.m_circBuffLength = 1;
         app.acquireResults = { 0 };
 
-        // Use a background thread here since the mismatch-retry path sleeps for a
-        // full second and we want to flip the geometry to match mid-flight.
+        // Use a background thread here. The mismatch-retry path sleeps for a full
+        // second, and the test must change the geometry to match during that sleep.
         std::thread runner( [&app]() { app.fgThreadExec(); } );
 
         // Give the mismatch branch a chance to log and sleep at least once.
@@ -1330,9 +1369,9 @@ TEST_CASE( "frameGrabber fgThreadExec drives the full acquisition loop", "[frame
         app.m_latencyCircBuffMaxTime = 5;
         app.acquireResults           = { 0, 0 };
 
-        // fps() is sampled into m_cbFPS once per outer-loop pass (in configCircBuffs()).
-        // Changing it right after the first frame's acquireAndCheckValid() call makes
-        // the end-of-iteration `m_cbFPS != fps()` check fire on that same pass.
+        // fps() is sampled into m_cbFPS once per outer-loop pass, inside configCircBuffs().
+        // Changing it right after the first acquireAndCheckValid() call makes the
+        // end-of-iteration `m_cbFPS != fps()` check fire on that same pass.
         app.bumpFpsAfterCall = 1;
         app.bumpedFpsValue   = 50;
 
@@ -1353,9 +1392,9 @@ TEST_CASE( "frameGrabber fgThreadExec drives the full acquisition loop", "[frame
         app.m_latencyCircBuffMaxTime = 5;
         app.acquireResults           = { 0, 0 };
 
-        // Same mid-iteration fps-change mechanism as above, but to a negative value:
-        // configCircBuffs() itself then returns -1 (only reachable via a real, negative
-        // fps() reading, not a hand-enumerated error code).
+        // Same mid-iteration fps-change mechanism as above, but to a negative value.
+        // configCircBuffs() itself then returns -1. That path is only reachable through
+        // a real negative fps() reading, not through a hand-enumerated error code.
         app.bumpFpsAfterCall = 1;
         app.bumpedFpsValue   = -1;
 
@@ -1366,14 +1405,14 @@ TEST_CASE( "frameGrabber fgThreadExec drives the full acquisition loop", "[frame
     }
 }
 
-/// appLogic() reports an error once the framegrabber thread has already exited.
-/** This must be the last TEST_CASE in this file: `pthread_tryjoin_np` reaps the
- * native thread without clearing the owning `std::thread`, so the instance it is
- * exercised on is intentionally leaked rather than destructed (which would call
- * std::terminate on a still-"joinable" thread whose native handle is no longer
- * valid to join or detach). Since `MagAOXApp` is a process-wide singleton, no other
- * `MagAOXApp`-derived object may be constructed anywhere in this binary afterward.
- * This mirrors the same pattern used by
+/// Verify that appLogic() reports an error once the framegrabber thread has exited.
+/** This must be the last TEST_CASE in this file. `pthread_tryjoin_np` reaps the
+ * native thread without clearing the owning `std::thread`. So the harness instance
+ * is leaked on purpose rather than destructed. Destructing it would call
+ * std::terminate on a thread that still reports joinable but whose native handle is
+ * no longer valid to join or detach. `MagAOXApp` is a process-wide singleton, so no
+ * other `MagAOXApp`-derived object may be constructed anywhere in this binary
+ * afterward. This mirrors the same pattern used by
  * apps/ocam2KCtrl/tests/ocam2KCtrl_lifecycle_test.cpp.
  * \ingroup app_dev_unit_tests
  */

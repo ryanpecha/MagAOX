@@ -1,6 +1,11 @@
 /** \file logTypes_test.cpp
- * \brief Tests for individual log types' formatting and validation branches, and for the
- *        code-generated central dispatchers' unrecognized-event-code fallback.
+ * \brief Tests for the formatting and validation branches of individual log types, and
+ *        for the unrecognized event code fallback of the code-generated dispatchers.
+ *
+ * Technique: each test builds a real log entry in memory with logHeader::createLog and
+ * then calls msgString(), verify(), or an accessor of the type directly. No files are
+ * written. These tests cover branches that the generated per-type tests cannot reach,
+ * because the generator uses one fixed dummy value for every bool field.
  * \ingroup logger_files
  */
 
@@ -30,9 +35,9 @@ namespace loggerTest
 namespace logTypesTest
 {
 
-/// Builds a full log entry for TYPE from msg and returns both the buffer and the message
-/// length verify()/msgString() need -- the same construction the generated per-type tests
-/// use, factored out here for these supplementary branch-coverage checks.
+/// Builds a full log entry for TYPE from msg. Returns both the buffer and the message
+/// length that verify() and msgString() need. This is the same construction the generated
+/// per-type tests use, factored out here for these supplementary branch coverage checks.
 template <class TYPE>
 std::pair<flatlogs::bufferPtrT, flatlogs::msgLenT> makeLog( const typename TYPE::messageT &msg )
 {
@@ -44,10 +49,10 @@ std::pair<flatlogs::bufferPtrT, flatlogs::msgLenT> makeLog( const typename TYPE:
 }
 
 /// logCodeValid, logVerify, logStdFormat, eventCode, and eventCodeName each dispatch on
-/// event code (or name) via a switch/if-chain with one case per real log type (exercised
-/// per-type by the generated tests); each also has its own fallback for an event code or
-/// name with no matching type, which is worth checking directly here since no per-type
-/// test can reach it.
+/// an event code or name through a switch or if chain with one case per real log type.
+/// The generated tests exercise those cases one type at a time. Each dispatcher also has
+/// its own fallback for an event code or name with no matching type. That fallback is
+/// checked directly here because no per-type test can reach it.
 /**
  * \ingroup logTypes_formatting_unit_test
  */
@@ -114,7 +119,7 @@ TEST_CASE( "logCodeValid, logVerify, logStdFormat, eventCode, and eventCodeName 
         MagAOX::logger::logShortStdFormat( oss, "a_very_long_application_name", buf );
         REQUIRE( !oss.str().empty() );
 
-        // A name of exactly 16 characters exercises the truncation loop's early-exit.
+        // A name of exactly 16 characters exercises the early exit of the truncation loop.
         std::ostringstream oss2;
         MagAOX::logger::logShortStdFormat( oss2, "sixteen_chars_ab", buf );
         REQUIRE( !oss2.str().empty() );
@@ -128,9 +133,9 @@ TEST_CASE( "logCodeValid, logVerify, logStdFormat, eventCode, and eventCodeName 
                                                                     MagAOX::logger::git_state::messageT( "repo", "sha", false ),
                                                                     flatlogs::logPrio::LOG_NOTICE );
 
-        // A few bytes of garbage is not a valid flatbuffers binary schema, so
-        // Parser::Deserialize() genuinely fails and the error branch runs, returning
-        // empty JSON rather than proceeding into GenText (which would crash).
+        // A few bytes of garbage is not a valid flatbuffers binary schema. So
+        // Parser::Deserialize() genuinely fails and the error branch runs. It returns
+        // empty JSON rather than proceeding into GenText, which would crash.
         const uint8_t notASchema[4] = { 0xde, 0xad, 0xbe, 0xef };
         std::string out = MagAOX::logger::git_state::msgJSON( flatlogs::logHeader::messageBuffer( buf ),
                                                               flatlogs::logHeader::msgLen( buf ),
@@ -150,11 +155,11 @@ TEST_CASE( "logCodeValid, logVerify, logStdFormat, eventCode, and eventCodeName 
     }
 }
 
-/// The per-type generated tests always construct bool-gated fields as true (the
-/// generator's dummy value for every bool field), so the "false" side of each type's own
-/// msgString() branching is never reached there. These are genuine, type-specific
-/// formatting branches (not generated dispatch code), so they're covered here directly
-/// rather than by complicating the generator's single bool dummy value for every type.
+/// The per-type generated tests always construct bool-gated fields as true, because that
+/// is the dummy value the generator uses for every bool field. So the false side of the
+/// msgString() branching in each type is never reached there. These are genuine type
+/// specific formatting branches, not generated dispatch code. So they are covered here
+/// directly rather than by complicating the single bool dummy value of the generator.
 /**
  * \ingroup logTypes_formatting_unit_test
  */
@@ -212,6 +217,8 @@ TEST_CASE( "telem_dmspeck, telem_sparkleclock, telem_fxngen, and telem_poltrack 
     }
 }
 
+/// ttmmod_params, outlet_state, and outlet_channel_state each map a small integer state
+/// to a name in msgString(). Every named value is formatted once and checked.
 /**
  * \ingroup logTypes_formatting_unit_test
  */
@@ -231,8 +238,9 @@ TEST_CASE( "ttmmod_params and outlet/outlet-channel state format every named sta
             auto [buf, len] =
                 makeLog<MagAOX::logger::ttmmod_params>( MagAOX::logger::ttmmod_params::messageT( c.state, 0.0, 0.0, 0.0, 0.0 ) );
             REQUIRE( MagAOX::logger::ttmmod_params::msgString( flatlogs::logHeader::messageBuffer( buf ), len ) == c.expect );
-            // modState() duplicates msgString()'s state-name mapping for the meta-data
-            // accessor system, rather than delegating to it -- exercise it directly too.
+            // modState() duplicates the state name mapping of msgString() for the
+            // metadata accessor system rather than delegating to it. So it is exercised
+            // directly too.
             REQUIRE( MagAOX::logger::ttmmod_params::modState( flatlogs::logHeader::messageBuffer( buf ) ) == c.expect );
         }
 
@@ -278,6 +286,8 @@ TEST_CASE( "ttmmod_params and outlet/outlet-channel state format every named sta
     }
 }
 
+/// telem_blockgains prints a placeholder instead of a value when a gain vector and its
+/// constant flag vector have different lengths. Each of the three vector pairs is tried.
 /**
  * \ingroup logTypes_formatting_unit_test
  */
@@ -308,6 +318,9 @@ TEST_CASE( "telem_blockgains reports a placeholder when a gain vector and its "
     }
 }
 
+/// telem_observer has a hand-written verify() that rejects a truncated buffer and any
+/// string field that contains a non-printable character. Each string field is tried in
+/// turn.
 /**
  * \ingroup logTypes_formatting_unit_test
  */
@@ -343,12 +356,15 @@ TEST_CASE( "telem_observer's verify() catches malformed buffers and non-printabl
     }
 }
 
+/// telem_stdcam maps small integer fields to state names in msgString(). Each section
+/// formats one combination and also checks the matching accessor function.
 /**
  * \ingroup logTypes_formatting_unit_test
  */
 TEST_CASE( "telem_stdcam formats every named shutter/sync/crop/led state", "[libMagAOX::logger::telem_stdcam]" )
 {
-    // Common placeholder values for fields this test doesn't care about.
+    // Builds a message with placeholder values for the fields this test does not care
+    // about.
     auto build = []( int8_t shutterState, uint8_t synchro, float vshift, uint8_t cropMode, int8_t led )
     {
         return MagAOX::logger::telem_stdcam::messageT( "mode", 0.0f, 0.0f, 1, 1, 1, 1, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
@@ -366,8 +382,9 @@ TEST_CASE( "telem_stdcam formats every named shutter/sync/crop/led state", "[lib
         REQUIRE( s.find( "vshift: ---" ) != std::string::npos );
         REQUIRE( s.find( "crop: ---" ) != std::string::npos );
         REQUIRE( s.find( "led: ---" ) != std::string::npos );
-        // shutterState() duplicates msgString()'s shutter-state-name mapping for the
-        // meta-data accessor system, rather than delegating to it -- exercise it directly.
+        // shutterState() duplicates the shutter state name mapping of msgString() for the
+        // metadata accessor system rather than delegating to it. So it is exercised
+        // directly.
         REQUIRE( MagAOX::logger::telem_stdcam::shutterState( msgBuffer ) == "UNKNOWN" );
     }
 
@@ -380,8 +397,8 @@ TEST_CASE( "telem_stdcam formats every named shutter/sync/crop/led state", "[lib
         REQUIRE( s.find( "crop: ON" ) != std::string::npos );
         REQUIRE( s.find( "led: ON" ) != std::string::npos );
         REQUIRE( MagAOX::logger::telem_stdcam::shutterState( msgBuffer ) == "SHUT" );
-        // cropMode() and led() likewise duplicate msgString()'s on/off mapping for the
-        // meta-data accessor system as their own bool-valued accessors.
+        // cropMode() and led() likewise duplicate the on and off mapping of msgString()
+        // for the metadata accessor system as their own bool-valued accessors.
         REQUIRE( MagAOX::logger::telem_stdcam::cropMode( msgBuffer ) == true );
         REQUIRE( MagAOX::logger::telem_stdcam::led( msgBuffer ) == true );
     }
@@ -396,9 +413,10 @@ TEST_CASE( "telem_stdcam formats every named shutter/sync/crop/led state", "[lib
     }
 }
 
-/// telem_pokecenter and telem_pokeloop's "measuring" is a uint8_t (not a bool field, so it
-/// isn't covered by the generator's fixed dummy value at all) that gates their own
-/// constructors: measuring==0 short-circuits and skips serializing the rest of the fields.
+/// The measuring field of telem_pokecenter and telem_pokeloop is a uint8_t, not a bool.
+/// So the fixed dummy value of the generator does not cover it at all. The field gates
+/// their own constructors. When measuring is 0 the constructor short-circuits and skips
+/// serializing the rest of the fields.
 /**
  * \ingroup logTypes_formatting_unit_test
  */

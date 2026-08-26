@@ -120,7 +120,7 @@ struct telem_dmspeck : public flatbuffer_log
 
       return msg;
 
-   } // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
+   } // LCOV_EXCL_LINE gcov reports this closing brace as a separate line that only runs during exception cleanup
 
    static bool modulating( void * msgBuffer )
    {
@@ -152,7 +152,7 @@ struct telem_dmspeck : public flatbuffer_log
       }
 
       return v;
-   } // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
+   } // LCOV_EXCL_LINE gcov reports this closing brace as a separate line that only runs during exception cleanup
 
    static std::vector<float> angles( void * msgBuffer )
    {
@@ -166,7 +166,7 @@ struct telem_dmspeck : public flatbuffer_log
       }
 
       return v;
-   } // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
+   } // LCOV_EXCL_LINE gcov reports this closing brace as a separate line that only runs during exception cleanup
 
    static std::vector<float> amplitudes( void * msgBuffer )
    {
@@ -180,7 +180,7 @@ struct telem_dmspeck : public flatbuffer_log
       }
 
       return v;
-   } // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
+   } // LCOV_EXCL_LINE gcov reports this closing brace as a separate line that only runs during exception cleanup
 
    static std::vector<bool> crosses( void * msgBuffer )
    {
@@ -194,7 +194,7 @@ struct telem_dmspeck : public flatbuffer_log
       }
 
       return v;
-   } // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
+   } // LCOV_EXCL_LINE gcov reports this closing brace as a separate line that only runs during exception cleanup
 
    /// Get the logMetaDetail for a member by name
    /**

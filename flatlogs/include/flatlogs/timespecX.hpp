@@ -111,10 +111,11 @@ struct timespecX
 
       time_t t0 = time_s;
 
-      // Unreachable via the test surface: time_s is a secT (uint32_t), whose entire range
-      // (up to year ~2106) is far within what glibc's gmtime_r can represent, so this
-      // defensive check can never actually fail -- consistent with the sibling
-      // ISO8601DateTimeStrX()/secondStrX()/minute() calls below, which don't check at all.
+      // This check never fails. time_s is a secT, which is a uint32_t.
+      // Every value in that range is a date before the year 2107.
+      // gmtime_r in glibc handles all of those dates.
+      // The sibling functions ISO8601DateTimeStrX(), secondStrX() and
+      // minute() below call gmtime_r without any check at all.
       // LCOV_EXCL_START
       if(gmtime_r(&t0, &uttime) == 0)
       {

@@ -1,5 +1,8 @@
 /** \file ttyErrors_test.cpp
-  * \brief Catch2 tests for ttyErrorString
+  * \brief Catch2 tests for ttyErrorString() in libMagAOX/tty/ttyErrors.hpp.
+  *
+  * ttyErrorString() turns a tty or telnet error code into a human readable message. The
+  * tests call it directly on every known code and on one unknown code. No setup is needed.
   */
 #include "../../../tests/catch2/catch.hpp"
 
@@ -10,6 +13,8 @@ namespace libXWCTest
 namespace ttyTest
 {
 
+// Every known error code must produce a non-empty message. The loop lists the codes so a
+// newly added code that is missing from the switch in ttyErrorString() is caught here.
 TEST_CASE( "ttyErrorString maps every known error code to a non-empty message", "[libMagAOX::tty::ttyErrorString]" )
 {
     int codes[] = { TTY_E_NOERROR,
@@ -44,6 +49,7 @@ TEST_CASE( "ttyErrorString maps every known error code to a non-empty message", 
     }
 }
 
+// A code that is not in the switch must produce the fixed unknown error message.
 TEST_CASE( "ttyErrorString falls back to an unknown-error message for an unrecognized code", "[libMagAOX::tty::ttyErrorString]" )
 {
     REQUIRE( MagAOX::tty::ttyErrorString( -1 ) == "TTY: unknown error code" );

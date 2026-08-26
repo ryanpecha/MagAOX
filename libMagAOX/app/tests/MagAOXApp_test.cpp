@@ -1,4 +1,22 @@
 // #define CATCH_CONFIG_MAIN
+/** \file MagAOXApp_test.cpp
+  * \brief Catch2 tests for the MagAOX::app::MagAOXApp<true> application base class.
+  *
+  * The tests use the MagAOXApp_test harness declared in MagAOXApp_test.hpp. The harness
+  * exposes the protected MagAOXApp interface and stubs the appStartup(), appLogic(), and
+  * appShutdown() hooks. Configuration, PID locking, INDI property registration, the INDI
+  * handle* callbacks, power management, signal handlers, threadStart(), and the FIFO and
+  * INDI driver startup paths are all exercised for real. INDI callbacks are driven with
+  * hand-built pcf::IndiProperty objects. No INDI server is needed.
+  *
+  * The tests create real directory trees under /tmp such as /tmp/MagAOXApp_test and force
+  * operating system failures by removing directory permissions. Failure branches that no
+  * external condition can trigger are reached with the XWCTEST_* fault injection macros in
+  * MagAOXApp.hpp. Each macro combination is compiled into its own XWCTEST_NAMESPACE copy of
+  * MagAOXApp and of the harness by re-including both headers below.
+  *
+  * \ingroup MagAOXApp_unit_test
+  */
 #include "../../../tests/catch2/catch.hpp"
 
 #include <filesystem>
@@ -10,9 +28,9 @@
 #include "MagAOXApp_test.hpp"
 
 // Captured now, before the XWCTEST_MAGAOXAPP_SIGTERMH_SIGQUIT hook below permanently
-// redefines the SIGQUIT token (to SIGKILL) for the rest of this translation unit -- any
-// later test code that writes the literal token "SIGQUIT" would otherwise unknowingly
-// pass SIGKILL's value instead.
+// redefines the SIGQUIT token to SIGKILL for the rest of this translation unit. Any later
+// test code that writes the literal token SIGQUIT would otherwise unknowingly pass the value
+// of SIGKILL instead.
 static const int REAL_SIGQUIT = SIGQUIT;
 
 #undef app_MagAOXApp_hpp
@@ -51,12 +69,12 @@ static const int REAL_SIGQUIT = SIGQUIT;
 #undef XWCTEST_NAMESPACE
 #undef XWCTEST_MAGAOXAPP_SIGTERMH_SIGQUIT
 // NOTE: XWCTEST_MAGAOXAPP_SIGTERMH_SIGQUIT redefines the SIGQUIT macro to SIGKILL inside
-// MagAOXApp.hpp's setSigTermHandler(), and that redefinition is never restored (it is not
-// scoped/undone within the header). Since the substitution therefore leaks for the rest of
-// this translation unit, only ONE of the SIGTERMH_SIGTERM/SIGTERMH_SIGQUIT/SIGTERMH_SIGINT
-// hooks may be used per .cpp file -- combining more than one here causes the compiler to see
-// duplicate `case` labels in handlerSigTerm's switch (they'd all collapse onto SIGKILL). Do
-// not add the SIGTERM or SIGINT variants below this point in this file; see
+// setSigTermHandler() in MagAOXApp.hpp. That redefinition is never restored. It is not scoped
+// or undone within the header. The substitution therefore leaks for the rest of this
+// translation unit, so only one of the SIGTERMH_SIGTERM, SIGTERMH_SIGQUIT, and
+// SIGTERMH_SIGINT hooks may be used per .cpp file. Combining more than one here makes the
+// compiler see duplicate case labels in the handlerSigTerm switch, because they all collapse
+// onto SIGKILL. Do not add the SIGTERM or SIGINT variants below this point in this file. See
 // MagAOXAppExecute_test.cpp for a second, independent use of one of these hooks.
 
 namespace libXWCTest
@@ -154,9 +172,9 @@ SCENARIO( "MagAOXApp INDI NewProperty", "[app::MagAOXApp]" )
 
         WHEN( "a null callback was registered" )
         {
-            // shmimMonitor<> registers some of its properties this way (see
-            // shmimMonitor.hpp's registerIndiPropertyNew( m_indiP_shmimName, nullptr )) --
-            // handleNewProperty() must tolerate a matched-but-null callback.
+            // shmimMonitor<> registers some of its properties this way. See the call
+            // registerIndiPropertyNew( m_indiP_shmimName, nullptr ) in shmimMonitor.hpp.
+            // handleNewProperty() must tolerate a matched but null callback.
             MagAOXApp_test app;
             app.setConfigName( "test" );
 
@@ -340,9 +358,9 @@ TEST_CASE( "Setting defaults", "[app::MagAOXApp]" )
         REQUIRE( app.configPathLocal() == app.configDir() + "/testapp.conf" );
         REQUIRE( app.doHelp() == false );
 
-        // calling setDefaults() again on the same app re-registers "fsm" and
-        // "fsm_clear_alert", which are already registered from the first call --
-        // exercises the registerIndiPropertyNew() failure-logging branches.
+        // Calling setDefaults() again on the same app re-registers "fsm" and
+        // "fsm_clear_alert", which are already registered from the first call. This
+        // exercises the registerIndiPropertyNew() failure logging branches.
         app.setDefaults( argv.size() - 1, const_cast<char **>( argv.data() ) );
     }
 
@@ -766,7 +784,7 @@ TEST_CASE( "Configuring MagAOXApp", "[app::MagAOXApp]" )
         REQUIRE( app.powerChannel() == "" );
         REQUIRE( app.powerElement() == "state" );
         REQUIRE( app.powerTargetElement() == "target" );
-        REQUIRE( app.powerOnWait() == 55 ); // default value, not set in config
+        REQUIRE( app.powerOnWait() == 55 ); // The default value. It is not set in the config.
 
         REQUIRE( app.doHelp() == true );
         REQUIRE( app.shutdown() == true );
@@ -908,8 +926,8 @@ TEST_CASE( "PID Locking", "[app::MagAOXApp]" )
         // First delete the directory and files in case this is a repeat call
         std::filesystem::remove_all( "/tmp/MagAOXApp_test" );
         mx::ioutils::createDirectories( "/tmp/MagAOXApp_test/sys" );
-        // The statusDir *root* now already exists (mkdir tolerates EEXIST), but is made
-        // read-only so the per-app subdirectory mkdir() genuinely fails with EACCES.
+        // The statusDir root now already exists, which mkdir tolerates with EEXIST. It is made
+        // read-only so the per-app subdirectory mkdir() fails with a real EACCES.
         REQUIRE( chmod( "/tmp/MagAOXApp_test/sys", 0555 ) == 0 );
 
         MagAOXApp_test app;
@@ -974,21 +992,21 @@ TEST_CASE( "PID Locking", "[app::MagAOXApp]" )
 
         mx::ioutils::createDirectories( "/tmp/MagAOXApp_test/sys/testapp" );
 
-        // Write *this* real, currently-running test process's own pid, so
-        // /proc/<pid>/cmdline genuinely exists and is readable (unlike "Stale lock"'s
-        // pid=1, which either doesn't exist or belongs to an unrelated process).
+        // Write the pid of this real, currently running test process. /proc/<pid>/cmdline
+        // then exists and is readable. The "Stale lock" section instead writes pid 1, which
+        // either does not exist or belongs to an unrelated process.
         std::ofstream fout;
         fout.open( "/tmp/MagAOXApp_test/sys/testapp/pid" );
         fout << getpid();
         fout.close();
 
         MagAOXApp_test app;
-        // "MagAOXApp_test" is a real substring of this actual process's own argv[0]
-        // (the compiled test binary's path), so pidCmdLine.find(invokedName) genuinely
-        // finds it -- exercising the real invokedPos-found branch without the
-        // XWCTEST_MAGAOXAPP_PID_LOCKED hook (which just hardcodes both positions to 0).
-        // "testapp" is not part of this real process's cmdline, so configPos stays
-        // npos and the lock is granted normally (not "already locked").
+        // "MagAOXApp_test" is a real substring of the argv[0] of this process, which is the
+        // path of the compiled test binary. pidCmdLine.find(invokedName) therefore finds it
+        // for real. This exercises the branch where invokedPos is found, without the
+        // XWCTEST_MAGAOXAPP_PID_LOCKED hook, which hardcodes both positions to 0. "testapp"
+        // is not part of the real command line of this process, so configPos stays npos and
+        // the lock is granted normally rather than reported as already locked.
         app.invokedName() = "MagAOXApp_test";
         app.setDefaults( argv.size() - 1, const_cast<char **>( argv.data() ) );
 
@@ -1167,8 +1185,8 @@ TEST_CASE( "MagAOXApp Power Management Logic Outside of Execute", "[app::MagAOXA
         REQUIRE( app.powerState() == 1 );
         REQUIRE( app.powerStateTarget() == 0 );
 
-        // Exercise the static wrapper generated by INDI_SETCALLBACK_DECL directly (see its
-        // definition for why setPowerState() above doesn't already cover it).
+        // Exercise the static wrapper generated by INDI_SETCALLBACK_DECL directly. See its
+        // definition for why setPowerState() above does not already cover it.
         app.setPowerStateViaStaticWrapper( "Off", "Off" );
         REQUIRE( app.powerState() == 0 );
 
@@ -1433,8 +1451,8 @@ TEST_CASE( "Signal Handlers", "[app::MagAOXApp]" )
         REQUIRE( app.setSigTermHandler() == 0 );
 
         REQUIRE( app.shutdown() == 0 );
-        // Uses REAL_SIGQUIT, not the literal token SIGQUIT -- see its definition near the
-        // top of this file for why (the SIGTERMH_SIGQUIT hook below poisons that token).
+        // Uses REAL_SIGQUIT, not the literal token SIGQUIT. See its definition near the top
+        // of this file. The SIGTERMH_SIGQUIT hook below poisons that token.
         app._handlerSigTerm( REAL_SIGQUIT, nullptr, nullptr );
         REQUIRE( app.shutdown() == 1 );
     }
@@ -1454,8 +1472,9 @@ TEST_CASE( "Signal Handlers", "[app::MagAOXApp]" )
 
     SECTION( "sigaction fails for SIGQUIT" )
     {
-        // See the NOTE near this hook's #include block at the top of this file: only one of
-        // the SIGTERMH_SIGTERM/SIGQUIT/SIGINT hooks can be used per translation unit.
+        // See the NOTE near the #include block for this hook at the top of this file. Only
+        // one of the SIGTERMH_SIGTERM, SIGTERMH_SIGQUIT, and SIGTERMH_SIGINT hooks can be
+        // used per translation unit.
         XWCTEST_MAGAOXAPP_SIGTERMH_SIGQUIT_ns::MagAOXApp_test app;
 
         REQUIRE( app.setSigTermHandler() == -1 );
@@ -1494,7 +1513,8 @@ TEST_CASE( "Tests of utilities in cpp", "[app::MagAOXApp]" )
     }
 }
 
-/// Elevated privileges RAII guard
+/// Verify that the elevated privileges RAII guard tolerates redundant elevate() and
+/// restore() calls.
 /**
  * \ingroup MagAOXApp_unit_test
  */
@@ -1502,14 +1522,16 @@ TEST_CASE( "Elevated privileges double guard", "[app::MagAOXApp]" )
 {
     MagAOXApp_test app;
 
-    // Exercises the redundant elevate()/restore() early-return branches. No externally
-    // observable state changes; this just needs to run without hitting the guarded logic twice.
+    // Exercises the early-return branches for redundant elevate() and restore() calls. No
+    // externally observable state changes. This only needs to run without hitting the
+    // guarded logic twice.
     app.testElevatedPrivilegesDoubleGuard();
 
     REQUIRE( true );
 }
 
-/// PID unlock after external removal
+/// Verify that unlockPID() reports failure when the pid file was already removed by
+/// someone else.
 /**
  * \ingroup MagAOXApp_unit_test
  */
@@ -1544,7 +1566,8 @@ TEST_CASE( "PID unlock after external removal", "[app::MagAOXApp]" )
     REQUIRE( app.unlockPID() == -1 );
 }
 
-/// Duplicate INDI property registration
+/// Verify that each registerIndiProperty* overload rejects a second registration of the same
+/// property name.
 /**
  * \ingroup MagAOXApp_unit_test
  */
@@ -1578,9 +1601,8 @@ TEST_CASE( "Duplicate INDI property registration", "[app::MagAOXApp]" )
 
     SECTION( "registerIndiPropertyNew duplicate, with explicit switch rule" )
     {
-        // This overload (which also sets the property's SwitchRuleType) isn't used by
-        // any macro or app in this codebase, but is part of the public API and so is
-        // tested directly here.
+        // This overload also sets the SwitchRuleType of the property. No macro or app in this
+        // codebase uses it, but it is part of the public API and so is tested directly here.
         MagAOXApp_test app;
         pcf::IndiProperty prop1, prop2;
         REQUIRE( app.registerIndiPropertyNew( prop1,
@@ -1612,14 +1634,16 @@ TEST_CASE( "Duplicate INDI property registration", "[app::MagAOXApp]" )
     }
 }
 
-/// INDI property handlers (Get/New/Set/Def) and updateSwitchIfChanged
+/// Verify the handleGetProperties(), handleNewProperty(), handleSetProperty(), and
+/// handleDefProperty() INDI callbacks and the updateIfChanged() family of helpers, with a
+/// FIFO-less INDI driver installed.
 /**
  * \ingroup MagAOXApp_unit_test
  */
 TEST_CASE( "INDI property handlers", "[app::MagAOXApp]" )
 {
     MagAOXApp_test app;
-    app.setConfigName( "handlertest" ); // constructs a FIFO-less (non-"good") indiDriver so m_indiDriver != nullptr
+    app.setConfigName( "handlertest" ); // Constructs a FIFO-less indiDriver that is not good(), so m_indiDriver != nullptr.
 
     pcf::IndiProperty roProp;
     REQUIRE( app.registerIndiPropertyReadOnly(
@@ -1753,9 +1777,10 @@ TEST_CASE( "INDI property handlers", "[app::MagAOXApp]" )
     }
 }
 
-/// indiTargetUpdate()'s key-mismatch and missing-target/current-element branches. The
-/// "no non-empty value found" branch is unreachable dead code (see the LCOV_EXCL note next
-/// to it in MagAOXApp.hpp) since finding either element unconditionally sets `set = true`.
+/// Verify the indiTargetUpdate() branches for mismatched property keys and for a remote
+/// property with neither a target nor a current element. The branch for no non-empty value
+/// found is unreachable dead code, because finding either element unconditionally sets
+/// set = true. See the LCOV_EXCL note next to it in MagAOXApp.hpp.
 /**
  * \ingroup MagAOXApp_unit_test
  */
@@ -1790,15 +1815,15 @@ TEST_CASE( "MagAOXApp indiTargetUpdate", "[app::MagAOXApp]" )
     }
 }
 
-/// handleGetProperties/handleNewProperty/handleSetProperty's m_indiDriver==nullptr guards,
-/// distinct from the "INDI property handlers" fixture above (which always has a non-null,
-/// if not "good", driver).
+/// Verify the m_indiDriver == nullptr guards in handleGetProperties(), handleNewProperty(),
+/// and handleSetProperty(). The "INDI property handlers" test above always has a driver that
+/// is not null, even though it is not good().
 /**
  * \ingroup MagAOXApp_unit_test
  */
 TEST_CASE( "MagAOXApp INDI handle* callbacks with no driver", "[app::MagAOXApp]" )
 {
-    MagAOXApp_test    app; // m_indiDriver is still nullptr
+    MagAOXApp_test    app; // m_indiDriver is still nullptr.
     pcf::IndiProperty ip;
     ip.setDevice( "nodriverdev" );
     ip.setName( "someprop" );
@@ -1809,14 +1834,16 @@ TEST_CASE( "MagAOXApp INDI handle* callbacks with no driver", "[app::MagAOXApp]"
     REQUIRE( true );
 }
 
+/// Helpers for the threadStart() tests. g_ran records that a thread body ran to the end.
 namespace threadStartTest
 {
 std::atomic<int> g_ran{ 0 };
 
+/// Minimal thread function that follows the threadStart() contract.
 void trivialThreadStart( MagAOXAppTest::MagAOXApp_test *m )
 {
-    // Set the tpid reference immediately, as threadStart()'s caller contract requires,
-    // then let thrdInit clear (threadStart() itself flips it once past its own setup).
+    // Set the tpid reference immediately, as the caller contract of threadStart() requires.
+    // Then wait for thrdInit to clear. threadStart() itself flips it once past its own setup.
     m->m_testThreadID = getpid();
     while( m->m_testThreadInit )
     {
@@ -1825,14 +1852,19 @@ void trivialThreadStart( MagAOXAppTest::MagAOXApp_test *m )
     g_ran = 1;
 }
 
-/// Deliberately never sets tpid and returns immediately, to exercise threadStart()'s
-/// "tpid for <thread> not set" timeout branch.
+/// Thread function that deliberately never sets tpid and returns immediately. It exercises
+/// the threadStart() timeout branch that reports the tpid for the thread was not set.
 void neverSetsPidThreadStart( MagAOXAppTest::MagAOXApp_test *m )
 {
     static_cast<void>( m );
 }
 } // namespace threadStartTest
 
+/// Verify threadStart() with real std::thread objects. Priority clamping, the cpuset tasks
+/// file handling, and the tpid timeout are all exercised for real.
+/**
+ * \ingroup MagAOXApp_unit_test
+ */
 TEST_CASE( "MagAOXApp threadStart", "[app::MagAOXApp]" )
 {
     SECTION( "starts a real thread successfully" )
@@ -1867,9 +1899,9 @@ TEST_CASE( "MagAOXApp threadStart", "[app::MagAOXApp]" )
         pcf::IndiProperty thProp;
         threadStartTest::g_ran = 0;
 
-        // A non-root, non-CAP_SYS_NICE process cannot raise its own scheduling priority,
-        // so this genuinely exercises the pthread_setschedparam() failure branch. 150 is
-        // also out of the valid [0,99] range, exercising the clamp-to-99 branch too.
+        // A process without root or CAP_SYS_NICE cannot raise its own scheduling priority,
+        // so this exercises the real pthread_setschedparam() failure branch. 150 is also
+        // outside the valid range of 0 to 99, which exercises the clamp to 99 branch too.
         int rv = app.threadStart( thrd,
                                   app.m_testThreadInit,
                                   app.m_testThreadID,
@@ -1930,9 +1962,9 @@ TEST_CASE( "MagAOXApp threadStart", "[app::MagAOXApp]" )
 
         REQUIRE( rv == -1 );
 
-        // threadStart() sets thrdInit=true at its very start and only ever clears it at
-        // the very end -- an early return (like this cpuset failure) never clears it, so
-        // the real spawned thread (still checking m_testThreadInit in its loop) would spin
+        // threadStart() sets thrdInit to true at its very start and only ever clears it at
+        // the very end. An early return such as this cpuset failure never clears it, so the
+        // real spawned thread, which still checks m_testThreadInit in its loop, would spin
         // forever. Clear it here so the thread can exit and be joined.
         app.m_testThreadInit = false;
         if( thrd.joinable() )
@@ -1948,9 +1980,9 @@ TEST_CASE( "MagAOXApp threadStart", "[app::MagAOXApp]" )
         std::thread       thrd;
         pcf::IndiProperty thProp;
 
-        // threadStart() waits up to 1 real second for tpid to become nonzero -- this
-        // thread function deliberately never sets it (nor loops on thrdInit, so it exits
-        // immediately and there's nothing left to join problematically).
+        // threadStart() waits up to 1 real second for tpid to become nonzero. This thread
+        // function deliberately never sets it. It also does not loop on thrdInit, so it exits
+        // immediately and the join below cannot hang.
         int rv = app.threadStart( thrd,
                                   app.m_testThreadInit,
                                   app.m_testThreadID,
@@ -2017,15 +2049,16 @@ TEST_CASE( "MagAOXApp threadStart", "[app::MagAOXApp]" )
     }
 }
 
-/// sendNewProperty(ipSend, el, newVal) looks up `el` via IndiProperty::operator[], which
-/// genuinely throws std::runtime_error for a name the property doesn't have.
+/// Verify sendNewProperty(ipSend, el, newVal). It looks up el through
+/// IndiProperty::operator[], which throws a real std::runtime_error for a name the property
+/// does not have.
 /**
  * \ingroup MagAOXApp_unit_test
  */
 TEST_CASE( "MagAOXApp sendNewProperty(prop, element, value)", "[app::MagAOXApp]" )
 {
     MagAOXApp_test app;
-    app.setConfigName( "sendnewproptest" ); // constructs a FIFO-less indiDriver so m_indiDriver != nullptr
+    app.setConfigName( "sendnewproptest" ); // Constructs a FIFO-less indiDriver so m_indiDriver != nullptr.
 
     pcf::IndiProperty ipSend( pcf::IndiProperty::Number );
     ipSend.setDevice( "somedev" );
@@ -2035,8 +2068,8 @@ TEST_CASE( "MagAOXApp sendNewProperty(prop, element, value)", "[app::MagAOXApp]"
     SECTION( "a real element name reaches the driver (this FIFO-less driver then fails "
              "the actual transmit, same as the existing handlertest coverage)" )
     {
-        // Not exercising the exception catch here is the point of this section --
-        // whatever sendNewProperty() on the driver itself returns is unrelated.
+        // The point of this section is that the exception catch is not exercised. Whatever
+        // sendNewProperty() on the driver itself returns is unrelated.
         app.sendNewProperty( ipSend, "val", 3.14 );
     }
 
@@ -2047,10 +2080,15 @@ TEST_CASE( "MagAOXApp sendNewProperty(prop, element, value)", "[app::MagAOXApp]"
 
 }
 
+/// Verify that sendNewProperty(prop, element, value) fails on a fresh app whose INDI driver
+/// was never created.
+/**
+ * \ingroup MagAOXApp_unit_test
+ */
 TEST_CASE( "MagAOXApp sendNewProperty(prop, element, value) fails with no INDI driver initialized",
            "[app::MagAOXApp]" )
 {
-    MagAOXApp_test freshApp; // fresh app, m_indiDriver is still nullptr
+    MagAOXApp_test freshApp; // A fresh app. m_indiDriver is still nullptr.
 
     pcf::IndiProperty ipSend( pcf::IndiProperty::Number );
     ipSend.setDevice( "somedev" );
@@ -2060,13 +2098,13 @@ TEST_CASE( "MagAOXApp sendNewProperty(prop, element, value) fails with no INDI d
     REQUIRE( freshApp.sendNewProperty( ipSend, "val", 3.14 ) == -1 );
 }
 
-/// Test createINDIFIFOS()'s 2nd (output) and 3rd (control) FIFO creation failures,
-/// distinct from the already-tested 1st (input) FIFO failure (which the "running
-/// execute" fixture forces by never creating the fifos directory at all, so mkfifo()
-/// fails on the very first call). Here the directory exists and the first FIFO is
-/// pre-created (a real, unrelated file also present, both real, not mocked), then the
-/// directory is made read-only so the *next* mkfifo() genuinely fails with EACCES
-/// (not EEXIST, which would otherwise be silently tolerated).
+/// Verify the createINDIFIFOS() failures on the second FIFO, which is the output FIFO, and
+/// on the third FIFO, which is the control FIFO. The failure on the first FIFO, the input
+/// FIFO, is already tested. The "running execute" test forces it by never creating the fifos
+/// directory at all, so mkfifo() fails on the very first call. Here the directory exists and
+/// the earlier FIFOs are pre-created as real named pipes. Nothing is mocked. The directory is
+/// then made read-only so the next mkfifo() fails with a real EACCES. That is not EEXIST,
+/// which would otherwise be silently tolerated.
 /**
  * \ingroup MagAOXApp_unit_test
  */
@@ -2119,9 +2157,9 @@ TEST_CASE( "MagAOXApp createINDIFIFOS 2nd and 3rd FIFO failures", "[app::MagAOXA
     }
 }
 
-/// Test sendNewProperty(ipSend) (the single-argument overload, distinct from the
-/// sendNewProperty(prop, element, value) overload tested above), sendNewStandardIndiToggle(),
-/// and newCallBack_clearFSMAlert()'s wrong-key branch.
+/// Verify the single-argument sendNewProperty(ipSend) overload, which is distinct from the
+/// sendNewProperty(prop, element, value) overload tested above. Also verify
+/// sendNewStandardIndiToggle() and the wrong-key branch of newCallBack_clearFSMAlert().
 /**
  * \ingroup MagAOXApp_unit_test
  */
@@ -2129,7 +2167,7 @@ TEST_CASE( "MagAOXApp sendNewProperty(ipSend), sendNewStandardIndiToggle, and cl
 {
     SECTION( "sendNewProperty(ipSend) fails with no INDI driver initialized" )
     {
-        MagAOXApp_test app; // fresh app, m_indiDriver is still nullptr
+        MagAOXApp_test app; // A fresh app. m_indiDriver is still nullptr.
         pcf::IndiProperty ipSend( pcf::IndiProperty::Number );
         ipSend.setDevice( "somedev" );
         ipSend.setName( "someprop" );
@@ -2139,9 +2177,9 @@ TEST_CASE( "MagAOXApp sendNewProperty(ipSend), sendNewStandardIndiToggle, and cl
 
     SECTION( "sendNewProperty(ipSend) fails when the driver has no real indiserver to connect to" )
     {
-        // With a non-null driver present, indiDriver::sendNewProperty() still fails --
-        // genuinely, not mocked -- because connecting its internal indiClient requires a
-        // real indiserver process, which doesn't exist in this test environment.
+        // With a driver present that is not null, indiDriver::sendNewProperty() still fails
+        // for real. Nothing is mocked. Connecting its internal indiClient requires a real
+        // indiserver process, which does not exist in this test environment.
         MagAOXApp_test app;
         app.setConfigName( "sendnewpropdrivertest" );
 
@@ -2154,7 +2192,7 @@ TEST_CASE( "MagAOXApp sendNewProperty(ipSend), sendNewStandardIndiToggle, and cl
 
     SECTION( "sendNewStandardIndiToggle propagates that same sendNewProperty() failure" )
     {
-        MagAOXApp_test app; // fresh app, m_indiDriver is still nullptr
+        MagAOXApp_test app; // A fresh app. m_indiDriver is still nullptr.
 
         REQUIRE( app.sendNewStandardIndiToggle( "somedev", "someprop", true ) == -1 );
         REQUIRE( app.sendNewStandardIndiToggle( "somedev", "someprop", false ) == -1 );
@@ -2171,9 +2209,9 @@ TEST_CASE( "MagAOXApp sendNewProperty(ipSend), sendNewStandardIndiToggle, and cl
     }
 }
 
-/// Test startINDI()'s indiDriver->good()==false path, otherwise unreachable via the other
-/// execute()/FIFO-failure fixtures (which never create the FIFOs directory at all, so
-/// createINDIFIFOS() itself fails before indiDriver is even constructed).
+/// Verify the startINDI() path where indiDriver->good() is false. The other execute() and
+/// FIFO failure tests cannot reach it. They never create the FIFOs directory at all, so
+/// createINDIFIFOS() itself fails before the indiDriver is even constructed.
 /**
  * \ingroup MagAOXApp_unit_test
  */
@@ -2200,9 +2238,9 @@ TEST_CASE( "MagAOXApp startINDI good() failure", "[app::MagAOXApp]" )
         app.invokedName() = argv[0];
         app.setDefaults( argv.size() - 1, const_cast<char **>( argv.data() ) );
 
-        // Pre-create the FIFOs (as real, valid named pipes) then strip all permissions,
-        // so createINDIFIFOS() tolerates their pre-existence (EEXIST) but indiDriver's
-        // own open() calls genuinely fail with EACCES.
+        // Pre-create the FIFOs as real, valid named pipes, then strip all permissions.
+        // createINDIFIFOS() tolerates their existence through EEXIST, but the open() calls
+        // inside indiDriver fail with a real EACCES.
         REQUIRE( mkfifo( "/tmp/MagAOXApp_startinditest/drivers/fifos/startinditest.in", 0660 ) == 0 );
         REQUIRE( mkfifo( "/tmp/MagAOXApp_startinditest/drivers/fifos/startinditest.out", 0660 ) == 0 );
         REQUIRE( mkfifo( "/tmp/MagAOXApp_startinditest/drivers/fifos/startinditest.ctrl", 0660 ) == 0 );
@@ -2220,10 +2258,10 @@ TEST_CASE( "MagAOXApp startINDI good() failure", "[app::MagAOXApp]" )
 
 }
 
-/// Test sendGetPropertySetList()'s key-desync detection, for both the forced-refresh
-/// (all==true) and incremental (all==false) code paths. A Set property's key is fixed
-/// at registerIndiPropertySet() time; if the caller later renames the same property
-/// object in place (as opposed to registering a new one), the two diverge and
+/// Verify that sendGetPropertySetList() detects a key mismatch, for both the forced refresh
+/// path where all is true and the incremental path where all is false. The key of a Set
+/// property is fixed when registerIndiPropertySet() is called. If the caller later renames
+/// the same property object in place, rather than registering a new one, the two diverge.
 /// sendGetPropertySetList() must detect and skip it rather than requesting garbage.
 /**
  * \ingroup MagAOXApp_unit_test
@@ -2235,14 +2273,14 @@ TEST_CASE( "MagAOXApp sendGetPropertySetList detects a renamed Set property", "[
     pcf::IndiProperty setProp;
     REQUIRE( app.registerIndiPropertySet( setProp, "setdev", "setprop", callback ) == 0 );
 
-    // Mutate the already-registered property directly, so its current key diverges from
-    // the key it was registered (and stored) under.
+    // Mutate the already registered property directly, so its current key diverges from the
+    // key it was registered and stored under.
     setProp.setName( "renamed" );
 
     app.callSendGetPropertySetList( false );
     app.callSendGetPropertySetList( true );
-    // Both prior calls resolved every entry, so m_allDefsReceived is now true -- this
-    // third, all==false call hits the "nothing to do" early return.
+    // Both prior calls resolved every entry, so m_allDefsReceived is now true. This third
+    // call with all false hits the early return for nothing to do.
     app.callSendGetPropertySetList( false );
     REQUIRE( true );
 }

@@ -1,3 +1,16 @@
+/** \file dmPokeWFS_test.hpp
+  * \brief Test harness for the MagAOX::app::dev::dmPokeWFS device mixin.
+  *
+  * Declares dmPokeWFSTest, a MagAOXApp<false> that mixes in dmPokeWFS and two real
+  * shmimMonitor bases, one for the WFS camera stream and one for the dark stream.
+  * The harness stubs out the telemeter interface with a call counter and replaces
+  * runSensor() and analyzeSensor() with controllable stubs that can return canned
+  * values, sleep, or call the real basicRunSensor(). It also exposes protected
+  * dmPokeWFS members, INDI callbacks, and thread bookkeeping so tests can drive
+  * each branch directly without a full appStartup().
+  *
+  * \ingroup dmPokeWFS_tests
+  */
 
 #include "../../MagAOXApp.hpp"
 #include "../dmPokeWFS.hpp"
@@ -19,8 +32,11 @@ namespace XWCTEST_NAMESPACE
 {
 #endif
 
-/// Test harness for dev::dmPokeWFS
-/**
+/// Test harness for dev::dmPokeWFS.
+/** A MagAOXApp<false> that mixes in dmPokeWFS and two shmimMonitor bases. It stubs
+ * the telemeter interface and the runSensor() and analyzeSensor() hooks, and exposes
+ * protected internals so tests can call them directly.
+ *
  * \ingroup dmPokeWFS_tests
  */
 struct dmPokeWFSTest : public MagAOX::app::MagAOXApp<false>,
@@ -83,8 +99,9 @@ struct dmPokeWFSTest : public MagAOX::app::MagAOXApp<false>,
         return dmPokeWFST::appShutdown();
     }
 
-    /// Stub telemeter interface: dmPokeWFS::recordPokeLoop() calls
+    /// Stub of the telemeter interface. dmPokeWFS::recordPokeLoop() calls
     /// derived().template telem<telem_pokeloop>(msg). No real dev::telemeter is used here.
+    /// The stub only counts calls.
     int m_telemCount{ 0 };
 
     template <class telT>
@@ -95,14 +112,17 @@ struct dmPokeWFSTest : public MagAOX::app::MagAOXApp<false>,
         return 0;
     }
 
-    // -- runSensor()/analyzeSensor() interface required by dmPokeWFS, controllable by tests --
+    // The runSensor() and analyzeSensor() interface that dmPokeWFS requires. Tests control
+    // the behavior through the members below.
 
-    bool m_useRealRunSensor{ false }; ///< if true, runSensor() calls the real basicRunSensor()
-    int  m_runSensorRV{ 0 };          ///< canned return value when not using the real sensor
-    bool m_lastFirstRun{ false };
-    int  m_runSensorCalls{ 0 };
-    int  m_runSensorSleepMs{ 0 }; ///< if >0, widens the measuring==1/2 window so a test can observe it
+    bool m_useRealRunSensor{ false }; ///< If true, runSensor() calls the real basicRunSensor().
+    int  m_runSensorRV{ 0 };          ///< Canned return value when not using the real sensor.
+    bool m_lastFirstRun{ false };     ///< The firstRun argument of the last runSensor() call.
+    int  m_runSensorCalls{ 0 };       ///< Number of runSensor() calls so far.
+    int  m_runSensorSleepMs{ 0 }; ///< If greater than zero, runSensor() sleeps this long so a test can observe the measuring state.
 
+    /// Stub runSensor(). Records the call, optionally sleeps, then returns the canned value
+    /// or the result of the real basicRunSensor().
     int runSensor( bool firstRun )
     {
         m_lastFirstRun = firstRun;
@@ -118,11 +138,12 @@ struct dmPokeWFSTest : public MagAOX::app::MagAOXApp<false>,
         return m_runSensorRV;
     }
 
-    int   m_analyzeSensorRV{ 0 };
-    float m_testDeltaX{ 0 };
-    float m_testDeltaY{ 0 };
-    int   m_analyzeSensorCalls{ 0 };
+    int   m_analyzeSensorRV{ 0 };    ///< If negative, analyzeSensor() returns this without updating.
+    float m_testDeltaX{ 0 };         ///< Delta x that analyzeSensor() reports.
+    float m_testDeltaY{ 0 };         ///< Delta y that analyzeSensor() reports.
+    int   m_analyzeSensorCalls{ 0 }; ///< Number of analyzeSensor() calls so far.
 
+    /// Stub analyzeSensor(). Either fails with the canned value or reports the test deltas.
     int analyzeSensor()
     {
         ++m_analyzeSensorCalls;
@@ -133,13 +154,13 @@ struct dmPokeWFSTest : public MagAOX::app::MagAOXApp<false>,
         return updateMeasurement( m_testDeltaX, m_testDeltaY );
     }
 
-    /// Telemeter interface used by real apps; not exercised directly here.
+    /// Telemeter interface used by real apps. It is not exercised directly here.
     int checkRecordTimes()
     {
         return 0;
     }
 
-    // -- test-only setters mirroring shmimMonitor's real connection-time behavior --
+    // Test-only setters that mirror what shmimMonitor does when it connects to a real stream.
 
     void setWfsSize( uint32_t w, uint32_t h, uint8_t dtype )
     {
@@ -155,7 +176,7 @@ struct dmPokeWFSTest : public MagAOX::app::MagAOXApp<false>,
         darkShmimMonitorT::m_dataType = dtype;
     }
 
-    // -- wrappers exposing protected dmPokeWFS internals for direct testing --
+    // Wrappers that expose protected dmPokeWFS internals for direct testing.
 
     int callBasicRunSensor()
     {
@@ -252,7 +273,7 @@ struct dmPokeWFSTest : public MagAOX::app::MagAOXApp<false>,
         m_pokeLocal.setZero();
     }
 
-    // -- INDI property accessors and callback wrappers --
+    // INDI property accessors and callback wrappers.
 
     pcf::IndiProperty indiP_pokeAmp()
     {
@@ -329,7 +350,7 @@ struct dmPokeWFSTest : public MagAOX::app::MagAOXApp<false>,
         return newCallBack_m_indiP_stop( ip );
     }
 
-    // -- static INDI callback trampolines --
+    // Wrappers for the static INDI callback trampolines.
 
     static int callStNewCallBack_pokeAmp( void *app, const pcf::IndiProperty &ip )
     {
@@ -366,21 +387,22 @@ struct dmPokeWFSTest : public MagAOX::app::MagAOXApp<false>,
         return st_newCallBack_m_indiP_stop( app, ip );
     }
 
+    /// Set the app shutdown flag so the wfs thread's outer loop can exit.
     void requestShutdown()
     {
         m_shutdown = 1;
     }
 
-    /// sem_init() the image/wfs semaphores without running the rest of appStartup(),
-    /// so basicTimedPoke()/basicRunSensor()/processImage() can be exercised directly.
+    /// Initialize the image and wfs semaphores without running the rest of appStartup().
+    /// This lets basicTimedPoke(), basicRunSensor(), and processImage() be exercised directly.
     void initSemaphoresForTest()
     {
         sem_init( &m_imageSemaphore, 0, 0 );
         sem_init( &m_wfsSemaphore, 0, 0 );
     }
 
-    /// Populate the measurement INDI property's elements without running the rest of
-    /// appStartup(), so updateMeasurement() can be tested in isolation.
+    /// Populate the elements of the measurement INDI property without running the rest of
+    /// appStartup(). This lets updateMeasurement() be tested in isolation.
     void prepMeasurementIndiForTest()
     {
         m_indiP_measurement.add( { "delta_x", 0.0 } );
@@ -388,10 +410,10 @@ struct dmPokeWFSTest : public MagAOX::app::MagAOXApp<false>,
         m_indiP_measurement.add( { "counter", 0 } );
     }
 
-    /// Post the real wfs semaphore without setting m_single/m_continuous first, which
-    /// production code never does (both callbacks always set one of the flags
-    /// immediately before posting) -- exercises wfsThreadExec()'s defensive
-    /// neither-flag-set branch, which causes the thread to return outright.
+    /// Post the real wfs semaphore without setting m_single or m_continuous first.
+    /// Production code never does this. Both callbacks always set one of the flags
+    /// immediately before posting. This exercises the defensive branch in wfsThreadExec()
+    /// taken when neither flag is set, which makes the thread return outright.
     void postWfsSemaphoreWithNoModeSet()
     {
         m_single     = 0;
@@ -399,16 +421,21 @@ struct dmPokeWFSTest : public MagAOX::app::MagAOXApp<false>,
         sem_post( &m_wfsSemaphore );
     }
 
-    // -- direct control of the dmPokeWFS/shmimMonitor std::thread bookkeeping,
-    // mirroring shmimMonitor_test.cpp's setSmThread()/abandonSmThread() pattern, so
-    // appLogic()'s three separate "thread has exited" propagation branches can each
-    // be exercised independently without a full, real appStartup().
+    // Direct control of the std::thread bookkeeping in dmPokeWFS and shmimMonitor. This
+    // mirrors the setSmThread() and abandonSmThread() pattern in shmimMonitor_test.cpp.
+    // It lets each of the three separate "thread has exited" propagation branches in
+    // appLogic() be exercised on its own without a full, real appStartup().
 
+    /// Install a test thread as the dmPokeWFS wfs measurement thread.
     void setWfsMeasurementThread( std::thread &&t )
     {
         m_wfsThread = std::move( t );
     }
 
+    /// Drop the wfs measurement thread object without joining it.
+    /// The thread has already finished. Swapping it into a local and then placement
+    /// constructing a fresh std::thread over that local leaves the local not joinable, so
+    /// its destructor does not call std::terminate(). The member is left default constructed.
     void abandonWfsMeasurementThread()
     {
         std::thread tmp;
@@ -416,17 +443,20 @@ struct dmPokeWFSTest : public MagAOX::app::MagAOXApp<false>,
         new( &tmp ) std::thread();
     }
 
+    /// Join the wfs measurement thread if it is joinable.
     void joinWfsMeasurementThread()
     {
         if( m_wfsThread.joinable() )
             m_wfsThread.join();
     }
 
+    /// Install a test thread as the WFS shmimMonitor thread.
     void setWfsMonitorThread( std::thread &&t )
     {
         shmimMonitorT::m_smThread = std::move( t );
     }
 
+    /// Same as abandonWfsMeasurementThread() for the WFS shmimMonitor thread.
     void abandonWfsMonitorThread()
     {
         std::thread tmp;
@@ -434,23 +464,27 @@ struct dmPokeWFSTest : public MagAOX::app::MagAOXApp<false>,
         new( &tmp ) std::thread();
     }
 
+    /// Join the WFS shmimMonitor thread if it is joinable.
     void joinWfsMonitorThread()
     {
         if( shmimMonitorT::m_smThread.joinable() )
             shmimMonitorT::m_smThread.join();
     }
 
+    /// Install a test thread as the dark shmimMonitor thread.
     void setDarkMonitorThread( std::thread &&t )
     {
         darkShmimMonitorT::m_smThread = std::move( t );
     }
 
+    /// Join the dark shmimMonitor thread if it is joinable.
     void joinDarkMonitorThread()
     {
         if( darkShmimMonitorT::m_smThread.joinable() )
             darkShmimMonitorT::m_smThread.join();
     }
 
+    /// Same as abandonWfsMeasurementThread() for the dark shmimMonitor thread.
     void abandonDarkMonitorThread()
     {
         std::thread tmp;

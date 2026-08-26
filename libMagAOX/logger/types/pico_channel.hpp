@@ -75,7 +75,7 @@ struct pico_channel : public flatbuffer_log
       s += std::to_string(rgs->channel());
 
       return s;
-   } // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
+   } // LCOV_EXCL_LINE gcov reports this closing brace as a separate line that only runs during exception cleanup
 
    /// Get an empty logMetaDetail because meta data doesn't make sense for this log
    /**

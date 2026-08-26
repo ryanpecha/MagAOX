@@ -1,3 +1,13 @@
+/** \file indiDriver_test.hpp
+  * \brief Test harness types for the MagAOX::app::indiDriver Catch2 tests.
+  *
+  * Provides a stand-in parent that replaces MagAOXApp, and a subclass of indiDriver that
+  * exposes its protected state to the tests. This header expects indiDriver.hpp and the
+  * pcf INDI headers to be included before it.
+  *
+  * \ingroup indiDriver_tests
+  */
+
 #ifndef app_tests_indiDriver_test_hpp
 #define app_tests_indiDriver_test_hpp
 
@@ -5,10 +15,11 @@ namespace indiDriver_tests
 {
 
 /// Minimal stand-in for a MagAOXApp-like parent.
-/** Satisfies the interface required by MagAOX::app::indiDriver<parentT>
- * without dragging in all of MagAOXApp -- just the FIFO name accessors,
- * configName(), the handleXXXProperty callbacks, and a static log<>()
- * template matching the one used in indiDriver.hpp.
+/** Satisfies the interface required by MagAOX::app::indiDriver<parentT> without pulling in
+ * all of MagAOXApp. It provides only the FIFO name accessors, configName(), the
+ * handleXXXProperty callbacks, and a static log<>() template matching the one used in
+ * indiDriver.hpp. Each callback increments a counter so tests can check that it was called.
+ * The log<>() stub discards the message and returns 0.
  */
 struct indiDriverTestParent
 {
@@ -40,12 +51,11 @@ struct indiDriverTestParent
     }
 };
 
-/// Test-exposed subclass, reaching the protected members of indiDriver so
-/// tests can inspect/force its internal state (e.g. clearing m_parent, or
-/// forcing the outgoing client into a "disconnected" state) without adding
-/// any test-only surface to the production class itself (beyond the
-/// xwcTestHooks member, which only exists when XWCTEST_INDIDRIVER_HOOKS is
-/// defined).
+/// Test-exposed subclass which reaches the protected members of indiDriver.
+/// Tests use it to inspect or force the internal state of the driver. Examples are clearing
+/// m_parent, or forcing the outgoing client into a disconnected state. This avoids adding
+/// test-only surface to the production class. The only exception is the xwcTestHooks member,
+/// which exists only when XWCTEST_INDIDRIVER_HOOKS is defined.
 template <class parentT>
 struct indiDriverExposed : public MagAOX::app::indiDriver<parentT>
 {
@@ -54,22 +64,26 @@ struct indiDriverExposed : public MagAOX::app::indiDriver<parentT>
     {
     }
 
+    /// Null the parent pointer so the handler no-op paths can be tested.
     void clearParent()
     {
         this->m_parent = nullptr;
     }
 
+    /// Set the address and port that sendNewProperty will connect to.
     void setServer( const std::string &ip, int port )
     {
         this->m_serverIPAddress = ip;
         this->m_serverPort      = port;
     }
 
+    /// Report whether an outgoing client object currently exists.
     bool hasOutGoing()
     {
         return this->m_outGoing != nullptr;
     }
 
+    /// Tell the outgoing client to quit so the next send must reconnect.
     void forceOutGoingQuit()
     {
         if( this->m_outGoing )

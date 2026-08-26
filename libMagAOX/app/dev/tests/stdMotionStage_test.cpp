@@ -26,8 +26,12 @@ namespace devTest
  * \ingroup app_dev_unit_tests
  */
 
-/// Test harness for exercising stdMotionStage without needing a real INDI/hardware stack.
+/// Test harness for exercising stdMotionStage without a real INDI server or hardware.
 /** \ingroup stdMotionStage_tests
+ *
+ * The harness counts stop, homing, and move calls. It captures log and telemetry
+ * messages in static counters instead of sending them to the real loggers. It can
+ * also inject INDI property registration failures and install a FIFO-less INDI driver.
  */
 class stdMotionStageHarness : public MagAOXApp<false>, public dev::stdMotionStage<stdMotionStageHarness>
 {
@@ -76,7 +80,7 @@ class stdMotionStageHarness : public MagAOXApp<false>, public dev::stdMotionStag
     /// Directly set the preset positions used to resolve preset-name aliases.
     void setPresetPositions( const std::vector<float> &positions /**< [in] the preset positions to use */ );
 
-    /// Override the configured device name (used to probe INDI unique-key edge cases).
+    /// Override the configured device name. Used to probe INDI unique-key edge cases.
     void setConfigName( const std::string &name /**< [in] the new device/config name */ );
 
     /// Control the m_defaultPositions flag exercised by loadConfig().
@@ -85,7 +89,7 @@ class stdMotionStageHarness : public MagAOXApp<false>, public dev::stdMotionStag
     /// Control the m_fractionalPresets flag exercised by appStartup().
     void setFractionalPresets( bool fractionalPresets /**< [in] the new flag value */ );
 
-    /// Directly set m_moving, simulating the derived class's motion-state responsibility.
+    /// Directly set m_moving. In a real app the derived class maintains this motion state.
     void setMoving( int8_t moving /**< [in] the new m_moving value */ );
 
     /// Directly set the value returned by presetNumber().
@@ -94,7 +98,7 @@ class stdMotionStageHarness : public MagAOXApp<false>, public dev::stdMotionStag
     /// Force registerIndiPropertyNew to fail for the property with this name, simulating a registration failure.
     void setFailRegisterName( const std::string &name /**< [in] the property name that should fail to register */ );
 
-    /// Construct (or tear down) a non-activated real indiDriver, to exercise the m_indiDriver-present code paths.
+    /// Install or remove a real but never-activated indiDriver. This exercises the code paths that need m_indiDriver to be non-null.
     void setFakeIndiDriver( bool present /**< [in] whether a fake driver should be installed */ );
 
     /// Apply a presetName request property to the stdMotionStage callback under test.
@@ -165,7 +169,7 @@ class stdMotionStageHarness : public MagAOXApp<false>, public dev::stdMotionStag
     /// Get the configured homePreset value.
     int homePresetValue() const;
 
-    /// Get the name of the built preset (position) INDI property.
+    /// Get the name of the built numeric preset position INDI property.
     std::string presetPropertyName() const;
 
     /// Get the name of the built presetName INDI property.
@@ -226,13 +230,13 @@ class stdMotionStageHarness : public MagAOXApp<false>, public dev::stdMotionStag
     /// Record a requested move target when stdMotionStage accepts a motion request.
     int moveTo( float target /**< [in] the accepted move target */ );
 
-    /// Test-only seam allowing appStartup() registration failures to be simulated one property at a time.
+    /// Test-only override that lets appStartup() registration failures be simulated one property at a time.
     int registerIndiPropertyNew( pcf::IndiProperty &prop /**< [in,out] the property to register */,
                                  int ( *callBack )( void *, const pcf::IndiProperty & ) /**< [in] the callback */
     );
 
-    /// Test-only wrapper exposing the protected setPresetNameTracking, to probe its defensive out-of-range guard.
-    int callSetPresetNameTracking( int presetNameIndex /**< [in] the (possibly invalid) index to record */ );
+    /// Test-only wrapper exposing the protected setPresetNameTracking() so its out-of-range guard can be tested.
+    int callSetPresetNameTracking( int presetNameIndex /**< [in] the index to record, which may be invalid */ );
 };
 
 std::string stdMotionStageHarness::s_lastLogMessage;
@@ -570,8 +574,9 @@ int stdMotionStageHarness::moveTo( float target )
     ++m_moveCalls;
     m_preset = target;
 
-    // Simulate a derived class that immediately reports its new preset number, by locating a matching
-    // configured preset position (if any).
+    // Simulate a derived class that immediately reports its new preset number.
+    // Search the configured preset positions for one that matches the target.
+    // If none matches, report -1.
     m_presetNumberValue = -1.0f;
     for( size_t n = 0; n < m_presetPositions.size(); ++n )
     {
@@ -661,9 +666,11 @@ TEST_CASE( "stdMotionStage rejects invalid preset-name selections", "[dev::stdMo
     }
 }
 
-/// Verify stdMotionStage's setupConfig/loadConfig handle defaults, overrides, and the defaultPositions flag.
+/// Verify that setupConfig() and loadConfig() handle omitted positions, configured values, and the defaultPositions flag.
 /**
  * \ingroup stdMotionStage_tests
+ *
+ * The config files are written under /tmp and read back through mx::app::appConfigurator.
  */
 TEST_CASE( "stdMotionStage setupConfig and loadConfig", "[dev::stdMotionStage]" )
 {
@@ -736,7 +743,7 @@ TEST_CASE( "stdMotionStage setupConfig and loadConfig", "[dev::stdMotionStage]" 
         config.readConfig( "/tmp/stdMotionStage_test.conf" );
         REQUIRE( app.loadConfig( config ) == 0 );
 
-        // Without the default-fill/repair logic, the raw configured values (including the zeros) pass through.
+        // Without the default fill and repair logic the raw configured values pass through, including the zeros.
         REQUIRE( app.presetPositionsValue().size() == 3 );
         REQUIRE( app.presetPositionsValue()[0] == 0 );
         REQUIRE( app.presetPositionsValue()[1] == 5 );
@@ -744,9 +751,12 @@ TEST_CASE( "stdMotionStage setupConfig and loadConfig", "[dev::stdMotionStage]" 
     }
 }
 
-/// Verify stdMotionStage::appStartup builds and registers INDI properties, and reports failures distinctly.
+/// Verify that stdMotionStage::appStartup() builds and registers the INDI properties and reports each failure.
 /**
  * \ingroup stdMotionStage_tests
+ *
+ * Registration failures are injected one property at a time through the harness
+ * override of registerIndiPropertyNew().
  */
 TEST_CASE( "stdMotionStage appStartup", "[dev::stdMotionStage]" )
 {
@@ -826,9 +836,12 @@ TEST_CASE( "stdMotionStage appStartup", "[dev::stdMotionStage]" )
     }
 }
 
-/// Verify stdMotionStage's trivial lifecycle passthroughs.
+/// Verify the trivial lifecycle functions of stdMotionStage.
 /**
  * \ingroup stdMotionStage_tests
+ *
+ * appLogic(), whilePowerOff(), and appShutdown() return 0. onPowerOff() marks the
+ * stage as not moving by setting m_moving to -2.
  */
 TEST_CASE( "stdMotionStage appLogic, onPowerOff, whilePowerOff, and appShutdown", "[dev::stdMotionStage]" )
 {
@@ -913,9 +926,12 @@ TEST_CASE( "stdMotionStage static callback dispatcher routes by property name", 
     }
 }
 
-/// Verify stdMotionStage's numerical preset (position) callback.
+/// Verify the numeric preset position callback of stdMotionStage.
 /**
  * \ingroup stdMotionStage_tests
+ *
+ * A mismatched property and a missing target element are rejected. A valid target
+ * triggers one moveTo() call and records the target.
  */
 TEST_CASE( "stdMotionStage numerical preset callback", "[dev::stdMotionStage]" )
 {
@@ -951,7 +967,7 @@ TEST_CASE( "stdMotionStage numerical preset callback", "[dev::stdMotionStage]" )
     }
 }
 
-/// Verify stdMotionStage's named-preset callback across acceptance, rejection, and no-op paths.
+/// Verify the named preset callback of stdMotionStage across its accept, reject, and no-op paths.
 /**
  * \ingroup stdMotionStage_tests
  */
@@ -1009,7 +1025,7 @@ TEST_CASE( "stdMotionStage preset-name callback", "[dev::stdMotionStage]" )
     }
 }
 
-/// Verify stdMotionStage's home-request callback.
+/// Verify the home request callback of stdMotionStage. Only a matching property with the request element on triggers startHoming().
 /**
  * \ingroup stdMotionStage_tests
  */
@@ -1045,7 +1061,7 @@ TEST_CASE( "stdMotionStage home callback", "[dev::stdMotionStage]" )
     }
 }
 
-/// Verify stdMotionStage's stop-request callback, including the unique-key ambiguity guard.
+/// Verify the stop request callback of stdMotionStage, including the unique-key ambiguity guard.
 /**
  * \ingroup stdMotionStage_tests
  */
@@ -1094,9 +1110,9 @@ TEST_CASE( "stdMotionStage stop callback", "[dev::stdMotionStage]" )
 
     SECTION( "colliding unique keys with a mismatched name are rejected and logged" )
     {
-        // pcf::IndiProperty::createUniqueKey() concatenates device + "." + name. If the device name
-        // itself contains a '.', two different (device, name) pairs can produce the same unique key.
-        // stdMotionStage's stop callback explicitly guards against this ambiguity by also comparing names.
+        // pcf::IndiProperty::createUniqueKey() joins the device name and the property name with a period.
+        // If the device name itself contains a period, two different device and name pairs can produce
+        // the same unique key. The stop callback guards against this ambiguity by also comparing names.
         stdMotionStageHarness app;
         app.setConfigName( "stest.st" );
         app.configurePresets( { "open", "focus" }, "preset" );
@@ -1104,19 +1120,23 @@ TEST_CASE( "stdMotionStage stop callback", "[dev::stdMotionStage]" )
 
         stdMotionStageHarness::resetLogState();
 
-        // Real key: "stest.st" + "." + "stop" == "stest.st.stop"
-        // Colliding key: "stest" + "." + "st.stop" == "stest.st.stop" (same string, different name)
+        // The real key is "stest.st" + "." + "stop", which is "stest.st.stop".
+        // The colliding key is "stest" + "." + "st.stop". That is the same string with a different name.
         REQUIRE( app.applyStopRequest( pcf::IndiElement::On, true, "stest", "st.stop" ) == -1 );
         REQUIRE( stdMotionStageHarness::logCount() == 1 );
-        // stdMotionStage logs this particular mismatch with the default priority (no level is passed).
+        // stdMotionStage logs this particular mismatch with the default priority because no level is passed.
         REQUIRE( stdMotionStageHarness::lastLogLevel() == logPrio::LOG_DEFAULT );
         REQUIRE( app.stopCalls() == 0 );
     }
 }
 
-/// Verify stdMotionStage's preset-name resolution and telemetry recording logic.
+/// Verify the preset-name resolution and telemetry recording logic of stdMotionStage.
 /**
  * \ingroup stdMotionStage_tests
+ *
+ * recordStage() is called after each state change. The harness telem() override counts
+ * records instead of writing them, so the test checks the count before and after each call.
+ * The moves are chosen so each branch of the preset name resolution is reached.
  */
 TEST_CASE( "stdMotionStage recordStage and preset-name resolution", "[dev::stdMotionStage]" )
 {
@@ -1125,7 +1145,7 @@ TEST_CASE( "stdMotionStage recordStage and preset-name resolution", "[dev::stdMo
     app.setPresetPositions( { 1, 2, 3 } );
     REQUIRE( app.dev::stdMotionStage<stdMotionStageHarness>::appStartup() == 0 );
 
-    // Before any motion, m_preset defaults to 0, so telemetryPresetName() should resolve to "".
+    // Before any motion m_preset defaults to 0, so telemetryPresetName() resolves to an empty string.
     int before = stdMotionStageHarness::telemCount();
     REQUIRE( app.recordStage( true ) == 0 );
     REQUIRE( stdMotionStageHarness::telemCount() == before + 1 );
@@ -1136,15 +1156,15 @@ TEST_CASE( "stdMotionStage recordStage and preset-name resolution", "[dev::stdMo
     REQUIRE( stdMotionStageHarness::telemCount() == before );
 
     // A raw numeric move to a known preset position resolves via the fallback presetIndex branch.
-    REQUIRE( app.applyPresetRequest( 3.0f ) == 0 ); // -> index 2 ("block"), presetNameIndex cleared
+    REQUIRE( app.applyPresetRequest( 3.0f ) == 0 ); // This is index 2, named block. presetNameIndex is cleared.
     REQUIRE( app.presetNameIndexValue() == -1 );
 
     before = stdMotionStageHarness::telemCount();
     REQUIRE( app.recordStage( false ) == 0 );
     REQUIRE( stdMotionStageHarness::telemCount() == before + 1 );
 
-    // A named-preset move while still "moving" resolves via the primary presetNameIndex branch.
-    REQUIRE( app.applyPresetNameRequest( { { "focus", pcf::IndiElement::On } } ) == 0 ); // -> index 1
+    // A named preset move while still moving resolves via the primary presetNameIndex branch.
+    REQUIRE( app.applyPresetNameRequest( { { "focus", pcf::IndiElement::On } } ) == 0 ); // This is index 1.
     app.setMoving( 1 );
     REQUIRE( app.presetNameIndexValue() == 1 );
 
@@ -1152,16 +1172,16 @@ TEST_CASE( "stdMotionStage recordStage and preset-name resolution", "[dev::stdMo
     REQUIRE( app.recordStage( false ) == 0 );
     REQUIRE( stdMotionStageHarness::telemCount() == before + 1 );
 
-    // Simulate arrival (moving stops) while movingState/presetNameIndex are unchanged: resolves via the
-    // "same position" secondary presetNameIndex branch.
+    // Simulate arrival by clearing m_moving while movingState and presetNameIndex are unchanged.
+    // This resolves via the same-position secondary presetNameIndex branch.
     app.setMoving( 0 );
 
     before = stdMotionStageHarness::telemCount();
     REQUIRE( app.recordStage( false ) == 0 );
     REQUIRE( stdMotionStageHarness::telemCount() == before + 1 );
 
-    // Move to a position with no matching configured preset: presetNumber() reports no match (-1),
-    // exercising the final "no match" fallback in activePresetNameIndex/activePresetName.
+    // Move to a position with no matching configured preset. The harness presetNumber() then
+    // reports -1. This reaches the final no-match fallback in activePresetNameIndex() and activePresetName().
     REQUIRE( app.applyPresetRequest( 42.0f ) == 0 );
     REQUIRE( app.presetNameIndexValue() == -1 );
 
@@ -1170,9 +1190,12 @@ TEST_CASE( "stdMotionStage recordStage and preset-name resolution", "[dev::stdMo
     REQUIRE( stdMotionStageHarness::telemCount() == before + 1 );
 }
 
-/// Verify stdMotionStage::updateINDI, including the no-driver early return and the full INDI-update path.
+/// Verify stdMotionStage::updateINDI(), including the no-driver early return and the full INDI update path.
 /**
  * \ingroup stdMotionStage_tests
+ *
+ * The full path uses a real but never-activated INDI driver from the harness, so no INDI
+ * server is needed. Each successful update also records one telemetry entry.
  */
 TEST_CASE( "stdMotionStage updateINDI", "[dev::stdMotionStage]" )
 {
@@ -1192,22 +1215,24 @@ TEST_CASE( "stdMotionStage updateINDI", "[dev::stdMotionStage]" )
     {
         app.setFakeIndiDriver( true );
 
-        // First call: selects preset index 0 by default (no match yet), busy state (moving).
+        // First call. The preset index defaults to 0 because nothing has matched yet.
+        // The stage is moving, so the property state is busy.
         app.setPresetNumberValue( 0 );
         app.setMoving( 1 );
         int before = stdMotionStageHarness::telemCount();
         REQUIRE( app.updateINDI() == 0 );
         REQUIRE( stdMotionStageHarness::telemCount() == before + 1 );
 
-        // Second call: switch the active preset and stop moving, exercising the idle-state branch and
-        // the presetName element toggle-off/toggle-on branches.
-        REQUIRE( app.applyPresetRequest( 2.0f ) == 0 ); // -> index 1
+        // Second call. Switch the active preset and stop moving. This reaches the idle-state branch
+        // and the branches that toggle the old presetName element off and the new one on.
+        REQUIRE( app.applyPresetRequest( 2.0f ) == 0 ); // This is index 1.
         app.setMoving( 0 );
         before = stdMotionStageHarness::telemCount();
         REQUIRE( app.updateINDI() == 0 );
         REQUIRE( stdMotionStageHarness::telemCount() == before + 1 );
 
-        // Third call: a named-preset move while moving, exercising the "moving && movingState<1" busy branch.
+        // Third call. A numeric preset move while moving. This reaches the busy branch taken when
+        // m_moving is set and m_movingState is less than 1.
         REQUIRE( app.applyPresetRequest( 3.0f ) == 0 );
         app.setMoving( 1 );
         before = stdMotionStageHarness::telemCount();
@@ -1218,10 +1243,13 @@ TEST_CASE( "stdMotionStage updateINDI", "[dev::stdMotionStage]" )
     }
 }
 
-/// Verify setPresetNameTracking's defensive out-of-range guard, which is not reachable through the class's
-/// only public call site (newCallBack_m_indiP_presetName always passes an index it has already validated).
+/// Verify the out-of-range guard in setPresetNameTracking().
 /**
  * \ingroup stdMotionStage_tests
+ *
+ * The guard cannot be reached through the only normal call site, because
+ * newCallBack_m_indiP_presetName() always passes an index it has already validated.
+ * The harness wrapper callSetPresetNameTracking() calls the protected function directly.
  */
 TEST_CASE( "stdMotionStage setPresetNameTracking rejects out-of-range indices", "[dev::stdMotionStage]" )
 {

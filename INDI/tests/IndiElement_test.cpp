@@ -1,8 +1,10 @@
 /** \file IndiElement_test.cpp
-  * \brief Catch2 tests for pcf::IndiElement (INDI/libcommon/IndiElement.cpp/.hpp).
+  * \brief Catch2 tests for pcf::IndiElement in INDI/libcommon/IndiElement.cpp and IndiElement.hpp.
   *
-  * Exercises every constructor, accessor, mutator, conversion, validity check,
-  * and enum<->string converter of the IndiElement value class.
+  * Exercises every constructor, accessor, mutator, conversion, and validity check
+  * of the IndiElement value class. It also covers the converters between enum
+  * values and strings in both directions. IndiElement is a plain value class,
+  * so no threads, sockets, or files are needed.
   */
 #include "../../tests/catch2/catch.hpp"
 
@@ -15,6 +17,8 @@ using pcf::IndiElement;
 namespace IndiElement_test
 {
 
+// Verifies every constructor, the copy, the assignment operators, and operator==.
+// The self-comparison and self-assignment branches are taken on purpose.
 SCENARIO( "IndiElement construction, assignment, and comparison", "[IndiElement]" )
 {
    GIVEN( "the various constructors" )
@@ -39,7 +43,7 @@ SCENARIO( "IndiElement construction, assignment, and comparison", "[IndiElement]
          IndiElement e5( "el5", IndiElement::On );
          REQUIRE( e5.getSwitchState() == IndiElement::On );
 
-         IndiElement e6( "el6", 3.5 ); // templated numeric constructor
+         IndiElement e6( "el6", 3.5 ); // The templated constructor accepts a numeric value.
          REQUIRE( e6.get<double>() == 3.5 );
 
          IndiElement eCopy( e2 );
@@ -64,18 +68,18 @@ SCENARIO( "IndiElement construction, assignment, and comparison", "[IndiElement]
          IndiElement b;
          b = a;
          REQUIRE( b == a );
-         REQUIRE( b == b ); // self-comparison branch
-         b = b;             // self-assignment branch
+         REQUIRE( b == b ); // This takes the self-comparison branch.
+         b = b;             // This takes the self-assignment branch.
          REQUIRE( b == a );
 
          IndiElement c( "other", "2" );
          REQUIRE( !( c == a ) );
 
-         // templated operator= sets the value from a numeric
+         // The templated operator= sets the value from a number.
          c = 42;
          REQUIRE( c.get<int>() == 42 );
 
-         // enum operator= overloads
+         // The enum operator= overloads set the light state and the switch state.
          c = IndiElement::Alert;
          REQUIRE( c.getLightState() == IndiElement::Alert );
          c = IndiElement::On;
@@ -84,6 +88,8 @@ SCENARIO( "IndiElement construction, assignment, and comparison", "[IndiElement]
    }
 }
 
+// Verifies the getters, the setters, the validity checks, clear(), and createString().
+// One element with every attribute set is shared by the first group of tests.
 SCENARIO( "IndiElement accessors, mutators, and validity checks", "[IndiElement]" )
 {
    GIVEN( "an element with every attribute set" )
@@ -91,8 +97,8 @@ SCENARIO( "IndiElement accessors, mutators, and validity checks", "[IndiElement]
       IndiElement el( "elname", "37" );
       el.setLabel( "A label" );
       el.setFormat( "%0.2f" );
-      // explicit std::string arguments select the string overloads of these setters
-      // (bare literals would select the templated ones, tested separately below)
+      // Explicit std::string arguments select the string overloads of these setters.
+      // Bare literals would select the templated overloads, which are tested separately below.
       el.setMax( std::string( "100" ) );
       el.setMin( std::string( "-100" ) );
       el.setStep( std::string( "0.5" ) );
@@ -116,20 +122,22 @@ SCENARIO( "IndiElement accessors, mutators, and validity checks", "[IndiElement]
          REQUIRE( el.getValue<int>() == 37 );
          REQUIRE( el.get<int>() == 37 );
 
-         // enum conversion operators
+         // The conversion operators return the light state and the switch state.
          IndiElement::LightStateType ls = el;
          REQUIRE( ls == IndiElement::Idle );
          IndiElement::SwitchStateType ss = el;
          REQUIRE( ss == IndiElement::Off );
 
-         // char-buffer value accessor
+         // The char buffer overload of getValue() writes the value and returns its length in sz.
          char cbuf[16];
          unsigned int sz = sizeof( cbuf );
          el.getValue( cbuf, sz );
          REQUIRE( sz == 2 );
          REQUIRE( std::string( cbuf, sz ) == "37" );
 
-         REQUIRE( el.isNumeric() == false ); // "37" streams fully; stream not good() after eof
+         // isNumeric() streams the value into an int and returns good() on the stream.
+         // The whole of "37" streams out, so the stream hits end of file and good() is false.
+         REQUIRE( el.isNumeric() == false );
       }
 
       WHEN( "checking validity flags on a fully-populated element" )
@@ -183,16 +191,16 @@ SCENARIO( "IndiElement accessors, mutators, and validity checks", "[IndiElement]
          el.setValue( "charval", 4 );
          REQUIRE( el.getValue() == "char" );
 
-         el.setValue( 2.25 ); // templated
+         el.setValue( 2.25 ); // The templated setValue() accepts a number.
          REQUIRE( el.getValue<double>() == 2.25 );
 
-         el.set( 7 ); // templated set
+         el.set( 7 ); // The templated set() also accepts a number.
          REQUIRE( el.get<int>() == 7 );
 
          el.setName( "renamed" );
          REQUIRE( el.getName() == "renamed" );
 
-         // templated numeric attribute setters
+         // The templated attribute setters convert numbers to strings.
          el.setMax( 99 );
          REQUIRE( el.getMax() == "99" );
          el.setMin( -5 );
@@ -205,6 +213,8 @@ SCENARIO( "IndiElement accessors, mutators, and validity checks", "[IndiElement]
    }
 }
 
+// Verifies the static converters between enum values and their string names in
+// both directions. Unknown strings and unknown enum values are included.
 SCENARIO( "IndiElement enum and type converters", "[IndiElement]" )
 {
    GIVEN( "light states, switch states, and element types" )

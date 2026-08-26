@@ -1,11 +1,28 @@
 //#define CATCH_CONFIG_MAIN
+/** \file outletController_test.cpp
+  * \brief Catch2 tests for the MagAOX::app::dev::outletController device mixin.
+  *
+  * The component under test is the CRTP mixin in libMagAOX/app/dev/outletController.hpp.
+  * It maps named channels onto numbered power outlets and sequences them on and off.
+  *
+  * The tests use the outletControllerTest harness declared in this file. It is a
+  * MagAOXApp<false> with four simulated outlets. The outlet hooks record the state and the
+  * time of each switch in memory. The harness can make one outlet fail and can make the
+  * n-th INDI property registration fail. Config files are written under /tmp and read back
+  * through a real appConfigurator. INDI callbacks are driven with hand-built
+  * pcf::IndiProperty objects. No INDI server is needed. One scenario installs a FIFO-less
+  * INDI driver so updateINDI() runs past its null-driver guard.
+  *
+  * \ingroup outletController_tests
+  */
 #include "../../../../tests/catch2/catch.hpp"
 
 #include <mx/sys/timeUtils.hpp>
 
-// OUTLET_CTRL_TEST_NOINDI deliberately NOT defined: the indi::updateIfChanged() calls it
-// would compile out are null-driver safe (indiUtils' updateIfChanged returns immediately
-// when the driver pointer is null), so they can run under these tests as-is.
+// OUTLET_CTRL_TEST_NOINDI is deliberately not defined here. Defining it would compile out the
+// indi::updateIfChanged() calls in outletController. Those calls are safe without a driver
+// because updateIfChanged() in indiUtils returns immediately when the driver pointer is null.
+// Leaving them in lets these tests run the real code paths.
 //#define OUTLET_CTRL_TEST_NOLOG
 #include "../../MagAOXApp.hpp"
 #include "../outletController.hpp"
@@ -23,9 +40,9 @@ struct outletControllerTest : public MagAOXApp<false>, dev::outletController<out
 {
    std::vector<double> m_timestamps;
 
-   /// If set to a valid outlet number, turnOutletOn/turnOutletOff will fail (return -1)
-   /// for that outlet number only.  Used to simulate a hardware failure to exercise
-   /// the error-return paths in turnChannelOn/turnChannelOff.  -1 (default) means never fail.
+   /// Outlet number for which turnOutletOn() and turnOutletOff() return -1.
+   /// This simulates a hardware failure on one outlet so the error-return paths
+   /// in turnChannelOn() and turnChannelOff() can be tested. The default of -1 means never fail.
    int m_failOutlet {-1};
 
    outletControllerTest()
@@ -52,7 +69,10 @@ struct outletControllerTest : public MagAOXApp<false>, dev::outletController<out
       return dev::outletController<outletControllerTest>::loadConfig(config);
    }
 
-   // -- register-call fault injection, used to hit every registration failure branch in appStartup() --
+   // Fault injection for INDI property registration. Each register call below increments
+   // m_regCallCount. When the count equals m_regFailAt the call returns -1 instead of
+   // registering. This lets a test hit every registration failure branch in appStartup().
+   // The default of -1 means never fail.
    int m_regCallCount{ 0 };
    int m_regFailAt{ -1 };
 
@@ -81,28 +101,33 @@ struct outletControllerTest : public MagAOXApp<false>, dev::outletController<out
       return dev::outletController<outletControllerTest>::appStartup();
    }
 
+   /// Forward to the mixin setupINDI() so a test can call it on the harness.
    int setupINDI()
    {
       return dev::outletController<outletControllerTest>::setupINDI();
    }
 
+   /// Expose the protected mixin updateINDI() to the tests.
    int callUpdateINDI()
    {
       return dev::outletController<outletControllerTest>::updateINDI();
    }
 
+   /// Expose the protected mixin newCallBack_channels() to the tests.
    int callNewCallBack_channels( const pcf::IndiProperty &ipRecv )
    {
       return dev::outletController<outletControllerTest>::newCallBack_channels( ipRecv );
    }
 
-   // Calls the static wrapper that registerIndiPropertyNew() actually installs as the
-   // callback, distinct from calling newCallBack_channels() directly above.
+   /// Call the static wrapper that registerIndiPropertyNew() installs as the INDI callback.
+   /// This is distinct from calling newCallBack_channels() directly as above.
    int callStaticNewCallBack_channels( const pcf::IndiProperty &ipRecv )
    {
       return dev::outletController<outletControllerTest>::st_newCallBack_channels( this, ipRecv );
    }
 
+   /// Install a real but FIFO-less INDI driver so updateINDI() runs past its null-driver guard.
+   /// No INDI server is needed because the driver is never activated.
    void setupRealDriver()
    {
       m_indiDriver = MagAOX::app::dev::testHarness::makeFifolessIndiDriver<MagAOX::app::MagAOXApp<false>>(
@@ -1772,7 +1797,10 @@ SCENARIO( "outletController Operation with delays", "[outletController]" )
 /**
  * \ingroup outletController_tests
  *
- * Exercises the error-return branches of loadConfig().
+ * Verify that loadConfig() returns -1 for each kind of malformed channel section.
+ * Each GIVEN writes a config file under /tmp with one specific defect, such as a
+ * missing outlet value, an out-of-range outlet number, or an order or delay list
+ * whose size does not match the outlet list.
  */
 SCENARIO( "outletController Configuration Error Handling", "[outletController]" )
 {
@@ -1798,7 +1826,7 @@ SCENARIO( "outletController Configuration Error Handling", "[outletController]" 
 
    GIVEN("a channel section with an outlet number that is out of range")
    {
-      //pdt has 4 outlets (0-3), so outlet 10 is invalid
+      // The harness has 4 outlets numbered 0 to 3, so outlet 10 is out of range.
       mx::app::writeConfigFile( "/tmp/outletController_test.conf", {"channel1"},
                                                         {"outlet"},
                                                         {"10"} );
@@ -1902,9 +1930,9 @@ SCENARIO( "outletController Configuration Error Handling", "[outletController]" 
 /**
  * \ingroup outletController_tests
  *
- * Exercises the default updateOutletStates() implementation, both the
- * success path (all outlets update cleanly) and the error path (an outlet
- * reports an error, which should short-circuit the loop).
+ * Verify the default updateOutletStates() implementation. On the success path
+ * every outlet updates cleanly and the function returns 0. On the error path one
+ * outlet reports a negative state. That value is returned and the loop stops early.
  */
 SCENARIO( "outletController updateOutletStates default implementation", "[outletController]" )
 {
@@ -1921,10 +1949,11 @@ SCENARIO( "outletController updateOutletStates default implementation", "[outlet
 
       WHEN("updateOutletStates is called and an outlet reports an error")
       {
+         // The harness updateOutletState() returns the stored state, so a negative value acts as an error.
          pdt.m_outletStates[2] = -7;
          int rv = pdt.updateOutletStates();
          REQUIRE( rv == -7);
-         pdt.m_outletStates[2] = 0; //reset
+         pdt.m_outletStates[2] = 0; // Restore the outlet state.
       }
    }
 }
@@ -1933,9 +1962,11 @@ SCENARIO( "outletController updateOutletStates default implementation", "[outlet
 /**
  * \ingroup outletController_tests
  *
- * Exercises the branches of turnChannelOn/turnChannelOff that are not hit
- * by ordinary operation: the null-mutex fallback, the already-on/already-off
- * no-ops, the state-delay skip logic, and the outlet-error return paths.
+ * Verify the branches of turnChannelOn() and turnChannelOff() that ordinary
+ * operation does not reach. These are the null-mutex fallback, the no-op when a
+ * channel is already on or already off, the skip when the state delay has not
+ * elapsed, and the error returns when an outlet fails. Outlet failures are
+ * injected through the harness member m_failOutlet.
  */
 SCENARIO( "outletController turnChannelOn/turnChannelOff edge cases", "[outletController]" )
 {
@@ -1954,8 +1985,8 @@ SCENARIO( "outletController turnChannelOn/turnChannelOff edge cases", "[outletCo
 
       WHEN("the channel mutex is null")
       {
-         //Force the null-mutex fallback path (channelSpec::m_mutex).  The underlying
-         //mutex is still owned and deleted via m_channelMutexes, so this is safe.
+         // Force the null-mutex fallback path by clearing channelSpec::m_mutex.
+         // The mutex object itself is still owned and deleted through m_channelMutexes, so this is safe.
          pdt.m_channels["channel1"].m_mutex = nullptr;
 
          int rv = pdt.turnChannelOn("channel1");
@@ -1989,60 +2020,60 @@ SCENARIO( "outletController turnChannelOn/turnChannelOff edge cases", "[outletCo
 
       WHEN("the state delay has not elapsed when turning a channel on")
       {
-         pdt.m_stateDelay = 5.0; //large delay so it won't elapse during the test
+         pdt.m_stateDelay = 5.0; // A large delay in seconds so it cannot elapse during the test.
 
-         //First transition: default m_stateTime is old, so this proceeds normally.
+         // First transition. The default m_stateTime is old, so this proceeds normally.
          int rv = pdt.turnChannelOn("channel1");
          REQUIRE( rv == 0 );
          REQUIRE( pdt.channelState("channel1") == 2 );
 
-         //Force the channel to appear off without going through turnChannelOff,
-         //so m_stateTime remains recent (i.e. within the delay window).
+         // Force the channel to appear off without going through turnChannelOff().
+         // This keeps m_stateTime recent, that is within the delay window.
          pdt.m_outletStates[0] = 0;
          pdt.m_outletStates[1] = 0;
          REQUIRE( pdt.channelState("channel1") == 0 );
 
-         //Now attempting to turn it on again should be skipped by the delay logic.
+         // Turning it on again should now be skipped by the delay logic.
          rv = pdt.turnChannelOn("channel1");
          REQUIRE( rv == 0 );
-         REQUIRE( pdt.outletState(0) == 0 ); //unchanged -- turnOutletOn was not actually called
+         REQUIRE( pdt.outletState(0) == 0 ); // Unchanged because turnOutletOn() was not called.
          REQUIRE( pdt.outletState(1) == 0 );
       }
 
       WHEN("the state delay has not elapsed when turning a channel off")
       {
-         pdt.m_stateDelay = 5.0; //large delay so it won't elapse during the test
+         pdt.m_stateDelay = 5.0; // A large delay in seconds so it cannot elapse during the test.
 
-         //Turn the channel on -- this sets m_stateTime to now.
+         // Turn the channel on. This sets m_stateTime to now.
          int rv = pdt.turnChannelOn("channel1");
          REQUIRE( rv == 0 );
          REQUIRE( pdt.channelState("channel1") == 2 );
 
-         //Immediately attempting to turn it off should be skipped by the delay logic.
+         // Turning it off immediately should be skipped by the delay logic.
          rv = pdt.turnChannelOff("channel1");
          REQUIRE( rv == 0 );
-         REQUIRE( pdt.channelState("channel1") == 2 ); //unchanged -- still on
+         REQUIRE( pdt.channelState("channel1") == 2 ); // Unchanged. The channel is still on.
       }
 
       WHEN("the first outlet fails to turn on")
       {
-         pdt.m_failOutlet = 0; //channel1's first outlet
+         pdt.m_failOutlet = 0; // The first outlet of channel1.
 
          int rv = pdt.turnChannelOn("channel1");
          REQUIRE( rv == -1 );
 
-         pdt.m_failOutlet = -1; //reset
+         pdt.m_failOutlet = -1; // Stop injecting failures.
       }
 
       WHEN("a subsequent outlet fails to turn on")
       {
-         pdt.m_failOutlet = 1; //channel1's second outlet
+         pdt.m_failOutlet = 1; // The second outlet of channel1.
 
          int rv = pdt.turnChannelOn("channel1");
          REQUIRE( rv == -1 );
-         REQUIRE( pdt.outletState(0) == 2 ); //first outlet succeeded before the failure
+         REQUIRE( pdt.outletState(0) == 2 ); // The first outlet succeeded before the failure.
 
-         pdt.m_failOutlet = -1; //reset
+         pdt.m_failOutlet = -1; // Stop injecting failures.
       }
 
       WHEN("the first outlet fails to turn off")
@@ -2050,12 +2081,12 @@ SCENARIO( "outletController turnChannelOn/turnChannelOff edge cases", "[outletCo
          pdt.turnChannelOn("channel1");
          REQUIRE( pdt.channelState("channel1") == 2 );
 
-         pdt.m_failOutlet = 0; //channel1's first outlet
+         pdt.m_failOutlet = 0; // The first outlet of channel1.
 
          int rv = pdt.turnChannelOff("channel1");
          REQUIRE( rv == -1 );
 
-         pdt.m_failOutlet = -1; //reset
+         pdt.m_failOutlet = -1; // Stop injecting failures.
       }
 
       WHEN("a subsequent outlet fails to turn off")
@@ -2063,13 +2094,13 @@ SCENARIO( "outletController turnChannelOn/turnChannelOff edge cases", "[outletCo
          pdt.turnChannelOn("channel1");
          REQUIRE( pdt.channelState("channel1") == 2 );
 
-         pdt.m_failOutlet = 1; //channel1's second outlet
+         pdt.m_failOutlet = 1; // The second outlet of channel1.
 
          int rv = pdt.turnChannelOff("channel1");
          REQUIRE( rv == -1 );
-         REQUIRE( pdt.outletState(0) == 0 ); //first outlet succeeded before the failure
+         REQUIRE( pdt.outletState(0) == 0 ); // The first outlet succeeded before the failure.
 
-         pdt.m_failOutlet = -1; //reset
+         pdt.m_failOutlet = -1; // Stop injecting failures.
       }
    }
 }
@@ -2078,9 +2109,9 @@ SCENARIO( "outletController turnChannelOn/turnChannelOff edge cases", "[outletCo
 /**
  * \ingroup outletController_tests
  *
- * Exercises all four branches (Off/Int/On/Unk) of the free function
- * MagAOX::app::dev::stateIntToString, which is compiled into libMagAOX.a
- * from outletController.cpp (not header-only).
+ * Verify all four branches of the free function MagAOX::app::dev::stateIntToString().
+ * The branches return Off, Int, On, and Unk. This function is not header-only. It is
+ * compiled into libMagAOX.a from outletController.cpp.
  */
 SCENARIO( "outletController stateIntToString", "[outletController]" )
 {
@@ -2113,9 +2144,14 @@ SCENARIO( "outletController stateIntToString", "[outletController]" )
 /**
  * \ingroup outletController_tests
  *
- * The test harness's appStartup() previously just returned 0 without ever calling the
- * real dev::outletController<>::appStartup(), so none of the INDI property registration,
- * newCallBack_channels() dispatch, or updateINDI() logic was ever exercised.
+ * Verify the INDI side of the mixin. appStartup() and setupINDI() must register the
+ * outlet and channel properties. Every registration failure must be propagated as -1.
+ * newCallBack_channels() must reject requests when the app is not READY and must
+ * dispatch on and off requests when it is. updateINDI() must return 0 both without a
+ * driver and with a real FIFO-less driver installed.
+ *
+ * The harness appStartup() forwards to the real dev::outletController appStartup() so
+ * these paths run. Registration failures are injected through m_regFailAt.
  */
 SCENARIO( "outletController appStartup, setupINDI, newCallBack_channels, updateINDI", "[outletController]" )
 {
@@ -2138,10 +2174,10 @@ SCENARIO( "outletController appStartup, setupINDI, newCallBack_channels, updateI
             REQUIRE( pdt.appStartup() == 0 );
          }
 
-         // setupINDI() just delegates to appStartup() -- a fresh instance is needed since
-         // MagAOXApp forbids a 2nd live instance, and registerIndiPropertyNew would also
-         // reject re-registering the same properties on the same instance. The above
-         // instance must go out of scope first (see its closing brace).
+         // setupINDI() delegates to appStartup(). A fresh instance is needed to call it because
+         // registerIndiPropertyNew() rejects registering the same properties twice on one instance.
+         // MagAOXApp also forbids a second live instance, so the instance above must go out of
+         // scope first. That is why it is wrapped in its own block.
          outletControllerTest pdt2;
          REQUIRE( pdt2.setupConfig(config) == 0 );
          REQUIRE( pdt2.loadConfig(config) == 0 );
@@ -2150,6 +2186,8 @@ SCENARIO( "outletController appStartup, setupINDI, newCallBack_channels, updateI
 
       WHEN("every registration failure is propagated")
       {
+         // First run a successful appStartup() to count the register calls it makes.
+         // Then run it once per call, failing a different call each time.
          int totalCalls = 0;
          {
             mx::app::appConfigurator config;
@@ -2186,7 +2224,7 @@ SCENARIO( "outletController appStartup, setupINDI, newCallBack_channels, updateI
          REQUIRE( pdt.loadConfig(config) == 0 );
          REQUIRE( pdt.appStartup() == 0 );
 
-         // Not READY: rejected regardless of ipRecv content.
+         // The app state is not READY, so the request is rejected regardless of its content.
          pcf::IndiProperty notReady( pcf::IndiProperty::Text );
          notReady.setDevice( pdt.configName() );
          notReady.setName( "channel1" );
@@ -2210,7 +2248,7 @@ SCENARIO( "outletController appStartup, setupINDI, newCallBack_channels, updateI
          REQUIRE( pdt.callNewCallBack_channels( offReq ) == 0 );
          REQUIRE( pdt.updateOutletState( 0 ) == OUTLET_STATE_OFF );
 
-         // Neither "on" nor "off" -- falls through to 0 with no action.
+         // A value that is neither on nor off takes no action and returns 0.
          pcf::IndiProperty neither( pcf::IndiProperty::Text );
          neither.setDevice( pdt.configName() );
          neither.setName( "channel1" );
@@ -2218,7 +2256,7 @@ SCENARIO( "outletController appStartup, setupINDI, newCallBack_channels, updateI
          neither["state"].setValue( "sideways" );
          REQUIRE( pdt.callNewCallBack_channels( neither ) == 0 );
 
-         // The static wrapper registerIndiPropertyNew() actually installs as the callback.
+         // Also go through the static wrapper that registerIndiPropertyNew() installs as the callback.
          REQUIRE( pdt.callStaticNewCallBack_channels( onReq ) == 0 );
       }
 
@@ -2232,11 +2270,12 @@ SCENARIO( "outletController appStartup, setupINDI, newCallBack_channels, updateI
          REQUIRE( pdt.loadConfig(config) == 0 );
          REQUIRE( pdt.appStartup() == 0 );
 
-         REQUIRE( pdt.callUpdateINDI() == 0 ); // no driver yet -- early return
+         REQUIRE( pdt.callUpdateINDI() == 0 ); // No driver yet, so updateINDI() returns early.
 
          pdt.setupRealDriver();
          REQUIRE( pdt.callUpdateINDI() == 0 );
 
+         // Change one outlet so the update has a state change to publish.
          pdt.turnOutletOn(0);
          REQUIRE( pdt.callUpdateINDI() == 0 );
       }

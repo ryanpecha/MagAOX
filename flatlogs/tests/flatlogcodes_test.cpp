@@ -1,5 +1,8 @@
 /** \file flatlogcodes_test.cpp
-  * \brief Catch2 tests for the flatlogs headers (logHeader, logPriority, timespecX).
+  * \brief Catch2 tests for the flatlogs headers logHeader, logPriority, and timespecX.
+  *
+  * These are pure in-memory tests. The header encoding tests write into a heap buffer
+  * and read it back. No files, sockets, or devices are involved.
   *
   * History:
   */
@@ -19,6 +22,9 @@ namespace flatlogs_test
 
 using namespace flatlogs;
 
+// Verifies the three variable-length message size encodings of logHeader. It checks the
+// size computed for each regime, then writes each encoding into a raw buffer and reads the
+// length and header size back.
 SCENARIO( "logHeader message-length encodings", "[flatlogs::logHeader]" )
 {
    GIVEN( "intended message sizes in each of the three length regimes" )
@@ -78,6 +84,8 @@ SCENARIO( "logHeader message-length encodings", "[flatlogs::logHeader]" )
    }
 }
 
+// Verifies the priority to string table and the string to priority parser. The parser
+// cases cover numeric input, every accepted name and prefix form, and rejected input.
 SCENARIO( "logPriority string conversions", "[flatlogs::logPriority]" )
 {
    GIVEN( "each log priority value" )
@@ -133,6 +141,9 @@ SCENARIO( "logPriority string conversions", "[flatlogs::logPriority]" )
    }
 }
 
+// Verifies construction of timespecX from a native timespec, including the clamp of a
+// negative time to zero, and the meanTimespecX() average with whole, fractional, and
+// carrying second results.
 SCENARIO( "timespecX conversions and arithmetic", "[flatlogs::timespecX]" )
 {
    GIVEN( "native timespec values" )

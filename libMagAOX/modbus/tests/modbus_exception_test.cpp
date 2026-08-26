@@ -1,7 +1,11 @@
 /** \file modbus_exception_test.cpp
  * \brief Catch2 tests for the MagAO-X Modbus exception hierarchy.
  *
- * \author Jared R. Males (jaredmales@gmail.com)
+ * Technique: each test constructs one exception type directly and checks the text that
+ * what() returns. Some tests also throw the exception and catch it through its base
+ * classes. Nothing else is needed to run them.
+ *
+ * \author Jared R. Males, jaredmales@gmail.com
  */
 
 #include "../../../tests/catch2/catch.hpp"
@@ -13,6 +17,8 @@ namespace libXWCTest
 namespace modbusExceptionTest
 {
 
+/// The base modbus_exception has a fixed message and an empty msg, and it can be caught
+/// as a std::exception.
 TEST_CASE( "modbus_exception is the default base message and is catchable as std::exception",
            "[modbus_exception]" )
 {
@@ -34,6 +40,8 @@ TEST_CASE( "modbus_exception is the default base message and is catchable as std
     REQUIRE( caught == true );
 }
 
+/// modbus_connect_exception returns msg from what() when msg is set, and a default
+/// message otherwise. It can be caught as modbus_exception and as std::exception.
 TEST_CASE( "modbus_connect_exception uses msg when set, and a default message otherwise",
            "[modbus_exception]" )
 {
@@ -81,6 +89,8 @@ TEST_CASE( "modbus_connect_exception uses msg when set, and a default message ot
     }
 }
 
+/// Each of the following tests constructs one specific exception type and checks its
+/// fixed what() text.
 TEST_CASE( "modbus_illegal_function_exception reports a fixed message", "[modbus_exception]" )
 {
     modbus_illegal_function_exception e;
@@ -92,8 +102,9 @@ TEST_CASE( "modbus_illegal_address_exception sets msg in its constructor but wha
 {
     modbus_illegal_address_exception e;
 
-    // The constructor sets msg, but unlike modbus_connect_exception, what() does not consult
-    // it -- it always returns the fixed string. Documenting this (mildly surprising) behavior.
+    // The constructor sets msg. But unlike modbus_connect_exception, what() does not
+    // consult it and always returns the fixed string. This test documents that mildly
+    // surprising behavior.
     REQUIRE( e.msg == "test" );
     REQUIRE( std::string( e.what() ) == "Illegal Address" );
 }

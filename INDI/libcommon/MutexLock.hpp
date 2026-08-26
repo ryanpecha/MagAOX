@@ -52,7 +52,7 @@ class MutexLock
     {
       int nErr = 0;
       if ( ( nErr = pthread_mutex_init( &m_idLock, NULL ) ) != 0 )
-        throw std::runtime_error( std::string( "MutexLock::MutexLock: " ) + strerror( nErr ) ); // LCOV_EXCL_LINE -- not triggerable: pthread_mutex_init with default attributes only fails on resource exhaustion
+        throw std::runtime_error( std::string( "MutexLock::MutexLock: " ) + strerror( nErr ) ); // LCOV_EXCL_LINE pthread_mutex_init with default attributes fails only when the system is out of resources. A test cannot cause that.
       //m_logMsg.clear();
       //m_logMsg << pcf::Logger::enumDebug << "pthread_mutex_init" << std::endl;
     }
@@ -81,7 +81,7 @@ class MutexLock
     {
       int nErr = 0;
       if ( ( nErr = pthread_mutex_lock( &m_idLock ) ) != 0 )
-        throw std::runtime_error( std::string( "MutexLock::lock: " ) + strerror( nErr ) ); // LCOV_EXCL_LINE -- not triggerable: a NORMAL (default) mutex deadlocks rather than returning an error on relock
+        throw std::runtime_error( std::string( "MutexLock::lock: " ) + strerror( nErr ) ); // LCOV_EXCL_LINE This is a default mutex of type NORMAL. Locking it twice from one thread deadlocks instead of returning an error. So a test cannot make lock() fail.
       //m_logMsg.clear();
       //m_logMsg << pcf::Logger::enumDebug << "pthread_mutex_lock" << std::endl;
     }
@@ -89,7 +89,7 @@ class MutexLock
     {
       int nErr = 0;
       if ( ( nErr = pthread_mutex_unlock( &m_idLock ) ) != 0 )
-        throw std::runtime_error( std::string( "MutexLock::unlock: " ) + strerror( nErr ) ); // LCOV_EXCL_LINE -- not triggerable: glibc returns 0 when unlocking an unheld NORMAL mutex
+        throw std::runtime_error( std::string( "MutexLock::unlock: " ) + strerror( nErr ) ); // LCOV_EXCL_LINE glibc returns 0 when a NORMAL mutex is unlocked while not held. So a test cannot make unlock() fail.
       //m_logMsg.clear();
       //m_logMsg << pcf::Logger::enumDebug << "pthread_mutex_unlock" << std::endl;
     }

@@ -77,9 +77,9 @@ class zaberLowLevel_test : public zaberLowLevel
             stateOut << rawPos << '\n' << parked << '\n' << maxPos << '\n' << lastHomed << '\n';
         }
 
-        // appStartup() bails out immediately while the FSM is still in its default
-        // UNINITIALIZED state (matching the real execute() sequence, which always
-        // transitions to INITIALIZED right before calling appStartup()).
+        // appStartup() returns immediately while the state machine is still in its default
+        // UNINITIALIZED state. The real execute() sequence always moves to INITIALIZED right
+        // before calling appStartup(), so the harness does the same here.
         state( stateCodes::INITIALIZED );
 
         if( appStartup() < 0 )
@@ -194,10 +194,9 @@ class zaberLowLevel_test : public zaberLowLevel
     }
 
     /// Get the warning-switch property value for a stage.
-    /** m_indiP_warn's element is a Switch, not a text/number element, so the shared
-     * propertyValue() helper (which reads the generic string value) doesn't apply here --
-     * it always reports "1"/"0" rather than the On/Off state -- so this reads the
-     * switch state directly instead.
+    /** The element of m_indiP_warn is a Switch, not a text or number element. The shared
+     * propertyValue() helper reads the generic string value, which for a switch is always
+     * "1" or "0" rather than the On or Off state. So this reads the switch state directly.
      */
     std::string warnValue( const std::string &stageName ) const
     {

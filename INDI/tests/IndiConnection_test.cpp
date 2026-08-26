@@ -1,7 +1,12 @@
 /** \file IndiConnection_test.cpp
-  * \brief Catch2 tests for pcf::IndiConnection (INDI/libcommon/IndiConnection.cpp).
+  * \brief Catch2 tests for pcf::IndiConnection in INDI/libcommon/IndiConnection.cpp.
   *
-  * Drives the real message-processing loop over real pipes.
+  * The tests drive the real message processing loop over real pipes. No mocks are used.
+  * Some tests start the connection's own thread and use short sleeps to let it run.
+  * One test closes the input descriptor on purpose so that select() fails with EBADF.
+  * That test waits about two seconds to cover the loop's one second back-off.
+  * One test ignores SIGPIPE while writing to a pipe with no reader.
+  * No ports or privileges are needed.
   */
 #include "../../tests/catch2/catch.hpp"
 
@@ -23,10 +28,12 @@ using pcf::IndiXmlParser;
 namespace IndiConnection_test
 {
 
-/// Minimal concrete connection: counts dispatches and update() calls.
+/// Minimal concrete connection. It counts dispatch() and update() calls and
+/// records the type and device of the last dispatched message.
 class TestConnection : public IndiConnection
 {
  public:
+   /// Uses the name testconn, version 1, and protocol version 1.
    TestConnection() : IndiConnection( "testconn", "1", "1" )
    {
    }
@@ -49,8 +56,10 @@ class TestConnection : public IndiConnection
       ++m_updates;
    }
 
-   // process() is private and detachFds() protected in IndiConnection; expose
-   // them for direct driving here.
+   // process() is private and detachFds() is protected in IndiConnection.
+   // These wrappers expose them so the tests can drive them directly.
+   // runProcess() runs the real loop in the calling thread by passing false
+   // to processIndiRequests().
    void runProcess()
    {
       processIndiRequests( false );
@@ -62,7 +71,7 @@ class TestConnection : public IndiConnection
    }
 };
 
-/// update() throws a std::exception subclass, escaping process().
+/// update() throws a std::exception subclass. The exception escapes process().
 class ThrowingUpdateConnection : public TestConnection
 {
  public:
@@ -72,7 +81,7 @@ class ThrowingUpdateConnection : public TestConnection
    }
 };
 
-/// update() throws a non-std value, escaping process().
+/// update() throws a plain int. It is not a std::exception and it escapes process().
 class ThrowingIntUpdateConnection : public TestConnection
 {
  public:
@@ -82,7 +91,8 @@ class ThrowingIntUpdateConnection : public TestConnection
    }
 };
 
-/// dispatch() throws a runtime_error, caught inside process()'s loop.
+/// dispatch() throws a std::runtime_error. The loop inside process() catches it
+/// and keeps running.
 class DispatchRuntimeThrowConnection : public TestConnection
 {
  public:
@@ -93,8 +103,8 @@ class DispatchRuntimeThrowConnection : public TestConnection
    }
 };
 
-/// dispatch() throws a logic_error (a std::exception that is NOT a
-/// runtime_error), caught by process()'s second handler.
+/// dispatch() throws a std::logic_error. That is a std::exception but not a
+/// runtime_error, so the second handler in process() catches it.
 class DispatchLogicThrowConnection : public TestConnection
 {
  public:
@@ -105,7 +115,7 @@ class DispatchLogicThrowConnection : public TestConnection
    }
 };
 
-/// XML for a getProperties request.
+/// Builds the XML for a getProperties request for device dev and property prop.
 static std::string getPropsXml()
 {
    IndiProperty ip( IndiProperty::Text );
@@ -116,6 +126,9 @@ static std::string getPropsXml()
    return gen.createXmlString();
 }
 
+// Verifies the whole connection with real descriptors. It covers message processing
+// over pipes, the background thread, exception handling in the overrides, the output
+// side, and the small accessors.
 SCENARIO( "IndiConnection processes real INDI traffic over pipes", "[IndiConnection]" )
 {
    GIVEN( "a connection wired to pipes" )
@@ -132,9 +145,9 @@ SCENARIO( "IndiConnection processes real INDI traffic over pipes", "[IndiConnect
 
          std::string xml = getPropsXml();
          REQUIRE( ::write( fdIn[1], xml.c_str(), xml.size() ) == (ssize_t)xml.size() );
-         ::close( fdIn[1] ); // EOF after the message: read() returns 0 -> quit
+         ::close( fdIn[1] ); // Close the write end so read() sees EOF after the message. EOF makes the loop quit.
 
-         conn.runProcess(); // runs the real loop in this thread until EOF
+         conn.runProcess(); // Run the real loop in this thread until EOF.
 
          REQUIRE( conn.m_dispatches.load() == 1 );
          REQUIRE( conn.m_lastType == IndiMessage::GetProperties );
@@ -144,7 +157,7 @@ SCENARIO( "IndiConnection processes real INDI traffic over pipes", "[IndiConnect
 
          ::close( fdIn[0] );
          ::close( fdOut[0] );
-         // fdOut[1] is owned (and closed) by the connection.
+         // fdOut[1] is left with the connection. setOutputFd() closes it if the fd is ever replaced.
       }
 
       WHEN( "processIndiRequests runs the loop in its own thread" )
@@ -155,13 +168,14 @@ SCENARIO( "IndiConnection processes real INDI traffic over pipes", "[IndiConnect
          TestConnection conn;
          conn.setInputFd( fdIn[0] );
 
-         conn.activate(); // so deactivate() runs and joins the process thread
+         conn.activate(); // Activate first so that deactivate() later joins the process thread.
          conn.waitForReady();
          conn.processIndiRequests( true );
 
          std::string xml = getPropsXml();
          REQUIRE( ::write( fdIn[1], xml.c_str(), xml.size() ) == (ssize_t)xml.size() );
 
+         // Wait up to one second for the process thread to dispatch the message.
          for( int i = 0; i < 200 && conn.m_dispatches.load() == 0; ++i )
          {
             pcf::Thread::msleep( 5 );
@@ -169,7 +183,7 @@ SCENARIO( "IndiConnection processes real INDI traffic over pipes", "[IndiConnect
          REQUIRE( conn.m_dispatches.load() == 1 );
 
          conn.quitProcess();
-         conn.deactivate(); // joins the process thread
+         conn.deactivate(); // deactivate() joins the process thread.
 
          ::close( fdIn[0] );
          ::close( fdIn[1] );
@@ -178,12 +192,12 @@ SCENARIO( "IndiConnection processes real INDI traffic over pipes", "[IndiConnect
       WHEN( "activate starts the Thread loop and rejects double activation" )
       {
          TestConnection conn;
-         conn.setInterval( 1 ); // so the loop reaches the default execute() quickly
+         conn.setInterval( 1 ); // A one millisecond interval lets the loop reach the default execute() quickly.
          conn.activate();
-         conn.waitForReady(); // the started thread flags itself running
+         conn.waitForReady(); // This returns once the started thread flags itself running.
          REQUIRE( conn.isActive() );
          REQUIRE_THROWS_AS( conn.activate(), std::runtime_error );
-         pcf::Thread::msleep( 30 ); // let the loop reach the default execute()
+         pcf::Thread::msleep( 30 ); // Let the loop reach the default execute() at least once.
          conn.deactivate();
          REQUIRE( !conn.isActive() );
       }
@@ -195,16 +209,16 @@ SCENARIO( "IndiConnection processes real INDI traffic over pipes", "[IndiConnect
       {
          ThrowingUpdateConnection conn;
          conn.processIndiRequests( true );
-         pcf::Thread::msleep( 50 ); // the catch prints and the thread exits
+         pcf::Thread::msleep( 50 ); // The catch handler prints the error and the thread exits. Give it time.
          conn.quitProcess();
-         REQUIRE( true );
+         REQUIRE( true ); // Reaching this point without a crash is the check.
       }
 
       WHEN( "update() throws a non-std value out of the process thread" )
       {
          ThrowingIntUpdateConnection conn;
          conn.processIndiRequests( true );
-         pcf::Thread::msleep( 50 );
+         pcf::Thread::msleep( 50 ); // Same as above. The catch-all handler runs and the thread exits.
          conn.quitProcess();
          REQUIRE( true );
       }
@@ -219,7 +233,7 @@ SCENARIO( "IndiConnection processes real INDI traffic over pipes", "[IndiConnect
          std::string xml = getPropsXml();
          REQUIRE( ::write( fdIn[1], xml.c_str(), xml.size() ) == (ssize_t)xml.size() );
          ::close( fdIn[1] );
-         conn.runProcess(); // catch(runtime_error) inside the loop, then EOF quits
+         conn.runProcess(); // The runtime_error handler inside the loop catches the throw. EOF then quits.
          REQUIRE( conn.m_dispatches.load() == 1 );
          ::close( fdIn[0] );
       }
@@ -234,7 +248,7 @@ SCENARIO( "IndiConnection processes real INDI traffic over pipes", "[IndiConnect
          std::string xml = getPropsXml();
          REQUIRE( ::write( fdIn[1], xml.c_str(), xml.size() ) == (ssize_t)xml.size() );
          ::close( fdIn[1] );
-         conn.runProcess();
+         conn.runProcess(); // The std::exception handler inside the loop catches the throw. EOF then quits.
          REQUIRE( conn.m_dispatches.load() == 1 );
          ::close( fdIn[0] );
       }
@@ -247,13 +261,13 @@ SCENARIO( "IndiConnection processes real INDI traffic over pipes", "[IndiConnect
 
          TestConnection conn;
          conn.setInputFd( fdIn[0] );
-         ::close( fdIn[0] ); // select() on the closed fd genuinely fails with EBADF
+         ::close( fdIn[0] ); // Close the fd after handing it over so select() on it fails with EBADF.
 
          conn.processIndiRequests( true );
-         pcf::Thread::msleep( 1200 ); // one full back-off sleep(1)
+         pcf::Thread::msleep( 1200 ); // Wait through one full back-off sleep of one second.
          conn.quitProcess();
-         pcf::Thread::msleep( 1100 ); // let the loop notice and exit
-         REQUIRE( true );
+         pcf::Thread::msleep( 1100 ); // Give the loop time to notice quitProcess() and exit.
+         REQUIRE( true ); // Surviving the back-off without a crash is the check.
       }
 
       WHEN( "the input fd is a directory, select succeeds but read fails" )
@@ -262,8 +276,8 @@ SCENARIO( "IndiConnection processes real INDI traffic over pipes", "[IndiConnect
          REQUIRE( fdDir >= 0 );
 
          TestConnection conn;
-         conn.setInputFd( fdDir ); // readable per select, but read() fails EISDIR
-         conn.runProcess(); // read < 0 -> quit
+         conn.setInputFd( fdDir ); // A directory is readable according to select(), but read() fails with EISDIR.
+         conn.runProcess(); // A negative read result makes the loop quit.
          REQUIRE( conn.getQuitProcess() );
 
          ::close( fdDir );
@@ -289,10 +303,10 @@ SCENARIO( "IndiConnection processes real INDI traffic over pipes", "[IndiConnect
          int fdOut2[2];
          REQUIRE( ::pipe( fdOut2 ) == 0 );
          conn.setOutputFd( fdOut2[1] );
-         conn.setOutputFd( fdOut2[1] ); // same fd: early-return branch
+         conn.setOutputFd( fdOut2[1] ); // Setting the same fd again takes the early return branch.
 
-         // Writing to a pipe whose read end is closed fails; with SIGPIPE
-         // ignored the write loop's error-break path runs for real.
+         // Writing to a pipe whose read end is closed fails. SIGPIPE is ignored so
+         // the process survives and the write loop's error break path runs for real.
          ::close( fdOut2[0] );
          void ( *prev )( int ) = ::signal( SIGPIPE, SIG_IGN );
          conn.sendXml( "<pong/>" );
@@ -306,7 +320,7 @@ SCENARIO( "IndiConnection processes real INDI traffic over pipes", "[IndiConnect
          TestConnection conn;
          conn.setOutputFd( -1 );
          conn.sendXml( "<nothing/>" );
-         REQUIRE( true );
+         REQUIRE( true ); // The call must return without touching any descriptor.
       }
    }
 
@@ -329,7 +343,7 @@ SCENARIO( "IndiConnection processes real INDI traffic over pipes", "[IndiConnect
          conn.enableVerboseMode( true );
          REQUIRE( conn.isVerboseModeEnabled() );
 
-         conn.callDetachFds();
+         conn.callDetachFds(); // Resets both descriptors to -1 without closing anything.
       }
    }
 }

@@ -1,8 +1,10 @@
 /** \file Thread_test.cpp
   * \brief Catch2 tests for pcf::Thread, pcf::MutexLock, and pcf::ReadWriteLock.
   *
-  * All thread behavior is exercised with real threads; the lock error branches
-  * that are exercised use real pthread deadlock detection (EDEADLK), not mocks.
+  * No mocks are used. All thread behavior runs on real pthreads. The trigger tests use a
+  * real loopback datagram socket. The failed pipe test lowers RLIMIT_NOFILE for real. The
+  * lock error branches rely on real pthread deadlock detection, which returns EDEADLK. The
+  * Turbo scheduling test only reaches the failure path when run without real-time privileges.
   */
 #include "../../tests/catch2/catch.hpp"
 
@@ -18,7 +20,7 @@
 namespace Thread_test
 {
 
-/// Counts execute() calls; used to observe the run loop doing work.
+/// Counts execute() calls so a test can observe the run loop doing work.
 class CountingThread : public pcf::Thread
 {
  public:
@@ -49,6 +51,9 @@ class ThrowingIntThread : public pcf::Thread
    }
 };
 
+// Verifies the full pcf::Thread life cycle on real threads. This covers start, pause,
+// resume, the datagram trigger, stop, copying, exceptions escaping execute(), scheduling
+// options, a failed self-pipe, the sleep helpers, and the error message table.
 SCENARIO( "Thread lifecycle: start, pause, resume, trigger, stop", "[Thread]" )
 {
    GIVEN( "a counting thread with a short interval" )
@@ -60,12 +65,12 @@ SCENARIO( "Thread lifecycle: start, pause, resume, trigger, stop", "[Thread]" )
          REQUIRE( t.getInterval() == 1 );
          REQUIRE( t.getState() == pcf::Thread::Idle );
          REQUIRE( !t.isRunning() );
-         REQUIRE( t.join() != 0 ); // join before start: not running
+         REQUIRE( t.join() != 0 ); // Joining before start fails because nothing is running.
 
          REQUIRE( t.start() == 0 );
          t.waitForReady();
          REQUIRE( t.isRunning() );
-         REQUIRE( t.start() != 0 ); // already running
+         REQUIRE( t.start() != 0 ); // A second start fails because it is already running.
 
          // Let it do some work.
          for( int i = 0; i < 200 && t.m_count.load() == 0; ++i )
@@ -75,10 +80,11 @@ SCENARIO( "Thread lifecycle: start, pause, resume, trigger, stop", "[Thread]" )
          REQUIRE( t.m_count.load() > 0 );
          REQUIRE( t.getState() == pcf::Thread::Execute );
 
-         // Pause: the loop enters the self-pipe select; resume writes the pipe.
+         // On pause the loop blocks in a select() on its self-pipe. Resume writes to the pipe
+         // to wake it.
          t.pause();
          REQUIRE( t.isPaused() );
-         pcf::Thread::msleep( 50 ); // let the loop actually block in select
+         pcf::Thread::msleep( 50 ); // Give the loop time to actually block in select().
          int paused = t.m_count.load();
          t.resume();
          REQUIRE( !t.isPaused() );
@@ -98,8 +104,9 @@ SCENARIO( "Thread lifecycle: start, pause, resume, trigger, stop", "[Thread]" )
          REQUIRE( !t.isStopping() );
          t.stop();
          REQUIRE( t.isStopping() );
-         // join() races with the loop's own exit: 0 if we joined it, -EHOSTDOWN if
-         // the thread had already finished and cleared its running flag.
+         // join() races with the exit of the loop itself. It returns 0 if the join happened
+         // here. It returns -EHOSTDOWN if the thread had already finished and cleared its
+         // running flag.
          int j = t.join();
          REQUIRE( ( j == 0 || j == -EHOSTDOWN ) );
          REQUIRE( !t.isRunning() );
@@ -112,7 +119,7 @@ SCENARIO( "Thread lifecycle: start, pause, resume, trigger, stop", "[Thread]" )
          trigger.bind();
 
          CountingThread t;
-         t.setInterval( 0 ); // rely on the trigger, not the interval
+         t.setInterval( 0 ); // Rely on the trigger rather than the interval.
          t.setTrigger( &trigger );
          REQUIRE( t.start() == 0 );
          t.waitForReady();
@@ -128,9 +135,9 @@ SCENARIO( "Thread lifecycle: start, pause, resume, trigger, stop", "[Thread]" )
          }
          REQUIRE( t.m_count.load() > 0 );
 
-         // Make sure the loop is parked back in the trigger select (no data
-         // pending) so stop()'s signal interrupts the select itself and the
-         // loop exits through the post-select stop check.
+         // Wait until the loop is parked back in the trigger select with no data pending.
+         // Then the signal sent by stop() interrupts the select itself and the loop exits
+         // through the stop check that follows the select.
          pcf::Thread::msleep( 50 );
          t.stop();
          int j = t.join();
@@ -152,9 +159,9 @@ SCENARIO( "Thread lifecycle: start, pause, resume, trigger, stop", "[Thread]" )
          REQUIRE( t.start() == 0 );
          t.waitForReady();
 
-         // No datagram is ever sent, so the loop blocks inside the trigger
-         // select. stop()'s pthread_kill interrupts the select and the loop
-         // exits through the post-select stop check.
+         // No datagram is ever sent, so the loop blocks inside the trigger select. The
+         // pthread_kill() issued by stop() interrupts the select and the loop exits through
+         // the stop check that follows the select.
          pcf::Thread::msleep( 50 );
          t.stop();
          int j = t.join();
@@ -185,10 +192,10 @@ SCENARIO( "Thread lifecycle: start, pause, resume, trigger, stop", "[Thread]" )
          pcf::Thread b( a );
          REQUIRE( b.getInterval() == 7 );
 
-         // NOTE: operator= re-locks m_mutReady, which the constructor leaves locked
-         // until the thread's runLoop() unlocks it -- so assigning onto a thread that
-         // has never been started self-deadlocks. Run the target thread once first,
-         // which leaves m_mutReady unlocked, matching operator='s expectation.
+         // NOTE: operator= locks m_mutReady again. The constructor leaves that mutex locked
+         // until runLoop() unlocks it. So assigning onto a thread that has never been started
+         // deadlocks on itself. To avoid that, the target thread is run once first. That
+         // leaves m_mutReady unlocked, which is what operator= expects.
          pcf::Thread c;
          c.setInterval( 1 );
          REQUIRE( c.start() == 0 );
@@ -198,7 +205,7 @@ SCENARIO( "Thread lifecycle: start, pause, resume, trigger, stop", "[Thread]" )
 
          c = a;
          REQUIRE( c.getInterval() == 7 );
-         c = c; // self-assignment branch
+         c = c; // This takes the self-assignment branch.
          REQUIRE( c.getInterval() == 7 );
       }
    }
@@ -240,12 +247,12 @@ SCENARIO( "Thread lifecycle: start, pause, resume, trigger, stop", "[Thread]" )
 
       WHEN( "requesting Turbo (SCHED_FIFO) scheduling without privileges" )
       {
-         // A non-root process cannot create a SCHED_FIFO max-priority thread, so
-         // this genuinely exercises the failed-create path.
+         // A process without real-time privileges cannot create a SCHED_FIFO thread at
+         // maximum priority, so this genuinely exercises the failed-create path.
          CountingThread t;
          t.setInterval( 1 );
          int rv = t.start( -1, pcf::Thread::Turbo );
-         if( rv == 0 ) // in case the environment does grant RT scheduling
+         if( rv == 0 ) // Some environments do grant real-time scheduling.
          {
             t.stop();
             t.join();
@@ -258,9 +265,8 @@ SCENARIO( "Thread lifecycle: start, pause, resume, trigger, stop", "[Thread]" )
    {
       WHEN( "resume and resumeOnce report the failed pipe write" )
       {
-         // Exhaust the file-descriptor limit for real while the Thread
-         // constructor runs, so its pipe() call genuinely fails and the
-         // self-pipe fds stay -1.
+         // Exhaust the file descriptor limit for real while the Thread constructor runs.
+         // Its pipe() call then genuinely fails and the self-pipe descriptors stay -1.
          struct rlimit old;
          REQUIRE( getrlimit( RLIMIT_NOFILE, &old ) == 0 );
          struct rlimit low = old;
@@ -310,6 +316,9 @@ SCENARIO( "Thread lifecycle: start, pause, resume, trigger, stop", "[Thread]" )
    }
 }
 
+// Verifies the scoped lock guards for pcf::MutexLock and pcf::ReadWriteLock. A null pointer
+// must be rejected, and the write-then-write and write-then-read misuse cases must throw
+// because glibc reports EDEADLK for them.
 SCENARIO( "MutexLock and ReadWriteLock guards and error branches", "[locks]" )
 {
    GIVEN( "a MutexLock" )

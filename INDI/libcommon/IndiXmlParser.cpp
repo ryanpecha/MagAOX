@@ -1143,12 +1143,14 @@ void IndiXmlParser::createEnableBLOB( const IndiProperty &ip )
 ////////////////////////////////////////////////////////////////////////////////
 ///  Copy constructor.
 
-// This copy constructor (and operator= below) cannot execute without crashing:
-// lilxml's cloneLilXML() dereferences the parser's current-element cursor, which
-// is NULL except mid-parse, and cloneXMLEle() dereferences m_pxeRoot, which is
-// NULL except after a complete parse -- the two conditions are mutually
-// exclusive, so one of the clone calls always dereferences NULL. Nothing in
-// this codebase copies a parser (it would crash if it did).
+// This copy constructor and the operator= below cannot run without crashing.
+// cloneLilXML() reads the current element of the source parser.
+// That element is NULL except in the middle of a parse.
+// cloneXMLEle() reads m_pxeRoot of the source parser.
+// That root is NULL until a parse has completed.
+// The two conditions cannot hold at the same time.
+// So one of the two clone calls always dereferences NULL.
+// Nothing in this codebase copies a parser.
 // LCOV_EXCL_START
 IndiXmlParser::IndiXmlParser( const IndiXmlParser &ixp )
 {
@@ -1171,7 +1173,8 @@ IndiXmlParser::~IndiXmlParser()
 ////////////////////////////////////////////////////////////////////////////////
 /// Assigns the internal data of this object from an existing one.
 
-// See the copy constructor above -- guaranteed to crash, never used.
+// See the copy constructor above. This operator always crashes for the
+// same reason, and nothing calls it.
 // LCOV_EXCL_START
 const IndiXmlParser &IndiXmlParser::operator=( const IndiXmlParser &ixpRhs )
 {
@@ -1311,7 +1314,7 @@ string IndiXmlParser::getAttributeValue( const string &szAttributeName,
     XMLEle *pxeRoot ) const
 {
   if ( pxeRoot == NULL )
-    return ""; // LCOV_EXCL_LINE - private helper, every caller passes m_pxeRoot under a non-NULL check
+    return ""; // LCOV_EXCL_LINE This helper is private. Every caller passes m_pxeRoot and checks it for NULL first.
 
   XMLAtt *attrib = ::findXMLAtt( pxeRoot, szAttributeName.c_str() );
 
@@ -1788,8 +1791,9 @@ IndiMessage::Type IndiXmlParser::extractMessage( const std::string &szXml,
 ////////////////////////////////////////////////////////////////////////////////
 /// Returns the string type given the enumerated type.
 
-// Private, and nothing ever calls it (MessageType is a private enum, and no
-// method of this class uses it), so it is uncallable dead code.
+// This method is private and nothing calls it.
+// MessageType is a private enum and no method of this class uses it.
+// The method is dead code that cannot run.
 // LCOV_EXCL_START
 string IndiXmlParser::convertTypeToString( const IndiXmlParser::MessageType &tType )
 {

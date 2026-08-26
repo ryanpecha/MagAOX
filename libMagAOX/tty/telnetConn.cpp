@@ -62,8 +62,9 @@ int telnetConn::connect( const std::string & host,
    /* bind server socket */
    memset(&addr, 0, sizeof(addr));
    addr.sin_family = AF_INET;
-   // Binding to port 0/INADDR_ANY (the only values ever set here) lets the kernel pick
-   // any free ephemeral port, which essentially never fails.
+   // The address here is always port 0 with INADDR_ANY.
+   // That lets the kernel pick any free ephemeral port.
+   // Such a bind() essentially never fails.
    // LCOV_EXCL_START
    if (bind(m_sock, (struct sockaddr *)&addr, sizeof(addr)) == -1)
    {
@@ -83,7 +84,8 @@ int telnetConn::connect( const std::string & host,
    /* initialize the telnet box */
    m_telnet = telnet_init(telopts, telnetConn::event_handler, 0, this);
 
-   // telnet_init() only returns nullptr on a failed internal malloc().
+   // telnet_init() returns nullptr only when its internal malloc() fails.
+   // A unit test cannot force that.
    // LCOV_EXCL_START
    if(m_telnet == nullptr)
    {
@@ -169,10 +171,11 @@ int telnetConn::login( const std::string & username,
       #endif
    }
 
-   // The poll() above uses a fixed real 30-second timeout; genuinely waiting it out isn't
-   // practical in a unit test (and there's no test-only override for it, unlike e.g.
-   // ttyUSB.cpp's sysfs path/prefix, since this class isn't currently structured for the
-   // XWCTEST_NAMESPACE re-inclusion pattern).
+   // The poll() above uses a fixed real timeout of 30 seconds.
+   // Waiting that out for real is not practical in a unit test.
+   // There is no test-only override for the timeout.
+   // ttyUSB.cpp has such an override for its sysfs path and prefix.
+   // This class is not currently structured for the XWCTEST_NAMESPACE re-inclusion pattern.
    // LCOV_EXCL_START
    if(pollrv == 0)
    {
@@ -375,8 +378,9 @@ int telnetConn::send(int sock, const char *buffer, size_t size)
          fprintf(stderr, "send() failed: %s\n", strerror(errno));
          return TTY_E_ERRORONWRITE;
       }
-      // POSIX doesn't define a case where send() returns 0 for a connected stream socket
-      // with a non-zero buffer size -- defensive, not reachable in practice.
+      // POSIX does not define a case where send() returns 0 for a connected
+      // stream socket with a non-zero buffer size.
+      // This check is defensive. It is not reachable in practice.
       // LCOV_EXCL_START
       else if (rs == 0)
       {
@@ -415,8 +419,10 @@ void telnetConn::event_handler( telnet_t *telnet,
          //First we remove the various control chars from the front.
          if(ev->data.size == 0) break;
 
+         // Bug fix. The code used to write a terminator at buf[ev->data.size], one byte
+         // past the buffer that libtelnet owns. The string is now built from an explicit
+         // length below, so no terminator is needed.
          char * buf = const_cast<char *>(ev->data.buffer);
-         buf[ev->data.size] = 0;
 
          int nn = 0;
          for(size_t i=0; i<ev->data.size; ++i)
@@ -450,8 +456,10 @@ void telnetConn::event_handler( telnet_t *telnet,
          std::cerr << "dezeroed: " << mm << "\n";
          #endif
 
-         //Now make it a string so we can make use of it.
-         std::string sbuf(buf);
+         // Now make it a string so we can make use of it. The length skips the nn control
+         // characters removed from the front. Embedded zeros were replaced above, so the
+         // result matches what the old terminator based construction produced.
+         std::string sbuf(buf, ev->data.size - nn);
 
          if(sbuf.size() == 0) break;
 
@@ -537,8 +545,9 @@ void telnetConn::event_handler( telnet_t *telnet,
          break;
       }
       /* error */
-      // libtelnet only raises a fatal TELNET_EV_ERROR (vs. EV_WARNING) for an internal
-      // zlib/MCCP compression failure -- not reachable by feeding it plain protocol bytes.
+      // libtelnet raises a fatal TELNET_EV_ERROR only for an internal zlib or
+      // MCCP compression failure. Lesser problems raise TELNET_EV_WARNING instead.
+      // Feeding it plain protocol bytes cannot reach this case.
       // LCOV_EXCL_START
       case TELNET_EV_ERROR:
       {
@@ -547,11 +556,12 @@ void telnetConn::event_handler( telnet_t *telnet,
          break;
       }
       // LCOV_EXCL_STOP
-      // Catches libtelnet event types (EV_WARNING, EV_COMPRESS, EV_ZMP, EV_ENVIRON,
-      // EV_MSSP) this class never triggers: it only passively responds to the peer's
-      // WILL/WONT/DO/DONT per its telopts stance and never itself calls
-      // telnet_negotiate(), so it can't create the RFC1143 state race (e.g. "DONT
-      // answered by WILL") that would raise a non-fatal protocol warning.
+      // This catches the libtelnet event types this class never triggers.
+      // Those are EV_WARNING, EV_COMPRESS, EV_ZMP, EV_ENVIRON, and EV_MSSP.
+      // This class only passively answers the peer's WILL, WONT, DO, and DONT
+      // according to its telopts stance. It never calls telnet_negotiate() itself.
+      // So it cannot create the RFC1143 state race that would raise a non-fatal
+      // protocol warning. One example of that race is a DONT answered by a WILL.
       // LCOV_EXCL_START
       default:
       {

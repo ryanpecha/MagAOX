@@ -1,3 +1,18 @@
+/** \file dm_test.hpp
+  * \brief Test harnesses for the MagAOX::app::dev::dm device mixin.
+  *
+  * Declares dmTest, a MagAOXApp<false> that mixes in dm<dmTest, float> and a real
+  * shmimMonitor base. The hardware hooks initDM(), zeroDM(), releaseDM(), and commandDM()
+  * are stubs whose return values a test can set. The harness exposes protected dm<> state,
+  * the INDI properties and callbacks, and the saturation thread bookkeeping so tests can
+  * drive each branch directly without a full appStartup(). It also exposes a few
+  * MagAOXApp<false> functions that MagAOXApp_test.cpp cannot reach, because that file only
+  * instantiates MagAOXApp<true>.
+  *
+  * Also declares dmTestBadType, a minimal harness with an unsupported DM data type.
+  *
+  * \ingroup dm_tests
+  */
 
 #include "../../MagAOXApp.hpp"
 #include "../dm.hpp"
@@ -46,9 +61,11 @@ struct dmTest : public MagAOX::app::MagAOXApp<false>,
     {
     }
 
-    // Constructs a real (but FIFO-less) indiDriver so m_indiDriver != nullptr, the same
-    // pattern used in shmimMonitor_test.cpp/frameGrabber_test.cpp -- indi::updateIfChanged()
-    // and friends catch their own send failures, so this doesn't need a live INDI server.
+    /// Set the config name and attach a real indiDriver that has no FIFOs.
+    /// Afterwards m_indiDriver is not null, so the code paths that send INDI updates run.
+    /// Helpers such as indi::updateIfChanged() catch their own send failures, so no live
+    /// INDI server is needed. shmimMonitor_test.cpp and frameGrabber_test.cpp use the
+    /// same pattern.
     void setConfigNameWithDriver( const std::string &cn )
     {
         m_configName = cn;
@@ -81,6 +98,8 @@ struct dmTest : public MagAOX::app::MagAOXApp<false>,
         return dmT::appShutdown();
     }
 
+    /// The next three functions forward the MagAOXApp hooks to the dm mixin so tests
+    /// can call them directly.
     int onPowerOff()
     {
         return dmT::onPowerOff();
@@ -96,6 +115,8 @@ struct dmTest : public MagAOX::app::MagAOXApp<false>,
         return dmT::updateINDI();
     }
 
+    /// Return values of the stub hardware hooks initDM(), zeroDM(), and releaseDM().
+    /// A test sets one of them to -1 to make that hook fail.
     int m_initDMRV{ 0 };
     int initDM()
     {
@@ -127,8 +148,9 @@ struct dmTest : public MagAOX::app::MagAOXApp<false>,
     /// If true, commandDM() returns -1 to exercise the processImage() error path.
     bool m_commandDMFail{ false };
 
-    /// Required derivedT interface, called from dm<>::processImage(). Just sets the
-    /// instantaneous saturation map to a test-controlled constant.
+    /// Stub for the hardware hook that dm<>::processImage() calls to command the DM.
+    /// It fills the instantaneous saturation map with m_testSatValue, or returns -1
+    /// when m_commandDMFail is set.
     int commandDM( void *curr_src )
     {
         static_cast<void>( curr_src );
@@ -143,7 +165,7 @@ struct dmTest : public MagAOX::app::MagAOXApp<false>,
         return 0;
     }
 
-    // -- test-only accessors for otherwise-protected dm<> state --
+    // Test-only accessors for dm<> state that is otherwise protected.
 
     size_t numFlatCommands()
     {
@@ -225,9 +247,9 @@ struct dmTest : public MagAOX::app::MagAOXApp<false>,
         return m_indiP_tests;
     }
 
-    /// Build the request/toggle INDI properties normally created by appStartup(), without
-    /// running the rest of appStartup() (thread creation, semaphores, etc). Lets tests drive
-    /// the newCallBack_* functions directly.
+    /// Build the request and toggle INDI properties that appStartup() normally creates.
+    /// The rest of appStartup() is skipped, so no thread or semaphore is created.
+    /// This lets tests call the newCallBack_* functions directly.
     void prepIndiForCallbackTests()
     {
         createStandardIndiToggleSw( m_indiP_setFlat, "flat_set" );
@@ -238,42 +260,47 @@ struct dmTest : public MagAOX::app::MagAOXApp<false>,
         createStandardIndiRequestSw( m_indiP_zeroAll, "zeroAll" );
     }
 
+    /// Fill both saturation maps with nonzero values so a later clearSat() has
+    /// something to clear.
     void setAccumSatNonzero()
     {
         m_accumSatMap.setConstant( 3 );
         m_instSatMap.setConstant( 1 );
     }
 
+    /// Set the shutdown flag the way a signal handler would.
     void requestShutdown()
     {
         m_shutdown = 1;
     }
 
-    /// Exposes MagAOXApp<false>::setupBasicConfig()'s "power management enabled but
-    /// _useINDI==false" critical-shutdown branch, which is otherwise unreachable from
-    /// MagAOXApp_test.cpp (that harness only instantiates MagAOXApp<true>).
+    /// Set the power management flag directly.
+    /// This reaches the critical-shutdown branch of MagAOXApp<false>::setupBasicConfig()
+    /// for power management enabled without INDI. MagAOXApp_test.cpp only instantiates
+    /// MagAOXApp<true>, so that branch cannot be reached from there.
     void setPowerMgtEnabled( bool pme )
     {
         m_powerMgtEnabled = pme;
     }
 
-    /// Exposes MagAOXApp<false>::startINDI()'s trivial-success branch when _useINDI is
-    /// false, also otherwise unreachable from MagAOXApp_test.cpp.
+    /// Call MagAOXApp<false>::startINDI(), which trivially succeeds when _useINDI is
+    /// false. This branch is also unreachable from MagAOXApp_test.cpp.
     int startINDI()
     {
         return MagAOX::app::MagAOXApp<false>::startINDI();
     }
 
-    /// Exposes MagAOXApp<false>::createINDIFIFOS()'s trivial-success branch, also
-    /// otherwise unreachable from MagAOXApp_test.cpp.
+    /// Call MagAOXApp<false>::createINDIFIFOS(), which trivially succeeds when INDI is
+    /// compiled out. This branch is also unreachable from MagAOXApp_test.cpp.
     int callCreateINDIFIFOS()
     {
         return MagAOX::app::MagAOXApp<false>::createINDIFIFOS();
     }
 
-    /// Exposes the MagAOXApp<false> (constexpr !m_useINDI) early-return branches of the
-    /// INDI handle* callbacks, also otherwise unreachable from MagAOXApp_test.cpp (which
-    /// only instantiates MagAOXApp<true>).
+    /// The next three functions call the INDI handle* callbacks of MagAOXApp<false>.
+    /// With m_useINDI false at compile time each callback returns immediately. These
+    /// branches are also unreachable from MagAOXApp_test.cpp, which only instantiates
+    /// MagAOXApp<true>.
     void callHandleGetProperties( const pcf::IndiProperty &ipRecv )
     {
         MagAOX::app::MagAOXApp<false>::handleGetProperties( ipRecv );
@@ -289,23 +316,26 @@ struct dmTest : public MagAOX::app::MagAOXApp<false>,
         MagAOX::app::MagAOXApp<false>::handleSetProperty( ipRecv );
     }
 
-    /// Exposes the two registerIndiPropertyNew() overloads that build the property from
-    /// type/perm/state (with and without an explicit switch rule) under MagAOXApp<false>,
-    /// otherwise unreachable from MagAOXApp_test.cpp (only MagAOXApp<true> there, and
-    /// neither overload is used by any dev:: mixin in this codebase).
+    /// Call the registerIndiPropertyNew() overload that builds the property from a type,
+    /// a permission, and a state, without a switch rule. No dev:: mixin uses this
+    /// overload and MagAOXApp_test.cpp only instantiates MagAOXApp<true>, so it is
+    /// otherwise untested.
     int callRegisterIndiPropertyNew( pcf::IndiProperty &prop, const std::string &propName )
     {
         return MagAOX::app::MagAOXApp<false>::registerIndiPropertyNew(
             prop, propName, pcf::IndiProperty::Number, pcf::IndiProperty::ReadWrite, pcf::IndiProperty::Idle, nullptr );
     }
 
-    /// Exposes MagAOXApp<false>::sendNewStandardIndiToggle()'s constexpr !_useINDI
-    /// trivial-success branch, also otherwise unreachable from MagAOXApp_test.cpp.
+    /// Call MagAOXApp<false>::sendNewStandardIndiToggle(), which trivially succeeds
+    /// when _useINDI is false at compile time. This branch is also unreachable from
+    /// MagAOXApp_test.cpp.
     int callSendNewStandardIndiToggle( const std::string &device, const std::string &property, bool onoff )
     {
         return MagAOX::app::MagAOXApp<false>::sendNewStandardIndiToggle( device, property, onoff );
     }
 
+    /// Same as callRegisterIndiPropertyNew() but uses the overload that also takes an
+    /// explicit switch rule.
     int callRegisterIndiPropertyNewWithRule( pcf::IndiProperty &prop, const std::string &propName )
     {
         return MagAOX::app::MagAOXApp<false>::registerIndiPropertyNew( prop,
@@ -317,23 +347,28 @@ struct dmTest : public MagAOX::app::MagAOXApp<false>,
                                                                        nullptr );
     }
 
-    /// sem_init() the saturation semaphore without running the rest of appStartup(),
-    /// so processImage()'s sem_post( &m_satSemaphore ) call is well-defined when tests
-    /// drive processImage() directly.
+    /// Initialize the saturation semaphore with sem_init() without running the rest of
+    /// appStartup(). processImage() posts this semaphore, so it must be valid when tests
+    /// call processImage() directly.
     void initSatSemaphoreForTest()
     {
         sem_init( &m_satSemaphore, 0, 0 );
     }
 
-    /// Direct control of the saturation thread's std::thread bookkeeping, mirroring
-    /// shmimMonitor_test.cpp's setSmThread()/abandonSmThread() pattern, so appLogic()'s
-    /// "saturation thread has exited" branch can be exercised without ever starting the
-    /// real thread (avoiding the real-thread-teardown hazards noted in dm_test.cpp).
+    /// Replace the saturation thread object with a caller-supplied std::thread.
+    /// This lets a test reach the appLogic() branch for a saturation thread that has
+    /// exited without ever starting the real thread. Tearing down the real thread is
+    /// hazardous, as explained in dm_test.cpp. setSmThread() and abandonSmThread() in
+    /// shmimMonitor_test.cpp follow the same pattern.
     void setSatThread( std::thread &&t )
     {
         m_satThread = std::move( t );
     }
 
+    /// Swap the saturation thread object out and overwrite the copy with an empty
+    /// thread. The handle is leaked on purpose. appLogic() has already reaped the thread
+    /// with pthread_tryjoin_np(), and destroying a joinable std::thread would call
+    /// std::terminate().
     void abandonSatThread()
     {
         std::thread tmp;
@@ -342,10 +377,12 @@ struct dmTest : public MagAOX::app::MagAOXApp<false>,
     }
 };
 
-/// A minimal harness using an unsupported ImageStreamIO data type (int has no
-/// ImageStreamTypeCode<> specialization, so m_dmDataType == 0), to exercise the
-/// appStartup() unsupported-data-type error path.
+/// A minimal harness that uses int as the DM data type.
 /**
+ * int has no ImageStreamTypeCode<> specialization, so m_dmDataType is 0 and
+ * appStartup() must reject it. This reaches the unsupported data type error path.
+ * The hooks initDM(), zeroDM(), releaseDM(), and commandDM() are stubs that succeed.
+ *
  * \ingroup dm_tests
  */
 struct dmTestBadType : public MagAOX::app::MagAOXApp<false>,

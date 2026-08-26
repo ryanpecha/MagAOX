@@ -1,8 +1,10 @@
 /** \file TimeStamp_test.cpp
-  * \brief Catch2 tests for pcf::TimeStamp (INDI/libcommon/TimeStamp.cpp).
+  * \brief Catch2 tests for pcf::TimeStamp in INDI/libcommon/TimeStamp.cpp.
   *
-  * Uses the fixed instant 2007-06-24T19:38:12.234000Z (a Sunday; unix epoch
-  * 1182713892) so every formatted output can be asserted exactly.
+  * Most tests use the fixed instant 2007-06-24T19:38:12.234000Z so every formatted output
+  * can be asserted exactly. That instant is a Sunday and its Unix epoch value is 1182713892.
+  * One test sets the TZ environment variable for real so the time zone save and restore
+  * path in the library runs. The variable is unset again afterward.
   */
 #include "../../tests/catch2/catch.hpp"
 
@@ -18,21 +20,25 @@ using pcf::TimeStamp;
 namespace TimeStamp_test
 {
 
+/// Returns the fixed reference instant used throughout these tests.
 static TimeStamp fixed()
 {
    timeval tv;
-   tv.tv_sec  = 1182713892; // 2007-06-24T19:38:12Z, a Sunday
+   tv.tv_sec  = 1182713892; // 2007-06-24T19:38:12Z, which is a Sunday.
    tv.tv_usec = 234000;
    return TimeStamp( tv );
 }
 
+// Verifies every constructor and assignment form, then the arithmetic, comparison, elapsed
+// time, and scalar conversion operators. The add and subtract cases are chosen so both the
+// microsecond carry and borrow branches run.
 SCENARIO( "TimeStamp construction, assignment, and arithmetic", "[TimeStamp]" )
 {
    GIVEN( "the various constructors and assignments" )
    {
       WHEN( "constructing each way" )
       {
-         TimeStamp tsNow; // default = now
+         TimeStamp tsNow; // The default constructor captures the current time.
          REQUIRE( tsNow.getTimeVal().tv_sec > 1182713892 );
 
          TimeStamp tsFixed = fixed();
@@ -46,8 +52,8 @@ SCENARIO( "TimeStamp construction, assignment, and arithmetic", "[TimeStamp]" )
          TimeStamp tsYmd( 2007, 6, 24, 19, 38, 12 );
          REQUIRE( tsYmd.getTimeVal().tv_sec == 1182713892 );
 
-         // With TZ set in the environment, local_timegm() takes its save-and-
-         // restore branch for real.
+         // With TZ set in the environment, local_timegm() takes its save and restore
+         // branch for real.
          setenv( "TZ", "America/Phoenix", 1 );
          tzset();
          TimeStamp tsYmdTz( 2007, 6, 24, 19, 38, 12 );
@@ -61,7 +67,7 @@ SCENARIO( "TimeStamp construction, assignment, and arithmetic", "[TimeStamp]" )
          TimeStamp tsAssigned;
          tsAssigned = tsFixed;
          REQUIRE( tsAssigned == tsFixed );
-         tsAssigned = tsAssigned; // self-assignment branch
+         tsAssigned = tsAssigned; // This takes the self-assignment branch.
          REQUIRE( tsAssigned == tsFixed );
 
          timeval tv;
@@ -85,22 +91,22 @@ SCENARIO( "TimeStamp construction, assignment, and arithmetic", "[TimeStamp]" )
 
       WHEN( "subtracting with and without the microsecond borrow" )
       {
-         TimeStamp d1 = b - a; // 0.75s + 0.25s: usec 750000-500000 >= 0
+         TimeStamp d1 = b - a; // The microsecond difference 750000-500000 is not negative. No borrow.
          REQUIRE( d1.getTimeVal().tv_sec == 1 );
          REQUIRE( d1.getTimeVal().tv_usec == 250000 );
 
-         TimeStamp d2 = a - b; // usec 500000-750000 < 0: borrow
+         TimeStamp d2 = a - b; // The microsecond difference 500000-750000 is negative. Borrow.
          REQUIRE( d2.getTimeVal().tv_usec == 750000 );
       }
 
       WHEN( "adding with and without the microsecond carry" )
       {
-         TimeStamp s1 = a + b; // usec 500000+750000 >= 1e6: carry
+         TimeStamp s1 = a + b; // The microsecond sum 500000+750000 reaches one second. Carry.
          REQUIRE( s1.getTimeVal().tv_sec == 4 );
          REQUIRE( s1.getTimeVal().tv_usec == 250000 );
 
          TimeStamp small( 100 ); // 0.1 s
-         TimeStamp s2 = a + small; // usec 500000+100000 < 1e6: no carry
+         TimeStamp s2 = a + small; // The microsecond sum 500000+100000 stays below one second. No carry.
          REQUIRE( s2.getTimeVal().tv_sec == 1 );
          REQUIRE( s2.getTimeVal().tv_usec == 600000 );
       }
@@ -125,7 +131,7 @@ SCENARIO( "TimeStamp construction, assignment, and arithmetic", "[TimeStamp]" )
          REQUIRE( a.elapsedDays( b ) == Approx( 1250.0 / 86400000.0 ) );
 
          TimeStamp past( 0 );
-         REQUIRE( past.intervalElapsedMillis( 0 ) == true ); // resets to now
+         REQUIRE( past.intervalElapsedMillis( 0 ) == true ); // This also resets the stamp to now.
          TimeStamp now2 = TimeStamp::now();
          REQUIRE( now2.intervalElapsedMillis( 1000000000 ) == false );
       }
@@ -139,12 +145,15 @@ SCENARIO( "TimeStamp construction, assignment, and arithmetic", "[TimeStamp]" )
          REQUIRE( a.getMillisStr() == "1500" );
 
          std::ostringstream oss;
-         oss << fixed(); // operator<<
+         oss << fixed(); // This exercises operator<<.
          REQUIRE( oss.str() == "Sun Jun 24 19:38:12.234 2007" );
       }
    }
 }
 
+// Verifies the string formatters, the calendar field accessors, day stepping, and the round
+// trips through Modified Julian Date and ISO 8601 text. The month and weekday lookup tables
+// are checked entry by entry, including the out-of-range fallbacks.
 SCENARIO( "TimeStamp formatted output and field extraction", "[TimeStamp]" )
 {
    GIVEN( "the fixed instant 2007-06-24T19:38:12.234000Z" )

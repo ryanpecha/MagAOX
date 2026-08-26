@@ -17,6 +17,9 @@
 
 #include "../common/defaults.hpp"
 
+// Test-only fault hooks. Every XWCTEST_IF_ macro expands to an empty statement unless
+// a test defines the matching XWCTEST_ name before including this header. Each hook
+// below throws inside a try block so the real handler after it runs.
 #include "tests/testMacros.hpp"
 
 namespace MagAOX

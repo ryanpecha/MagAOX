@@ -1,9 +1,11 @@
 /** \file SystemSocket_test.cpp
-  * \brief Catch2 tests for pcf::SystemSocket (INDI/libcommon/SystemSocket.cpp).
+  * \brief Catch2 tests for pcf::SystemSocket in INDI/libcommon/SystemSocket.cpp.
   *
-  * All paths are exercised with real sockets on the loopback interface -- TCP
-  * client/server pairs, UDP datagrams, and real error conditions (refused
-  * connections, privileged ports, closed peers, invalid descriptors).
+  * No mocks are used. Every path is exercised with real sockets on the loopback
+  * interface. This includes TCP client and server pairs, UDP datagrams, and real
+  * error conditions such as refused connections, closed peers, invalid descriptors,
+  * and an exhausted file descriptor limit set with setrlimit(). The tests bind fixed
+  * loopback ports in the 52000 range, so they must not run in parallel with each other.
   */
 #include "../../tests/catch2/catch.hpp"
 
@@ -21,6 +23,9 @@ using pcf::SystemSocket;
 namespace SystemSocket_test
 {
 
+// Verifies the constructors, copy semantics, and the static address and interface helpers.
+// Copies must not share the file descriptor, and assignment must close any descriptor the
+// target already owns.
 SCENARIO( "SystemSocket construction, copying, and static helpers", "[SystemSocket]" )
 {
    GIVEN( "constructors and copies" )
@@ -102,6 +107,9 @@ SCENARIO( "SystemSocket construction, copying, and static helpers", "[SystemSock
    }
 }
 
+// Verifies a full TCP round trip on loopback. A real server listens, a real client connects,
+// and data is exchanged with both the string and chunk interfaces. Socket options and a peer
+// that closes in the middle of a chunk read are also checked.
 SCENARIO( "SystemSocket TCP end to end on loopback", "[SystemSocket]" )
 {
    GIVEN( "a listening server and a client" )
@@ -170,8 +178,8 @@ SCENARIO( "SystemSocket TCP end to end on loopback", "[SystemSocket]" )
          accepted.sendChunk( part, n );
          accepted.close();
 
-         // Ask for more than was sent: after the 3 bytes, recv() returns 0
-         // (peer shutdown), which throws ECONNRESET.
+         // Ask for more than was sent. After the 3 bytes, recv() returns 0 because the
+         // peer shut down, and the wrapper throws ECONNRESET.
          char buf[10];
          n = 10;
          REQUIRE_THROWS_AS( client.recvChunk( buf, n ), SystemSocket::Error );
@@ -186,6 +194,9 @@ SCENARIO( "SystemSocket TCP end to end on loopback", "[SystemSocket]" )
    }
 }
 
+// Verifies datagram send and receive on loopback with both the string and chunk interfaces.
+// A receiver of the multicast type is also fed plain loopback datagrams so that its distinct
+// receive branches run for real.
 SCENARIO( "SystemSocket UDP and multicast-type paths on loopback", "[SystemSocket]" )
 {
    GIVEN( "a bound datagram receiver and a sender" )
@@ -220,9 +231,9 @@ SCENARIO( "SystemSocket UDP and multicast-type paths on loopback", "[SystemSocke
 
    GIVEN( "a multicast-type receiver bound to INADDR_ANY" )
    {
-      // The multicast type only changes socket options and the recv-side
-      // address handling; a plain loopback datagram still reaches it, which
-      // exercises the multicast branches of recvFrom/recvChunkFrom for real.
+      // The multicast type only changes socket options and the receive-side address
+      // handling. A plain loopback datagram still reaches it. That exercises the multicast
+      // branches of recvFrom() and recvChunkFrom() for real.
       SystemSocket mrx( SystemSocket::enumMulticast, 52021, "" );
       mrx.create();
       mrx.bind();
@@ -248,7 +259,7 @@ SCENARIO( "SystemSocket UDP and multicast-type paths on loopback", "[SystemSocke
          mc.create();
          try
          {
-            mc.join(); // needs a multicast-capable interface; fine either way
+            mc.join(); // This needs a multicast-capable interface. Either outcome is acceptable.
          }
          catch( const SystemSocket::Error & )
          {
@@ -261,6 +272,9 @@ SCENARIO( "SystemSocket UDP and multicast-type paths on loopback", "[SystemSocke
    }
 }
 
+// Verifies that operations on a never-created socket throw, and that the operating system
+// rejections for a duplicate bind, listening on a datagram socket, accepting without
+// listening, a refused connection, and an unroutable connect all surface as exceptions.
 SCENARIO( "SystemSocket real error paths", "[SystemSocket]" )
 {
    GIVEN( "an invalid (never-created) socket" )
@@ -335,9 +349,9 @@ SCENARIO( "SystemSocket real error paths", "[SystemSocket]" )
 
       WHEN( "connecting to a blackhole address times out" )
       {
-         // 10.255.255.1 is not routed here, so the non-blocking connect stays
-         // pending and the select() times out (or the network stack reports
-         // unreachability -- a real failure either way).
+         // 10.255.255.1 is not routed here, so the non-blocking connect stays pending and
+         // the select() times out. On some hosts the network stack reports the address as
+         // unreachable instead. Both are real failures and both must throw.
          SystemSocket s( SystemSocket::Stream, 80, "10.255.255.1" );
          s.setConnectTimeout( 300 );
          REQUIRE_THROWS_AS( s.connect(), SystemSocket::Error );
@@ -349,6 +363,10 @@ SCENARIO( "SystemSocket real error paths", "[SystemSocket]" )
    }
 }
 
+// Verifies the remaining fault paths and the entry points that create or bind a socket on
+// demand. The socket() failures are produced by lowering RLIMIT_NOFILE for real. The stale
+// descriptor, zero-length datagram, port 0, closed peer, and bad option cases are all real
+// kernel rejections.
 SCENARIO( "SystemSocket remaining real fault and auto-create paths", "[SystemSocket]" )
 {
    GIVEN( "sockets left to their destructors and re-created" )
@@ -359,7 +377,7 @@ SCENARIO( "SystemSocket remaining real fault and auto-create paths", "[SystemSoc
             SystemSocket s( SystemSocket::Datagram, 52050, "127.0.0.1" );
             s.create();
             REQUIRE( s.isValid() );
-         } // destructor closes it
+         } // The destructor closes it here.
          REQUIRE( true );
       }
 
@@ -367,11 +385,11 @@ SCENARIO( "SystemSocket remaining real fault and auto-create paths", "[SystemSoc
       {
          SystemSocket s( SystemSocket::Datagram, 52062, "127.0.0.1" );
          s.create();
-         ::close( s.getFd() ); // the object's fd is now stale
-         REQUIRE_THROWS_AS( s.close(), SystemSocket::Error ); // ::close -> EBADF
+         ::close( s.getFd() ); // The descriptor held by the object is now stale.
+         REQUIRE_THROWS_AS( s.close(), SystemSocket::Error ); // ::close() fails with EBADF.
 
-         // Revive the fd so the destructor's close() succeeds instead of
-         // terminating the process.
+         // Revive the descriptor number so the close() in the destructor succeeds instead
+         // of terminating the process.
          int dummy = ::open( "/dev/null", O_RDONLY );
          REQUIRE( dummy >= 0 );
          REQUIRE( ::dup2( dummy, s.getFd() ) == s.getFd() );
@@ -410,12 +428,12 @@ SCENARIO( "SystemSocket remaining real fault and auto-create paths", "[SystemSoc
          SystemSocket sm( SystemSocket::enumMulticast, 52052, "127.0.0.1" );
          REQUIRE_THROWS_AS( sm.create(), SystemSocket::Error );
 
-         // getInterfaces' internal socket() also fails.
+         // The internal socket() call inside getInterfaces() also fails.
          std::vector<SystemSocket::Interface> ifaces;
          REQUIRE( SystemSocket::getInterfaces( ifaces ) == -1 );
 
-         // recvFrom/recvChunkFrom on an invalid socket reach their internal
-         // create() calls, which fail here -- no blocking recvfrom needed.
+         // recvFrom() and recvChunkFrom() on an invalid socket reach their internal
+         // create() calls, which fail here. No blocking recvfrom() is needed.
          SystemSocket sr( SystemSocket::Datagram, 52061, "127.0.0.1" );
          REQUIRE_THROWS_AS( sr.recvFrom(), SystemSocket::Error );
          char b[4];
@@ -431,7 +449,7 @@ SCENARIO( "SystemSocket remaining real fault and auto-create paths", "[SystemSoc
       WHEN( "listen() on a fresh socket binds it first" )
       {
          SystemSocket s( SystemSocket::Stream, 52053, "127.0.0.1" );
-         s.listen(); // isBound false -> bind -> (create) -> listen
+         s.listen(); // Not bound yet, so listen() calls bind(), which calls create() first.
          REQUIRE( s.isBound() );
          s.close();
       }
@@ -447,23 +465,23 @@ SCENARIO( "SystemSocket remaining real fault and auto-create paths", "[SystemSoc
       WHEN( "the sendTo/recvFrom family auto-creates fresh sockets" )
       {
          SystemSocket rx( SystemSocket::Datagram, 52055, "127.0.0.1" );
-         rx.bind(); // also auto-creates
+         rx.bind(); // This also creates the socket.
 
          SystemSocket tx( SystemSocket::Datagram, 52055, "127.0.0.1" );
-         tx.sendTo( "auto1" ); // auto-creates
+         tx.sendTo( "auto1" ); // This creates the socket.
          REQUIRE( rx.recvFrom() == "auto1" );
 
          SystemSocket tx2( SystemSocket::Datagram, 52055, "127.0.0.1" );
          char out[6] = "auto2";
          int  n = 5;
-         tx2.sendChunkTo( out, n ); // auto-creates
+         tx2.sendChunkTo( out, n ); // This creates the socket.
          char in[6];
          n = 5;
          rx.recvChunkFrom( in, n );
          REQUIRE( std::string( in, 5 ) == "auto2" );
 
-         // recvFrom/recvChunkFrom auto-create: fresh sockets with a receive
-         // timeout so the recvfrom genuinely times out (error branch).
+         // Fresh sockets with a short receive timeout, so recvfrom() genuinely times out
+         // and the error branches of recvFrom() and recvChunkFrom() run.
          SystemSocket rx2( SystemSocket::Datagram, 52056, "127.0.0.1" );
          rx2.create();
          rx2.bind();
@@ -489,9 +507,9 @@ SCENARIO( "SystemSocket remaining real fault and auto-create paths", "[SystemSoc
 
          SystemSocket tx( SystemSocket::Datagram, 52057, "127.0.0.1" );
          tx.create();
-         tx.sendTo( "" ); // real zero-length datagram
+         tx.sendTo( "" ); // A real zero-length datagram.
 
-         REQUIRE_THROWS_AS( rx.recvFrom(), SystemSocket::Error ); // nRet==0 -> ECONNRESET
+         REQUIRE_THROWS_AS( rx.recvFrom(), SystemSocket::Error ); // A zero return is reported as ECONNRESET.
 
          tx.sendTo( "" );
          char b[4];
@@ -550,7 +568,7 @@ SCENARIO( "SystemSocket remaining real fault and auto-create paths", "[SystemSoc
          bool threw = false;
          try
          {
-            for( int i = 0; i < 100 && !threw; ++i ) // fill until RST arrives
+            for( int i = 0; i < 100 && !threw; ++i ) // Keep sending until the RST arrives.
             {
                client.send( "0123456789abcdef" );
             }
@@ -589,7 +607,7 @@ SCENARIO( "SystemSocket remaining real fault and auto-create paths", "[SystemSoc
       WHEN( "joining with an empty group address fails in setsockopt" )
       {
          SystemSocket mc( SystemSocket::enumMulticast, 52060, "" );
-         REQUIRE_THROWS_AS( mc.join(), SystemSocket::Error ); // INADDR_NONE group
+         REQUIRE_THROWS_AS( mc.join(), SystemSocket::Error ); // The group resolves to INADDR_NONE.
          mc.close();
       }
    }

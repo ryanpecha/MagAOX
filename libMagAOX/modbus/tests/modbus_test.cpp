@@ -18,6 +18,17 @@
 #undef private
 #include "../modbus_exception.hpp"
 
+// Technique notes for this file. The tests never talk to real Modbus hardware. Most of
+// them connect the modbus object to one end of a socketpair and play the server on the
+// other end from a background thread. The private members are reached by defining
+// private as public before the include. Fault injection: each block below compiles
+// modbus.hpp and modbus.cpp a second time inside a test namespace with one XWCTEST_
+// fault macro defined. The macro turns on one production error branch that a real
+// socket will not produce on demand. The include guard is undefined first so the header
+// is really re-read.
+
+// Makes modbus_set_timeouts() see the SO_SNDTIMEO setsockopt call fail after the real
+// call succeeded.
 #undef MODBUSPP_MODBUS_H
 #define XWCTEST_NAMESPACE XWCTEST_MODBUS_SET_TIMEOUTS_SNDTIMEO_FAIL_ns
 #define XWCTEST_MODBUS_SET_TIMEOUTS_SNDTIMEO_FAIL
@@ -28,6 +39,8 @@
 #undef XWCTEST_NAMESPACE
 #undef XWCTEST_MODBUS_SET_TIMEOUTS_SNDTIMEO_FAIL
 
+// Makes modbus_send() see one byte fewer sent than requested after a real, fully
+// successful send.
 #undef MODBUSPP_MODBUS_H
 #define XWCTEST_NAMESPACE XWCTEST_MODBUS_SEND_PARTIAL_ns
 #define XWCTEST_MODBUS_SEND_PARTIAL
@@ -43,10 +56,11 @@ namespace libXWCTest
 namespace modbusTest
 {
 
-/// Connects `mb` to one end of a fresh socketpair, runs `callModbus`, and while it runs, a
-/// background thread drains whatever request bytes arrive on the other end and (unless
-/// `response` is empty) sends `response` back. Blocks until both `callModbus` and the
-/// responder thread finish. `req`, if non-null, is filled with the bytes that were received.
+/// Connects mb to one end of a fresh socketpair and runs callModbus. While it runs, a
+/// background thread drains whatever request bytes arrive on the other end. Unless
+/// response is empty, the thread then sends response back. The function blocks until both
+/// callModbus and the responder thread finish. If req is not null it is filled with the
+/// bytes that were received.
 void runAgainstFakeServer( modbus &mb,
                             const std::vector<uint8_t> &response,
                             const std::function<void()> &callModbus,
@@ -77,9 +91,9 @@ void runAgainstFakeServer( modbus &mb,
             ::close( peer );
         } );
 
-    // callModbus() may throw (that's the whole point of the error-response tests), so the
-    // join has to happen no matter what -- a still-joinable std::thread calls
-    // std::terminate() when destroyed while unwinding.
+    // callModbus() may throw. That is the whole point of the error response tests. So the
+    // join has to happen no matter what. A std::thread that is still joinable calls
+    // std::terminate() when it is destroyed while unwinding.
     try
     {
         callModbus();
@@ -93,6 +107,7 @@ void runAgainstFakeServer( modbus &mb,
     responder.join();
 }
 
+/// The constructors store the host and port and start in the disconnected state.
 TEST_CASE( "modbus construction sets the host, port, and initial state", "[modbus]" )
 {
     SECTION( "host and port constructor" )
@@ -115,6 +130,7 @@ TEST_CASE( "modbus construction sets the host, port, and initial state", "[modbu
     }
 }
 
+/// modbus_set_slave_id stores the new slave id.
 TEST_CASE( "modbus_set_slave_id updates the slave id", "[modbus]" )
 {
     modbus mb( "127.0.0.1", 502 );
@@ -124,6 +140,8 @@ TEST_CASE( "modbus_set_slave_id updates the slave id", "[modbus]" )
     REQUIRE( mb._slaveid == 7 );
 }
 
+/// modbus_connect is exercised against an empty host, an exhausted file descriptor
+/// table, a refused loopback port, and a real listening socket on loopback.
 TEST_CASE( "modbus_connect", "[modbus]" )
 {
     SECTION( "fails immediately when the host is empty" )
@@ -139,7 +157,7 @@ TEST_CASE( "modbus_connect", "[modbus]" )
         REQUIRE( getrlimit( RLIMIT_NOFILE, &orig ) == 0 );
 
         struct rlimit tiny;
-        tiny.rlim_cur = 3; // stdin/stdout/stderr only -- no room left for a new socket fd
+        tiny.rlim_cur = 3; // This leaves room for stdin, stdout, and stderr only, so no new socket fd can be created.
         tiny.rlim_max = orig.rlim_max;
         REQUIRE( setrlimit( RLIMIT_NOFILE, &tiny ) == 0 );
 
@@ -153,8 +171,8 @@ TEST_CASE( "modbus_connect", "[modbus]" )
 
     SECTION( "fails when the connection is refused" )
     {
-        // Bind to an ephemeral port, then close it immediately so nothing is listening --
-        // connecting to it on loopback fails fast with ECONNREFUSED rather than hanging.
+        // Bind to an ephemeral port, then close it immediately so nothing is listening.
+        // Connecting to it on loopback fails fast with ECONNREFUSED rather than hanging.
         int probe = ::socket( AF_INET, SOCK_STREAM, 0 );
         REQUIRE( probe >= 0 );
 
@@ -217,6 +235,8 @@ TEST_CASE( "modbus_connect", "[modbus]" )
     }
 }
 
+/// modbus_close closes the socket and resets the connection state. It is also safe to
+/// call when nothing was ever connected.
 TEST_CASE( "modbus_close releases the socket and resets state", "[modbus]" )
 {
     SECTION( "closes an open socket" )
@@ -233,7 +253,7 @@ TEST_CASE( "modbus_close releases the socket and resets state", "[modbus]" )
         REQUIRE( mb._socket == -1 );
         REQUIRE( mb._connected == false );
 
-        // sp[0] should now be closed -- writing to its peer should eventually see it gone.
+        // sp[0] should now be closed. Writing to its peer should eventually see it gone.
         ::close( sp[1] );
     }
 
@@ -248,6 +268,9 @@ TEST_CASE( "modbus_close releases the socket and resets state", "[modbus]" )
     }
 }
 
+/// modbus_set_timeouts is exercised on a disconnected object, a live socketpair, a
+/// closed descriptor, and the fault-injected build where only the send timeout call
+/// fails.
 TEST_CASE( "modbus_set_timeouts", "[modbus]" )
 {
     SECTION( "fails when not connected" )
@@ -280,7 +303,7 @@ TEST_CASE( "modbus_set_timeouts", "[modbus]" )
         REQUIRE( ::close( sp[1] ) == 0 );
 
         modbus mb( "127.0.0.1", 502 );
-        mb._socket    = sp[0]; // a now-closed, stale descriptor
+        mb._socket    = sp[0]; // This is a stale descriptor that is now closed.
         mb._connected = true;
 
         REQUIRE( mb.modbus_set_timeouts( 1 ) == false );
@@ -288,10 +311,10 @@ TEST_CASE( "modbus_set_timeouts", "[modbus]" )
 
     SECTION( "fails when only the SO_SNDTIMEO call fails" )
     {
-        // SO_RCVTIMEO and SO_SNDTIMEO act on the same fd with the same timeval, so there's
-        // no natural way to make only the second setsockopt() call fail -- this uses the
-        // XWCTEST_MODBUS_SET_TIMEOUTS_SNDTIMEO_FAIL build variant, which forces its result
-        // after the real (successful) call, rather than mocking setsockopt() itself.
+        // SO_RCVTIMEO and SO_SNDTIMEO act on the same fd with the same timeval. So there
+        // is no natural way to make only the second setsockopt() call fail. This uses the
+        // XWCTEST_MODBUS_SET_TIMEOUTS_SNDTIMEO_FAIL build variant, which forces the result
+        // after the real successful call, rather than mocking setsockopt() itself.
         int sp[2];
         REQUIRE( ::socketpair( AF_UNIX, SOCK_STREAM, 0, sp ) == 0 );
 
@@ -306,6 +329,8 @@ TEST_CASE( "modbus_set_timeouts", "[modbus]" )
     }
 }
 
+/// modbus_build_request encodes the header fields into a raw buffer. Each byte is
+/// checked.
 TEST_CASE( "modbus_build_request encodes the header fields", "[modbus]" )
 {
     modbus mb( "127.0.0.1", 502 );
@@ -314,9 +339,8 @@ TEST_CASE( "modbus_build_request encodes the header fields", "[modbus]" )
     uint8_t buf[10]{};
     mb.modbus_build_request( buf, 0x1234, READ_REGS );
 
-    // buf[0] is always 0: (uint8_t)_msg_id is applied before the >>8, so the shift always
-    // zeroes an 8-bit value. Documenting the actual behavior, not the apparent intent.
-    REQUIRE( buf[0] == 0 );
+    // The transaction id starts at 1, so its high byte is 0 here.
+    REQUIRE( buf[0] == (uint8_t)( mb._msg_id >> 8 ) );
     REQUIRE( buf[1] == (uint8_t)( mb._msg_id & 0x00FF ) );
     REQUIRE( buf[2] == 0 );
     REQUIRE( buf[3] == 0 );
@@ -327,6 +351,8 @@ TEST_CASE( "modbus_build_request encodes the header fields", "[modbus]" )
     REQUIRE( buf[9] == 0x34 );
 }
 
+/// modbus_read_holding_registers argument checks, response decoding, and error responses
+/// are exercised through the fake server helper.
 TEST_CASE( "modbus_read_holding_registers", "[modbus]" )
 {
     SECTION( "throws modbus_connect_exception when not connected" )
@@ -363,9 +389,9 @@ TEST_CASE( "modbus_read_holding_registers", "[modbus]" )
         std::vector<uint8_t> response( 13, 0 );
         response[7]  = READ_REGS;
         response[9]  = 0x00;
-        response[10] = 0x2A; // register 0 = 42
+        response[10] = 0x2A; // Register 0 is 42.
         response[11] = 0x00;
-        response[12] = 0x63; // register 1 = 99
+        response[12] = 0x63; // Register 1 is 99.
 
         std::vector<uint8_t> req;
         runAgainstFakeServer(
@@ -392,6 +418,8 @@ TEST_CASE( "modbus_read_holding_registers", "[modbus]" )
     }
 }
 
+/// modbus_read_input_registers argument checks, response decoding, and error responses
+/// are exercised through the fake server helper.
 TEST_CASE( "modbus_read_input_registers", "[modbus]" )
 {
     SECTION( "throws modbus_connect_exception when not connected" )
@@ -419,7 +447,7 @@ TEST_CASE( "modbus_read_input_registers", "[modbus]" )
         std::vector<uint8_t> response( 11, 0 );
         response[7] = READ_INPUT_REGS;
         response[9] = 0x01;
-        response[10] = 0x00; // register 0 = 256
+        response[10] = 0x00; // Register 0 is 256.
 
         runAgainstFakeServer( mb, response, [&]() { mb.modbus_read_input_registers( 0, 1, buffer ); } );
 
@@ -441,6 +469,8 @@ TEST_CASE( "modbus_read_input_registers", "[modbus]" )
     }
 }
 
+/// modbus_read_coils argument checks, packed bit decoding, and error responses are
+/// exercised through the fake server helper.
 TEST_CASE( "modbus_read_coils", "[modbus]" )
 {
     SECTION( "throws modbus_connect_exception when not connected" )
@@ -467,8 +497,8 @@ TEST_CASE( "modbus_read_coils", "[modbus]" )
 
         std::vector<uint8_t> response( 11, 0 );
         response[7] = READ_COILS;
-        response[9] = 0xB5;  // 1011 0101 -> bits 0,2,4,5,7 set
-        response[10] = 0x01; // bit 8 set, bit 9 clear
+        response[9] = 0xB5;  // The bit pattern 1011 0101 sets bits 0, 2, 4, 5, and 7.
+        response[10] = 0x01; // Bit 8 is set and bit 9 is clear.
 
         runAgainstFakeServer( mb, response, [&]() { mb.modbus_read_coils( 0, 10, buffer ); } );
 
@@ -494,6 +524,8 @@ TEST_CASE( "modbus_read_coils", "[modbus]" )
     }
 }
 
+/// modbus_read_input_bits argument checks, bit decoding, and error responses are
+/// exercised through the fake server helper.
 TEST_CASE( "modbus_read_input_bits", "[modbus]" )
 {
     SECTION( "throws modbus_connect_exception when not connected" )
@@ -542,6 +574,8 @@ TEST_CASE( "modbus_read_input_bits", "[modbus]" )
     }
 }
 
+/// modbus_write_coil argument checks, the encoded request bytes, and error responses are
+/// exercised through the fake server helper.
 TEST_CASE( "modbus_write_coil", "[modbus]" )
 {
     SECTION( "throws modbus_connect_exception when not connected" )
@@ -570,7 +604,7 @@ TEST_CASE( "modbus_write_coil", "[modbus]" )
         runAgainstFakeServer( mb, response, [&]() { mb.modbus_write_coil( 0, true ); }, &req );
 
         REQUIRE( req.size() == 12 );
-        // value[0]=0xFF00 written as the high/low bytes at the end of the request.
+        // The value 0xFF00 is written as the high and low bytes at the end of the request.
         REQUIRE( req[10] == 0xFF );
         REQUIRE( req[11] == 0x00 );
     }
@@ -588,6 +622,8 @@ TEST_CASE( "modbus_write_coil", "[modbus]" )
     }
 }
 
+/// modbus_write_register argument checks, a successful acknowledgement, and an error
+/// response are exercised through the fake server helper.
 TEST_CASE( "modbus_write_register", "[modbus]" )
 {
     SECTION( "throws modbus_connect_exception when not connected" )
@@ -617,13 +653,11 @@ TEST_CASE( "modbus_write_register", "[modbus]" )
 
     SECTION( "throws the specific exception for an acknowledge error response" )
     {
-        // modbus_write_register checks the response against WRITE_COIL rather than
-        // WRITE_REG (a pre-existing bug in modbus_error_handle's call site), so the error
-        // bit has to be set on WRITE_COIL to actually be detected here.
+        // The error bit is set on the function code that was sent, WRITE_REG.
         modbus mb( "127.0.0.1", 502 );
 
         std::vector<uint8_t> response( 9, 0 );
-        response[7] = WRITE_COIL + 0x80;
+        response[7] = WRITE_REG + 0x80;
         response[8] = EX_ACKNOWLEDGE;
 
         REQUIRE_THROWS_AS( runAgainstFakeServer( mb, response, [&]() { mb.modbus_write_register( 0, 4660 ); } ),
@@ -631,6 +665,8 @@ TEST_CASE( "modbus_write_register", "[modbus]" )
     }
 }
 
+/// modbus_write_coils argument checks, a successful acknowledgement, and an error
+/// response are exercised through the fake server helper.
 TEST_CASE( "modbus_write_coils", "[modbus]" )
 {
     SECTION( "throws modbus_connect_exception when not connected" )
@@ -652,8 +688,8 @@ TEST_CASE( "modbus_write_coils", "[modbus]" )
 
     SECTION( "completes without throwing on a successful acknowledgement" )
     {
-        // modbus_write_coils always copies exactly 4 source values regardless of `amount`,
-        // so `amount` is kept at 4 here to stay within the bounds of `value`.
+        // modbus_write_coils always copies exactly 4 source values regardless of amount.
+        // So amount is kept at 4 here to stay within the bounds of value.
         modbus mb( "127.0.0.1", 502 );
         bool   value[4]{ true, false, true, false };
 
@@ -677,6 +713,8 @@ TEST_CASE( "modbus_write_coils", "[modbus]" )
     }
 }
 
+/// modbus_write_registers argument checks, the request size, and an error response are
+/// exercised through the fake server helper.
 TEST_CASE( "modbus_write_registers", "[modbus]" )
 {
     SECTION( "throws modbus_connect_exception when not connected" )
@@ -707,7 +745,7 @@ TEST_CASE( "modbus_write_registers", "[modbus]" )
         std::vector<uint8_t> req;
         runAgainstFakeServer( mb, response, [&]() { mb.modbus_write_registers( 0, 2, value ); }, &req );
 
-        REQUIRE( req.size() == 17 ); // 13 + 2*amount
+        REQUIRE( req.size() == 17 ); // The size is 13 + 2*amount.
         REQUIRE( req[7] == WRITE_REGS );
     }
 
@@ -725,6 +763,8 @@ TEST_CASE( "modbus_write_registers", "[modbus]" )
     }
 }
 
+/// modbus_error_handle maps each known Modbus exception code to its C++ exception type
+/// and ignores everything else.
 TEST_CASE( "modbus_error_handle", "[modbus]" )
 {
     modbus mb( "127.0.0.1", 502 );
@@ -741,7 +781,7 @@ TEST_CASE( "modbus_error_handle", "[modbus]" )
     {
         uint8_t msg[9]{};
         msg[7] = READ_REGS + 0x80;
-        msg[8] = 0x7F; // not one of the known EX_* codes
+        msg[8] = 0x7F; // This is not one of the known EX_* codes.
 
         REQUIRE_NOTHROW( mb.modbus_error_handle( msg, READ_REGS ) );
     }
@@ -777,6 +817,8 @@ TEST_CASE( "modbus_error_handle", "[modbus]" )
     }
 }
 
+/// modbus_send is exercised over a real socketpair, a closed descriptor, and the
+/// fault-injected partial send build.
 TEST_CASE( "modbus_send", "[modbus]" )
 {
     SECTION( "returns the number of bytes sent on success" )
@@ -808,7 +850,7 @@ TEST_CASE( "modbus_send", "[modbus]" )
         REQUIRE( ::close( sp[1] ) == 0 );
 
         modbus mb( "127.0.0.1", 502 );
-        mb._socket = sp[0]; // stale, closed descriptor
+        mb._socket = sp[0]; // This is a stale descriptor that is now closed.
 
         uint8_t data[1]{ 42 };
         REQUIRE_THROWS_AS( mb.modbus_send( data, sizeof( data ) ), modbus_connect_exception );
@@ -816,10 +858,10 @@ TEST_CASE( "modbus_send", "[modbus]" )
 
     SECTION( "throws modbus_connect_exception on a partial send" )
     {
-        // A blocking send() of a small buffer doesn't produce short writes under normal
-        // conditions, so this uses the XWCTEST_MODBUS_SEND_PARTIAL build variant, which
-        // forces the byte count to be one less than requested after the real (fully
-        // successful) send completes, rather than mocking send() itself.
+        // A blocking send() of a small buffer does not produce short writes under normal
+        // conditions. So this uses the XWCTEST_MODBUS_SEND_PARTIAL build variant. It
+        // forces the byte count to be one less than requested after the real, fully
+        // successful send completes, rather than mocking send() itself.
         int sp[2];
         REQUIRE( ::socketpair( AF_UNIX, SOCK_STREAM, 0, sp ) == 0 );
 
@@ -834,6 +876,8 @@ TEST_CASE( "modbus_send", "[modbus]" )
     }
 }
 
+/// modbus_receive is exercised over a real socketpair, a closed descriptor, and a peer
+/// that shut down its write side.
 TEST_CASE( "modbus_receive", "[modbus]" )
 {
     SECTION( "returns the received bytes on success" )
@@ -873,9 +917,9 @@ TEST_CASE( "modbus_receive", "[modbus]" )
 
     SECTION( "throws modbus_connect_exception on a clean peer shutdown (recv returns 0)" )
     {
-        // Shut down only the write side of the peer, rather than closing it outright: a
-        // full close() tends to make our own send() fail with EPIPE first (a different
-        // branch), whereas shutting down writes lets recv() itself observe the clean EOF.
+        // Shut down only the write side of the peer rather than closing it outright. A
+        // full close() tends to make our own send() fail with EPIPE first, which is a
+        // different branch. Shutting down writes lets recv() itself observe the clean EOF.
         int sp[2];
         REQUIRE( ::socketpair( AF_UNIX, SOCK_STREAM, 0, sp ) == 0 );
         REQUIRE( ::shutdown( sp[1], SHUT_WR ) == 0 );
@@ -891,7 +935,8 @@ TEST_CASE( "modbus_receive", "[modbus]" )
     }
 }
 
-/// Verify the Modbus client throws instead of dying when the peer disappears.
+/// The Modbus client throws instead of dying when the peer disappears. The peer end of a
+/// socketpair is closed before a read is attempted.
 TEST_CASE( "modbus reports a dropped peer as a connection exception", "[modbus]" )
 {
     int socketPair[2];

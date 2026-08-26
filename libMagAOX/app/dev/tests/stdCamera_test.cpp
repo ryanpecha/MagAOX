@@ -1,6 +1,18 @@
 /** \file stdCamera_test.cpp
- * \brief Catch2 tests for MagAOX::app::dev::stdCamera.
+ * \brief Catch2 tests for the MagAOX::app::dev::stdCamera device mixin.
  * \author Claude
+ *
+ * These tests cover the free helper functions of stdCamera and the stdCamera<derivedT> mixin itself.
+ * They use two MagAOXApp<false> harnesses declared in stdCamera_test.hpp. stdCameraFullHarness turns
+ * every capability flag on. stdCameraReportOnlyHarness only reports temperature and frame rate and
+ * turns everything else off. The harnesses count calls to the derived-class interface and let a test
+ * force any setter or property registration to fail.
+ *
+ * INDI callbacks are driven directly with hand-built pcf::IndiProperty objects. No INDI server is
+ * needed. A few tests install a FIFO-less INDI driver so that the property update code runs.
+ *
+ * The tests write small config files under /tmp and the telemetry test writes logs under
+ * /tmp/stdcam_test_telems.
  *
  * \ingroup testing
  */
@@ -18,7 +30,7 @@ using namespace stdCamera_tests;
  * \ingroup app_dev_unit_tests
  */
 
-/// Test the free function stripQuotedWhitespace
+/// Verify that the free function stripQuotedWhitespace() trims whitespace and removes one matched pair of wrapping quotes.
 /**
  * \ingroup stdCamera_tests
  */
@@ -74,8 +86,9 @@ TEST_CASE( "stdCamera stripQuotedWhitespace", "[dev::stdCamera]" )
     }
 }
 
-/// Test the free function loadCameraConfig
-/**
+/// Verify that the free function loadCameraConfig() builds a cameraConfigMap from the unused sections of a config file.
+/** Each section that has a configFile key becomes one camera mode. Config files are written under /tmp.
+ *
  * \ingroup stdCamera_tests
  */
 TEST_CASE( "stdCamera loadCameraConfig", "[dev::stdCamera]" )
@@ -175,8 +188,10 @@ TEST_CASE( "stdCamera loadCameraConfig", "[dev::stdCamera]" )
 namespace
 {
 
-/// Build the full set of sections/keywords/values for a valid stdCamera config file exercising every
-/// feature of the stdCameraFullHarness (ROI, modes, focus helpers).
+/// Write a valid stdCamera config file to the given path.
+/** The file exercises every feature of stdCameraFullHarness. It sets the full and default ROI, two
+ * camera modes, the focus-state helper, and a two-switch goto-focus helper.
+ */
 void writeFullValidConfig( const std::string &path )
 {
     std::vector<std::string> s, k, v;
@@ -227,7 +242,7 @@ void writeFullValidConfig( const std::string &path )
 
 } // namespace
 
-/// Test stdCamera::setupConfig
+/// Verify that stdCamera::setupConfig() succeeds on both harnesses, with and without configured fan-speed names.
 /**
  * \ingroup stdCamera_tests
  */
@@ -257,8 +272,9 @@ TEST_CASE( "stdCamera setupConfig", "[dev::stdCamera]" )
     }
 }
 
-/// Test stdCamera::loadConfig
-/**
+/// Verify that stdCamera::loadConfig() reads a valid config file and rejects invalid fan speeds and missing full ROI values.
+/** It also checks that the default ROI falls back to the full ROI when it is not configured.
+ *
  * \ingroup stdCamera_tests
  */
 TEST_CASE( "stdCamera loadConfig", "[dev::stdCamera]" )
@@ -325,8 +341,8 @@ TEST_CASE( "stdCamera loadConfig", "[dev::stdCamera]" )
 
     SECTION( "missing full ROI values are individually rejected" )
     {
-        // Explicitly zero the target key: 0 fails the "==0" check for x/y/w/h, and also fails the "<1"
-        // check for bin_x/bin_y.
+        // Set the target key to zero. A zero value fails the equals-zero check for x, y, w, and h.
+        // It also fails the less-than-one check for bin_x and bin_y.
         auto testMissing = [&]( const std::string &zeroKey )
         {
             std::vector<std::string> s, k, v;
@@ -379,8 +395,9 @@ TEST_CASE( "stdCamera loadConfig", "[dev::stdCamera]" )
         mx::app::writeConfigFile( "/tmp/stdCamera_loadConfig_roidefaults.conf", s, k, v );
 
         stdCameraFullHarness app;
-        // Reset the harness's constructor-provided defaults so the fallback-to-full logic in loadConfig
-        // is actually exercised (a nonzero default_x/y/w/h or bin < 1 would short-circuit the fallback).
+        // Clear the defaults set by the harness constructor so that the fallback logic in loadConfig()
+        // runs. A nonzero default_x, default_y, default_w, or default_h would skip the fallback.
+        // A binning value of at least one would also skip it.
         app.m_default_x     = 0;
         app.m_default_y     = 0;
         app.m_default_w     = 0;
@@ -421,7 +438,7 @@ TEST_CASE( "stdCamera loadConfig", "[dev::stdCamera]" )
         mx::app::writeConfigFile( "/tmp/stdCamera_loadConfig_nomodes.conf", s, k, v );
 
         stdCameraFullHarness app;
-        app.m_defaultFanSpeed = "low"; // pre-satisfy fan-speed validation; not under test here
+        app.m_defaultFanSpeed = "low"; // Satisfy the fan-speed validation. It is not under test here.
         mx::app::appConfigurator config;
         REQUIRE( app.setupConfig( config ) == 0 );
         config.readConfig( "/tmp/stdCamera_loadConfig_nomodes.conf" );
@@ -441,8 +458,10 @@ TEST_CASE( "stdCamera loadConfig", "[dev::stdCamera]" )
     }
 }
 
-/// Test the stdCamera focus-configuration parsing edge cases in loadConfig.
-/**
+/// Verify how stdCamera::loadConfig() parses the focus.stateProperty and focus.gotoFocus config sections.
+/** Each section writes a small config file under /tmp with the full ROI plus one focus configuration.
+ * Malformed goto-focus formats, missing keys, and invalid INDI keys must be rejected.
+ *
  * \ingroup stdCamera_tests
  */
 TEST_CASE( "stdCamera loadConfig focus helper parsing", "[dev::stdCamera]" )
@@ -742,7 +761,7 @@ TEST_CASE( "stdCamera loadConfig focus helper parsing", "[dev::stdCamera]" )
         v.push_back( "stagesci1.presetName" );
         s.push_back( "focus.gotoFocus" );
         k.push_back( "property1" );
-        v.push_back( "stagebs.presetName" ); // same key as focus.stateProperty
+        v.push_back( "stagebs.presetName" ); // This is the same key as focus.stateProperty.
         mx::app::writeConfigFile( "/tmp/stdCamera_focus_gotoreuse.conf", s, k, v );
 
         stdCameraFullHarness app;
@@ -759,8 +778,10 @@ TEST_CASE( "stdCamera loadConfig focus helper parsing", "[dev::stdCamera]" )
 namespace
 {
 
-/// Build and configure a stdCameraFullHarness ready for a successful appStartup(), using the
-/// fully-valid config file built by writeFullValidConfig().
+/// Configure a stdCameraFullHarness so that appStartup() will succeed.
+/** It loads the valid config file written by writeFullValidConfig() and points the telemetry log
+ * at /tmp/stdcam_test_telems.
+ */
 void configureFullHarness( stdCameraFullHarness &app )
 {
     writeFullValidConfig( "/tmp/stdCamera_appStartup_valid.conf" );
@@ -774,8 +795,9 @@ void configureFullHarness( stdCameraFullHarness &app )
 
 } // namespace
 
-/// Test stdCamera::appStartup on the fully-featured harness, including every registration-failure branch.
-/**
+/// Verify stdCamera::appStartup() on the full harness, including every property registration failure branch.
+/** The harness counts registration calls and can force the Nth call to fail.
+ *
  * \ingroup stdCamera_tests
  */
 TEST_CASE( "stdCamera appStartup (full harness)", "[dev::stdCamera]" )
@@ -825,10 +847,10 @@ TEST_CASE( "stdCamera appStartup (full harness)", "[dev::stdCamera]" )
         }
         REQUIRE( totalCalls > 0 );
 
-        // createReadoutSpeed()/createVShiftSpeed() do not propagate the return value of their internal
-        // registerIndiPropertyNew() call, so forcing those two specific calls (the first two register
-        // calls made, right after the three temperature-control registrations) to fail does not cause
-        // appStartup() to fail. Every other call site checks its return value directly.
+        // createReadoutSpeed() and createVShiftSpeed() ignore the return value of their internal
+        // registerIndiPropertyNew() call. Those are registration calls four and five. They come right
+        // after the three temperature-control registrations. Forcing them to fail does not make
+        // appStartup() fail. Every other call site checks its return value directly.
         for( int failAt = 1; failAt <= totalCalls; ++failAt )
         {
             stdCameraFullHarness app;
@@ -862,7 +884,7 @@ TEST_CASE( "stdCamera appStartup (full harness)", "[dev::stdCamera]" )
     {
         stdCameraFullHarness app;
         configureFullHarness( app );
-        app.m_fanSpeedNameLabels.resize( 1 ); // mismatched vs m_fanSpeedNames.size()==2
+        app.m_fanSpeedNameLabels.resize( 1 ); // One label does not match the two entries in m_fanSpeedNames.
         REQUIRE( app.appStartup() == 0 );
     }
 
@@ -879,7 +901,7 @@ TEST_CASE( "stdCamera appStartup (full harness)", "[dev::stdCamera]" )
     {
         stdCameraFullHarness app;
         configureFullHarness( app );
-        app.m_analogGainNameLabels.resize( 1 ); // mismatched vs m_analogGainNames.size()==2
+        app.m_analogGainNameLabels.resize( 1 ); // One label does not match the two entries in m_analogGainNames.
         REQUIRE( app.appStartup() == 0 );
     }
 
@@ -896,12 +918,12 @@ TEST_CASE( "stdCamera appStartup (full harness)", "[dev::stdCamera]" )
         stdCameraFullHarness app;
         configureFullHarness( app );
         REQUIRE( app.m_focusMonitoredPropertyKeys.size() > 0 );
-        app.m_focusMonitoredPropertyKeys[0] = "no-dot-here"; // bypasses loadConfig's own validation
+        app.m_focusMonitoredPropertyKeys[0] = "no-dot-here"; // This bypasses the validation done by loadConfig().
         REQUIRE( app.appStartup() == -1 );
     }
 }
 
-/// Test stdCamera::appStartup on the report-only harness (most features disabled).
+/// Verify stdCamera::appStartup() on the report-only harness. Only the read-only temp_ccd and fps properties are created.
 /**
  * \ingroup stdCamera_tests
  */
@@ -922,10 +944,10 @@ TEST_CASE( "stdCamera appStartup (report-only harness)", "[dev::stdCamera]" )
     REQUIRE( app.m_indiP_fps.getName() == "fps" );
 }
 
-/// Test that the report-only harness's read-only temp_ccd/fps registration failures are propagated.
-/// (These are the "temp reporting only" and "fps reporting only" branches, only reachable when
-/// tempControl/fpsCtrl are false but temp/fps are true, as configured on this harness.)
-/**
+/// Verify that a failed registration of the read-only temp_ccd or fps property makes appStartup() fail on the report-only harness.
+/** These are the report-only branches. They only run when tempControl and fpsCtrl are false while
+ * temp and fps are true. The report-only harness is configured that way.
+ *
  * \ingroup stdCamera_tests
  */
 TEST_CASE( "stdCamera appStartup (report-only harness) registration failures", "[dev::stdCamera]" )
@@ -945,8 +967,9 @@ TEST_CASE( "stdCamera appStartup (report-only harness) registration failures", "
     }
 }
 
-/// Test stdCamera::appLogic on the fully-featured harness.
-/**
+/// Verify stdCamera::appLogic() on the full harness. The POWERON state must apply power-on defaults and move to NOTCONNECTED.
+/** The READY and OPERATING states must refresh the fan, analog gain, LED, and ROI selections.
+ *
  * \ingroup stdCamera_tests
  */
 TEST_CASE( "stdCamera appLogic (full harness)", "[dev::stdCamera]" )
@@ -1031,7 +1054,7 @@ TEST_CASE( "stdCamera appLogic (full harness)", "[dev::stdCamera]" )
     }
 }
 
-/// Test stdCamera::appLogic on the report-only harness (covers the disabled feature branches).
+/// Verify stdCamera::appLogic() on the report-only harness. This covers the branches for disabled features.
 /**
  * \ingroup stdCamera_tests
  */
@@ -1054,8 +1077,10 @@ TEST_CASE( "stdCamera appLogic (report-only harness)", "[dev::stdCamera]" )
     REQUIRE( app.appLogic() == 0 );
 }
 
-/// Test stdCamera::onPowerOff and stdCamera::whilePowerOff.
-/**
+/// Verify stdCamera::onPowerOff() and stdCamera::whilePowerOff() with and without an INDI driver.
+/** Without a driver both functions return early. With a FIFO-less driver every property update
+ * branch runs for each shutter status and each valid flag.
+ *
  * \ingroup stdCamera_tests
  */
 TEST_CASE( "stdCamera onPowerOff and whilePowerOff", "[dev::stdCamera]" )
@@ -1119,7 +1144,7 @@ TEST_CASE( "stdCamera onPowerOff and whilePowerOff", "[dev::stdCamera]" )
 
         app.m_shutterStatus = "UNKNOWN";
         app.m_ledState      = true;
-        REQUIRE( app.whilePowerOff() == 0 ); // m_fanSpeedValid/m_analogGainValid are already true too
+        REQUIRE( app.whilePowerOff() == 0 ); // m_fanSpeedValid and m_analogGainValid are still true here.
 
         app.m_ledState = false;
         REQUIRE( app.whilePowerOff() == 0 );
@@ -1141,6 +1166,10 @@ TEST_CASE( "stdCamera onPowerOff and whilePowerOff", "[dev::stdCamera]" )
     }
 }
 
+/// Verify that stdCamera::appShutdown() returns success after a normal startup.
+/**
+ * \ingroup stdCamera_tests
+ */
 TEST_CASE( "stdCamera appShutdown is a trivial no-op", "[dev::stdCamera]" )
 {
     stdCameraFullHarness app;
@@ -1149,8 +1178,9 @@ TEST_CASE( "stdCamera appShutdown is a trivial no-op", "[dev::stdCamera]" )
     REQUIRE( app.appShutdown() == 0 );
 }
 
-/// Test stdCamera::updateINDI.
-/**
+/// Verify stdCamera::updateINDI() with a FIFO-less INDI driver installed so that every property update branch runs.
+/** The test flips each piece of camera state and calls updateINDI() after each change.
+ *
  * \ingroup stdCamera_tests
  */
 TEST_CASE( "stdCamera updateINDI", "[dev::stdCamera]" )
@@ -1162,16 +1192,16 @@ TEST_CASE( "stdCamera updateINDI", "[dev::stdCamera]" )
         REQUIRE( app.appStartup() == 0 );
         app.setupRealDriver();
 
-        // Temp control not on target
+        // Temperature control is on but not yet on target.
         app.m_tempControlStatus   = true;
         app.m_tempControlOnTarget = false;
         REQUIRE( app.updateINDI() == 0 );
 
-        // Temp control on target
+        // Temperature control is on and on target.
         app.m_tempControlOnTarget = true;
         REQUIRE( app.updateINDI() == 0 );
 
-        // Temp control off
+        // Temperature control is off.
         app.m_tempControlStatus = false;
         REQUIRE( app.updateINDI() == 0 );
 
@@ -1207,8 +1237,8 @@ TEST_CASE( "stdCamera updateINDI", "[dev::stdCamera]" )
         app.m_ledState = false;
         REQUIRE( app.updateINDI() == 0 );
 
-        // m_stateStringValidResult defaults to true (the "valid" branch); flip it to
-        // exercise the "invalid" branch too.
+        // m_stateStringValidResult defaults to true, which takes the valid branch.
+        // Flip it to take the invalid branch too.
         app.m_stateStringValidResult = false;
         REQUIRE( app.updateINDI() == 0 );
     }
@@ -1245,15 +1275,16 @@ TEST_CASE( "stdCamera updateINDI", "[dev::stdCamera]" )
         REQUIRE( app.appStartup() == 0 );
         app.setupRealDriver();
 
-        // c_stdCamera_temp is true and c_stdCamera_tempControl is false on this harness,
-        // so this also exercises the temp-report-only branch (distinct from the
-        // temp-control branches already covered by the full harness above).
+        // c_stdCamera_temp is true and c_stdCamera_tempControl is false on this harness.
+        // This call therefore also runs the temperature report-only branch. That branch is
+        // separate from the temperature-control branches covered by the full harness above.
         REQUIRE( app.updateINDI() == 0 );
     }
 }
 
-/// Test stdCamera::recordCamera.
-/**
+/// Verify that stdCamera::recordCamera() writes telemetry with and without the force flag and through the telemeter interface.
+/** This test starts the real telemeter log thread and writes under /tmp/stdcam_test_telems.
+ *
  * \ingroup stdCamera_tests
  */
 TEST_CASE( "stdCamera recordCamera", "[dev::stdCamera]" )
@@ -1263,9 +1294,10 @@ TEST_CASE( "stdCamera recordCamera", "[dev::stdCamera]" )
     REQUIRE( app.appStartup() == 0 );
     REQUIRE( app.startTelemetry() == 0 );
 
-    // First call always records (force=true is used by recordTelem(), but force=false is exercised too).
+    // The first call always records. recordTelem() uses force equal to true. The unforced path is
+    // checked here as well.
     REQUIRE( app.recordCamera( false ) == 0 );
-    REQUIRE( app.recordCamera( false ) == 0 ); // no change -> should not re-record, but must not error
+    REQUIRE( app.recordCamera( false ) == 0 ); // Nothing changed, so this does not record again. It must still succeed.
 
     app.m_expTime = 1.234f;
     REQUIRE( app.recordCamera( false ) == 0 );
@@ -1279,7 +1311,7 @@ TEST_CASE( "stdCamera recordCamera", "[dev::stdCamera]" )
 namespace
 {
 
-/// Build a switch-type INDI property with the given device/name and On/Off states for each named element.
+/// Build a switch-type INDI property with the given device and name. Each named element gets the given On or Off state.
 pcf::IndiProperty makeSwitchProp( const std::string                                                       &device,
                                   const std::string                                                       &name,
                                   const std::vector<std::pair<std::string, pcf::IndiElement::SwitchStateType>> &elements )
@@ -1295,7 +1327,7 @@ pcf::IndiProperty makeSwitchProp( const std::string                             
     return ip;
 }
 
-/// Build a number-type INDI property with the given device/name and a "target" element value.
+/// Build a number-type INDI property with the given device and name and one "target" element set to the given value.
 pcf::IndiProperty makeNumberProp( const std::string &device, const std::string &name, double target )
 {
     pcf::IndiProperty ip( pcf::IndiProperty::Number );
@@ -1306,17 +1338,20 @@ pcf::IndiProperty makeNumberProp( const std::string &device, const std::string &
     return ip;
 }
 
-/// Configure and fully start up a stdCameraFullHarness, ready to be driven through INDI callbacks.
-/// (Not returned by value: MagAOXApp holds a std::mutex, so the harness is not movable/copyable.)
+/// Configure and start a stdCameraFullHarness so that it can be driven through INDI callbacks.
+/** The harness is passed by reference and not returned by value. MagAOXApp holds a std::mutex, so
+ * the harness cannot be moved or copied.
+ */
 void startFullHarness( stdCameraFullHarness &app )
 {
     configureFullHarness( app );
     REQUIRE( app.appStartup() == 0 );
 
-    // registerIndiPropertySet() is a no-op with no INDI driver (MagAOXApp<false>), so it never sets the
-    // device/name on the cached focus-monitored properties the way a real INDI subscription would. Fill
-    // those in here from the parsed monitored-property keys so setCallBack_focusMonitored() can match
-    // incoming properties by device+name, just as it would in a running INDI-connected app.
+    // registerIndiPropertySet() does nothing when there is no INDI driver, which is the case for
+    // MagAOXApp<false>. It therefore never sets the device and name on the cached focus-monitored
+    // properties the way a real INDI subscription would. Fill those in here from the parsed
+    // monitored-property keys. Then setCallBack_focusMonitored() can match incoming properties by
+    // device and name, just as it would in a running INDI-connected app.
     for( size_t n = 0; n < app.m_focusMonitoredPropertyKeys.size(); ++n )
     {
         std::string devName, propName;
@@ -1328,7 +1363,7 @@ void startFullHarness( stdCameraFullHarness &app )
 
 } // namespace
 
-/// Test stdCamera::newCallBack_stdCamera dispatch logic.
+/// Verify that stdCamera::newCallBack_stdCamera() rejects the wrong device or an unknown property and dispatches every known property name.
 /**
  * \ingroup stdCamera_tests
  */
@@ -1349,8 +1384,8 @@ TEST_CASE( "stdCamera newCallBack_stdCamera dispatch", "[dev::stdCamera]" )
         REQUIRE( app.newCallBack_stdCamera( ip ) == -1 );
     }
 
-    // Dispatch to every known property and confirm it reaches the right handler (each of these also
-    // exercises newCallBack_stdCamera's own dispatch branch for that property name).
+    // Dispatch to every known property and confirm that it reaches the right handler. Each call also
+    // runs the dispatch branch of newCallBack_stdCamera() for that property name.
     SECTION( "dispatches to every known property" )
     {
         REQUIRE( app.newCallBack_stdCamera( makeSwitchProp( app.configName(), "reconfigure", { { "request", pcf::IndiElement::Off } } ) ) == 0 );
@@ -1385,7 +1420,7 @@ TEST_CASE( "stdCamera newCallBack_stdCamera dispatch", "[dev::stdCamera]" )
     }
 }
 
-/// Test stdCamera::newCallBack_temp and setTempSetPt.
+/// Verify that stdCamera::newCallBack_temp() applies the target or current value through setTempSetPt() and propagates failures.
 /**
  * \ingroup stdCamera_tests
  */
@@ -1427,9 +1462,9 @@ TEST_CASE( "stdCamera newCallBack_temp", "[dev::stdCamera]" )
     }
 }
 
-/// Test that ROI/temperature-control callbacks are no-ops when the corresponding feature is disabled
-/// at compile time, using the report-only harness (c_stdCamera_tempControl=false, c_stdCamera_usesROI=false).
-/**
+/// Verify that the ROI and temperature-control callbacks do nothing when their feature is disabled at compile time.
+/** The report-only harness has c_stdCamera_tempControl and c_stdCamera_usesROI set to false.
+ *
  * \ingroup stdCamera_tests
  */
 TEST_CASE( "stdCamera callbacks are no-ops when disabled (report-only harness)", "[dev::stdCamera]" )
@@ -1467,7 +1502,7 @@ TEST_CASE( "stdCamera callbacks are no-ops when disabled (report-only harness)",
     REQUIRE( app.newCallBack_roi_default( requestOn ) == 0 );
 }
 
-/// Test stdCamera::newCallBack_temp_controller and setTempControl.
+/// Verify that stdCamera::newCallBack_temp_controller() turns temperature control on or off through setTempControl().
 /**
  * \ingroup stdCamera_tests
  */
@@ -1501,7 +1536,7 @@ TEST_CASE( "stdCamera newCallBack_temp_controller", "[dev::stdCamera]" )
     }
 }
 
-/// Test stdCamera::newCallBack_readoutSpeed and setReadoutSpeed.
+/// Verify that stdCamera::newCallBack_readoutSpeed() applies one selected speed, keeps the current speed when none is selected, and rejects more than one.
 /**
  * \ingroup stdCamera_tests
  */
@@ -1534,7 +1569,7 @@ TEST_CASE( "stdCamera newCallBack_readoutSpeed", "[dev::stdCamera]" )
     }
 }
 
-/// Test stdCamera::newCallBack_vShiftSpeed and setVShiftSpeed.
+/// Verify that stdCamera::newCallBack_vShiftSpeed() applies one selected speed, keeps the current speed when none is selected, and rejects more than one.
 /**
  * \ingroup stdCamera_tests
  */
@@ -1567,7 +1602,7 @@ TEST_CASE( "stdCamera newCallBack_vShiftSpeed", "[dev::stdCamera]" )
     }
 }
 
-/// Test stdCamera::newCallBack_emgain, newCallBack_exptime, newCallBack_fps and their setters.
+/// Verify that newCallBack_emgain(), newCallBack_exptime(), and newCallBack_fps() apply the target value and reject a mismatched property name.
 /**
  * \ingroup stdCamera_tests
  */
@@ -1607,7 +1642,7 @@ TEST_CASE( "stdCamera newCallBack_emgain, exptime, fps", "[dev::stdCamera]" )
     }
 }
 
-/// Test stdCamera::newCallBack_fanSpeed and setFanSpeed.
+/// Verify that stdCamera::newCallBack_fanSpeed() applies one selected speed, keeps the current speed when none is selected, and rejects more than one.
 /**
  * \ingroup stdCamera_tests
  */
@@ -1641,14 +1676,14 @@ TEST_CASE( "stdCamera newCallBack_fanSpeed", "[dev::stdCamera]" )
 
     SECTION( "an element the property doesn't have is skipped" )
     {
-        // Only "high" is present, so the "!ipRecv.find()" continue branch is exercised for "low".
+        // Only "high" is present. The callback therefore takes the continue branch for the missing "low" element.
         pcf::IndiProperty ip = makeSwitchProp( app.configName(), "fan_speed", { { "high", pcf::IndiElement::On } } );
         REQUIRE( app.newCallBack_fanSpeed( ip ) == 0 );
         REQUIRE( app.m_fanSpeedNameSet == "high" );
     }
 }
 
-/// Test stdCamera::newCallBack_analogGain and setAnalogGain.
+/// Verify that stdCamera::newCallBack_analogGain() applies one selected gain, keeps the current gain when none is selected, and rejects more than one.
 /**
  * \ingroup stdCamera_tests
  */
@@ -1681,7 +1716,7 @@ TEST_CASE( "stdCamera newCallBack_analogGain", "[dev::stdCamera]" )
     }
 }
 
-/// Test stdCamera::newCallBack_led and setLED.
+/// Verify that stdCamera::newCallBack_led() sets the LED state from the toggle element and ignores a property without one.
 /**
  * \ingroup stdCamera_tests
  */
@@ -1714,7 +1749,7 @@ TEST_CASE( "stdCamera newCallBack_led", "[dev::stdCamera]" )
     }
 }
 
-/// Test stdCamera::newCallBack_synchro and setSynchro.
+/// Verify that stdCamera::newCallBack_synchro() sets the synchro state from the toggle element and ignores a property without one.
 /**
  * \ingroup stdCamera_tests
  */
@@ -1747,7 +1782,7 @@ TEST_CASE( "stdCamera newCallBack_synchro", "[dev::stdCamera]" )
     }
 }
 
-/// Test stdCamera::newCallBack_mode.
+/// Verify that stdCamera::newCallBack_mode() records the selected mode and requests a reconfigure, and rejects bad input.
 /**
  * \ingroup stdCamera_tests
  */
@@ -1789,7 +1824,7 @@ TEST_CASE( "stdCamera newCallBack_mode", "[dev::stdCamera]" )
     }
 }
 
-/// Test stdCamera::newCallBack_reconfigure.
+/// Verify that stdCamera::newCallBack_reconfigure() requests a reconfigure of the current mode only when the request element is On.
 /**
  * \ingroup stdCamera_tests
  */
@@ -1824,7 +1859,7 @@ TEST_CASE( "stdCamera newCallBack_reconfigure", "[dev::stdCamera]" )
     }
 }
 
-/// Test stdCamera::newCallBack_cropMode and setCropMode.
+/// Verify that stdCamera::newCallBack_cropMode() sets crop mode from the toggle element and ignores a property without one.
 /**
  * \ingroup stdCamera_tests
  */
@@ -1857,7 +1892,7 @@ TEST_CASE( "stdCamera newCallBack_cropMode", "[dev::stdCamera]" )
     }
 }
 
-/// Test stdCamera::newCallBack_roi_x/y/w/h/bin_x/bin_y.
+/// Verify that each ROI element callback stores the target in m_nextROI and resets m_nextROI from m_currentROI on a mismatched property name.
 /**
  * \ingroup stdCamera_tests
  */
@@ -1939,9 +1974,9 @@ TEST_CASE( "stdCamera newCallBack_roi_x/y/w/h/bin_x/bin_y", "[dev::stdCamera]" )
     }
 }
 
-/// Test stdCamera::newCallBack_roi_check, roi_set, roi_full, roi_fullbin, roi_loadlast, roi_last,
-/// and roi_default, including checkNextROI/setNextROI dispatch.
-/**
+/// Verify the ROI action callbacks roi_check, roi_set, roi_full, roi_fullbin, roi_loadlast, roi_last, and roi_default.
+/** Each callback must dispatch to checkNextROI() or setNextROI() only when the request element is On.
+ *
  * \ingroup stdCamera_tests
  */
 TEST_CASE( "stdCamera ROI action callbacks", "[dev::stdCamera]" )
@@ -1991,7 +2026,7 @@ TEST_CASE( "stdCamera ROI action callbacks", "[dev::stdCamera]" )
         REQUIRE( app.newCallBack_roi_fullbin( ip ) == 0 );
         REQUIRE( app.m_nextROI.x == app.m_full_x );
         REQUIRE( app.m_nextROI.bin_x == app.m_full_bin_x );
-        REQUIRE( app.m_full_currbin_x == 0 ); // reset back to the "not implemented" sentinel
+        REQUIRE( app.m_full_currbin_x == 0 ); // The value is reset to the not-implemented sentinel.
         REQUIRE( app.m_setNextROICalls == 1 );
     }
 
@@ -2063,7 +2098,7 @@ TEST_CASE( "stdCamera ROI action callbacks", "[dev::stdCamera]" )
     }
 }
 
-/// Test stdCamera::newCallBack_shutter and setShutter.
+/// Verify that stdCamera::newCallBack_shutter() opens the shutter on toggle On and shuts it on toggle Off through setShutter().
 /**
  * \ingroup stdCamera_tests
  */
@@ -2096,7 +2131,7 @@ TEST_CASE( "stdCamera newCallBack_shutter", "[dev::stdCamera]" )
     }
 }
 
-/// Test stdCamera::newCallBack_gotoFocus.
+/// Verify that stdCamera::newCallBack_gotoFocus() calls gotoFocus() only on a request of On and only when focus is enabled.
 /**
  * \ingroup stdCamera_tests
  */
@@ -2127,7 +2162,7 @@ TEST_CASE( "stdCamera newCallBack_gotoFocus", "[dev::stdCamera]" )
     SECTION( "when focus is not enabled at runtime, the callback is a no-op" )
     {
         stdCameraFullHarness app;
-        REQUIRE( app.m_hasFocus == false ); // fresh harness, loadConfig not yet run
+        REQUIRE( app.m_hasFocus == false ); // This is a fresh harness. loadConfig() has not run yet.
 
         pcf::IndiProperty ip = makeSwitchProp( app.configName(), "goto_focus", { { "request", pcf::IndiElement::On } } );
         REQUIRE( app.newCallBack_gotoFocus( ip ) == 0 );
@@ -2135,7 +2170,7 @@ TEST_CASE( "stdCamera newCallBack_gotoFocus", "[dev::stdCamera]" )
     }
 }
 
-/// Test stdCamera::setCallBack_focusMonitored and stdCamera::checkFocusSwitchState.
+/// Verify that stdCamera::setCallBack_focusMonitored() caches the monitored property and that checkFocusSwitchState() reads the focus state from it.
 /**
  * \ingroup stdCamera_tests
  */
@@ -2144,8 +2179,8 @@ TEST_CASE( "stdCamera focus-state helper", "[dev::stdCamera]" )
     stdCameraFullHarness app;
     startFullHarness( app );
 
-    // writeFullValidConfig() configures focus.stateProperty=sre.caution/focus-mismatch, onMeansInFocus=false,
-    // as monitored property index 0.
+    // writeFullValidConfig() sets focus.stateProperty to sre.caution with element focus-mismatch and
+    // onMeansInFocus set to false. That property is monitored property index 0.
     REQUIRE( app.m_focusStateSourceIndex == 0 );
 
     SECTION( "an unrecognized monitored property is ignored" )
@@ -2196,7 +2231,7 @@ TEST_CASE( "stdCamera focus-state helper", "[dev::stdCamera]" )
     SECTION( "updateFocusStateProperty is a no-op when focus isn't enabled" )
     {
         app.m_hasFocus = false;
-        app.exposeUpdateFocusStateProperty(); // must not throw or touch m_indiP_focus
+        app.exposeUpdateFocusStateProperty(); // This must not throw and must not touch m_indiP_focus.
     }
 
     SECTION( "On means in focus when onMeansInFocus=true" )
@@ -2216,7 +2251,7 @@ TEST_CASE( "stdCamera focus-state helper", "[dev::stdCamera]" )
     }
 }
 
-/// Test that an empty configured focus.stateElement falls back to the "toggle" default.
+/// Verify that loadConfig() falls back to the "toggle" default when focus.stateElement is configured as an empty string.
 /**
  * \ingroup stdCamera_tests
  */
@@ -2235,7 +2270,7 @@ TEST_CASE( "stdCamera loadConfig defaults an empty focus.stateElement to toggle"
     add( "camera", "full_h", "1024" );
     add( "camera", "full_bin_x", "1" );
     add( "camera", "full_bin_y", "1" );
-    add( "focus", "stateElement", "" ); // an explicitly empty value
+    add( "focus", "stateElement", "" ); // The value is present but empty.
 
     mx::app::writeConfigFile( "/tmp/stdCamera_focus_emptyStateElement.conf", s, k, v );
 
@@ -2247,8 +2282,10 @@ TEST_CASE( "stdCamera loadConfig defaults an empty focus.stateElement to toggle"
     REQUIRE( app.m_focusStateElement == "toggle" );
 }
 
-/// Test stdCamera::sendGotoFocusCommand.
-/**
+/// Verify that stdCamera::sendGotoFocusCommand() formats the active switch names into a target preset and sends it.
+/** The harness captures the outgoing property in m_lastSentProperty instead of sending it to INDI.
+ * Every rejection branch is checked as well.
+ *
  * \ingroup stdCamera_tests
  */
 TEST_CASE( "stdCamera sendGotoFocusCommand", "[dev::stdCamera]" )
@@ -2256,8 +2293,9 @@ TEST_CASE( "stdCamera sendGotoFocusCommand", "[dev::stdCamera]" )
     stdCameraFullHarness app;
     startFullHarness( app );
 
-    // writeFullValidConfig() configures a 2-switch goto-focus helper: property1=stagebs.presetName,
-    // property2=fwfpm.filterName, format="{}-{}", targetProperty=stagesci1.presetName.
+    // writeFullValidConfig() configures a goto-focus helper with two switches. property1 is
+    // stagebs.presetName and property2 is fwfpm.filterName. The format is "{}-{}" and the
+    // targetProperty is stagesci1.presetName.
     REQUIRE( app.m_focusGotoHelperConfigured == true );
 
     pcf::IndiProperty prop1( pcf::IndiProperty::Switch );
@@ -2336,10 +2374,11 @@ TEST_CASE( "stdCamera sendGotoFocusCommand", "[dev::stdCamera]" )
     }
 }
 
-/// Directly exercise the trueFalseT tag-dispatch overloads and protected creator helpers that are not
-/// reachable through stdCamera's own runtime-gated call sites for a given harness's compile-time flags
-/// (see the report for a full explanation of why these are otherwise dead code for any single harness).
-/**
+/// Call the trueFalseT tag-dispatch overloads and the protected creator helpers directly.
+/** stdCamera selects these overloads from the compile-time capability flags of the derived class.
+ * Any single harness can therefore only reach one overload of each pair through the normal call
+ * sites. The other overload is dead code for that harness. Calling both directly covers them all.
+ *
  * \ingroup stdCamera_tests
  */
 TEST_CASE( "stdCamera tag-dispatch and creator helpers", "[dev::stdCamera]" )
@@ -2435,16 +2474,16 @@ TEST_CASE( "stdCamera tag-dispatch and creator helpers", "[dev::stdCamera]" )
         REQUIRE( app.exposeCreateVShiftSpeedFalse() == 0 );
         REQUIRE( app.exposeCreateFanSpeedFalse() == 0 );
 
-        // createFanSpeed(true) is otherwise entirely unreachable in stdCamera (appStartup builds the
-        // fan-speed selection switch inline rather than through this helper); call it directly to
-        // register the fan_speed selection switch through this code path as well.
+        // The true overload of createFanSpeed() is never reached in stdCamera. appStartup() builds the
+        // fan-speed selection switch inline instead of through this helper. Call it directly so that
+        // the fan_speed selection switch is also registered through this code path.
         REQUIRE( app.exposeCreateFanSpeedTrue() == 0 );
         REQUIRE( app.exposeCreateReadoutSpeedTrue() == 0 );
         REQUIRE( app.exposeCreateVShiftSpeedTrue() == 0 );
     }
 }
 
-/// Test the static callback wrappers st_newCallBack_stdCamera and st_setCallBack_focusMonitored.
+/// Verify that the static wrappers st_newCallBack_stdCamera() and st_setCallBack_focusMonitored() forward to the instance methods.
 /**
  * \ingroup stdCamera_tests
  */

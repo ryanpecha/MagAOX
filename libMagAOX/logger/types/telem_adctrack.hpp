@@ -82,7 +82,7 @@ struct telem_adctrack : public flatbuffer_log
         msg += std::to_string( fbs->min_zd() ) + " ";
 
         return msg;
-    } // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
+    } // LCOV_EXCL_LINE gcov reports this closing brace as a separate line that only runs during exception cleanup
 
     static bool tracking( void *msgBuffer )
     {

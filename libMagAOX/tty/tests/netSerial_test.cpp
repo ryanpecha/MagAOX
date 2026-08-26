@@ -1,5 +1,11 @@
 /** \file netSerial_test.cpp
-  * \brief Catch2 tests for netSerial
+  * \brief Catch2 tests for the netSerial TCP transport in libMagAOX/tty/netSerial.hpp.
+  *
+  * No mocks are used. The connect tests run against a real listening socket on loopback
+  * with a port chosen by the operating system. The read and write tests hand netSerial one
+  * end of a real Unix domain socket pair and drive the other end from the test. Error paths
+  * use real operating system behavior, for example a closed descriptor, a lowered open
+  * file limit, or a real signal that interrupts select().
   */
 #include "../../../tests/catch2/catch.hpp"
 
@@ -16,8 +22,9 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
-// netSerial keeps its socket fd protected; give the tests direct access to it the same way
-// this codebase's other socket-based tests reach into private/protected transport state.
+// netSerial keeps its socket descriptor protected. The tests need to set it directly to a
+// descriptor they own. Other socket tests in this codebase reach into transport state the
+// same way.
 #define protected public
 #include "../netSerial.hpp"
 #undef protected
@@ -27,12 +34,16 @@ namespace libXWCTest
 namespace netSerialTest
 {
 
+// A fresh netSerial reports -1 for its socket descriptor. This checks the constructor default.
 TEST_CASE( "netSerial starts with no open socket", "[libMagAOX::tty::netSerial]" )
 {
     MagAOX::tty::netSerial ns;
     REQUIRE( ns.getSocketFD() == -1 );
 }
 
+// serialInit() connects to a host and port. Each section checks one return code by
+// creating the matching real condition: a listening server, a refused port, no free
+// descriptors, or a previously open socket that must be closed first.
 TEST_CASE( "netSerial::serialInit", "[libMagAOX::tty::netSerial]" )
 {
     SECTION( "succeeds against a real listening server" )
@@ -72,8 +83,8 @@ TEST_CASE( "netSerial::serialInit", "[libMagAOX::tty::netSerial]" )
 
     SECTION( "fails with NETSERIAL_E_CONNECT when the connection is refused" )
     {
-        // Bind to an ephemeral port then close it immediately -- nothing is listening, so
-        // connecting to it on loopback fails fast with ECONNREFUSED rather than hanging.
+        // Bind to an ephemeral port and close it at once. Nothing is listening on it, so a
+        // loopback connect fails fast with ECONNREFUSED instead of hanging.
         int probe = ::socket( AF_INET, SOCK_STREAM, 0 );
         REQUIRE( probe >= 0 );
 
@@ -102,7 +113,7 @@ TEST_CASE( "netSerial::serialInit", "[libMagAOX::tty::netSerial]" )
         REQUIRE( getrlimit(RLIMIT_NOFILE, &orig) == 0 );
 
         struct rlimit tiny;
-        tiny.rlim_cur = 3; // stdin/stdout/stderr only -- no room for a new socket fd
+        tiny.rlim_cur = 3; // Only stdin, stdout, and stderr fit. A new socket descriptor cannot be created.
         tiny.rlim_max = orig.rlim_max;
         REQUIRE( setrlimit(RLIMIT_NOFILE, &tiny) == 0 );
 
@@ -122,8 +133,9 @@ TEST_CASE( "netSerial::serialInit", "[libMagAOX::tty::netSerial]" )
         MagAOX::tty::netSerial ns;
         ns.m_sockfd = sp[0];
 
-        // connect() will fail (nothing listening), but it must run serialClose() on
-        // m_sockfd first -- verified by the peer observing a clean disconnect.
+        // connect() will fail because nothing is listening on port 1. Before that, serialInit()
+        // must call serialClose() on the old m_sockfd. The peer end of the socket pair sees a
+        // clean disconnect if it did.
         int rv = ns.serialInit("127.0.0.1", 1);
 
         REQUIRE( rv != NETSERIAL_E_NOERROR );
@@ -135,6 +147,8 @@ TEST_CASE( "netSerial::serialInit", "[libMagAOX::tty::netSerial]" )
     }
 }
 
+// serialClose() closes the socket if one is open. The peer end of a socket pair sees end of
+// file when it does. Calling it with no socket open must also succeed.
 TEST_CASE( "netSerial::serialClose", "[libMagAOX::tty::netSerial]" )
 {
     SECTION( "closes an open socket" )
@@ -160,6 +174,8 @@ TEST_CASE( "netSerial::serialClose", "[libMagAOX::tty::netSerial]" )
     }
 }
 
+// serialOut() sends bytes over the socket. The peer end of a socket pair must receive every
+// byte. A closed descriptor must produce NETSERIAL_E_COMM.
 TEST_CASE( "netSerial::serialOut", "[libMagAOX::tty::netSerial]" )
 {
     SECTION( "sends all the requested bytes" )
@@ -197,6 +213,8 @@ TEST_CASE( "netSerial::serialOut", "[libMagAOX::tty::netSerial]" )
     }
 }
 
+// serialIn() reads a fixed number of bytes with a timeout. It returns the full count when
+// the bytes are already waiting. It returns the partial count when the timeout expires first.
 TEST_CASE( "netSerial::serialIn", "[libMagAOX::tty::netSerial]" )
 {
     SECTION( "reads exactly the requested number of bytes" )
@@ -240,6 +258,9 @@ TEST_CASE( "netSerial::serialIn", "[libMagAOX::tty::netSerial]" )
     }
 }
 
+// serialInString() reads until a terminator character arrives or the timeout expires. The
+// sections cover an immediate terminator, a slow sender that never sends one, a failed
+// select() on a closed descriptor, and a select() interrupted by a real signal.
 TEST_CASE( "netSerial::serialInString", "[libMagAOX::tty::netSerial]" )
 {
     SECTION( "returns as soon as the terminator is seen" )
@@ -280,7 +301,7 @@ TEST_CASE( "netSerial::serialInString", "[libMagAOX::tty::netSerial]" )
         });
 
         char buff[16]{};
-        // No '\n' will ever arrive; the overall 50ms budget elapses partway through.
+        // No '\n' will ever arrive. The overall 50 millisecond budget runs out partway through the sends.
         int rv = ns.serialInString(buff, sizeof(buff), 50, '\n');
 
         sender.join();
@@ -315,10 +336,11 @@ TEST_CASE( "netSerial::serialInString", "[libMagAOX::tty::netSerial]" )
         MagAOX::tty::netSerial ns;
         ns.m_sockfd = sp[0];
 
-        // A signal handler with no SA_RESTART makes the blocking select() below return
-        // EINTR partway through its wait, exercising serialInString's signal-safe retry
-        // loop. The terminator arrives well after the signal fires, but still inside the
-        // overall timeout, so the retry has to succeed for this to pass.
+        // Install a SIGALRM handler without SA_RESTART. The blocking select() below then
+        // returns EINTR when the timer fires partway through its wait. This exercises the
+        // signal-safe retry loop in serialInString(). The terminator arrives well after
+        // the signal but still inside the overall timeout. The retry must succeed for the
+        // assertions to hold.
         struct sigaction sa{};
         sa.sa_handler = []( int ){};
         sigemptyset(&sa.sa_mask);
@@ -327,7 +349,7 @@ TEST_CASE( "netSerial::serialInString", "[libMagAOX::tty::netSerial]" )
         REQUIRE( ::sigaction(SIGALRM, &sa, &old) == 0 );
 
         struct itimerval it{};
-        it.it_value.tv_usec = 20000; // 20ms
+        it.it_value.tv_usec = 20000; // The timer fires once after 20 milliseconds.
         REQUIRE( ::setitimer(ITIMER_REAL, &it, nullptr) == 0 );
 
         std::thread sender([sp]()

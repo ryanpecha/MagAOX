@@ -2,9 +2,10 @@
 ### Hide commands
 AT=@
 GEN_TEST_FILES = ./generated_tests/*_generated_tests.cpp
-# common.mk supplies the repo-standard CXXFLAGS (including the COVERAGE=1 flags,
-# previously duplicated here). python.mk supplies $(PYTHON): the test generator
-# uses syntax that needs Python >= 3.10, which the system python3 may not be.
+# common.mk supplies the repo standard CXXFLAGS. That includes the COVERAGE=1 flags,
+# which were previously duplicated here. python.mk supplies $(PYTHON). The test
+# generator uses syntax that needs Python 3.10 or newer, which the system python3
+# may not be.
 include ../../../Make/common.mk
 include ../../../Make/python.mk
 ### default entropy test settings
@@ -49,10 +50,11 @@ generated_tests: $(GEN_TEST_FILES)
 $(GEN_TEST_FILES) :
 	$(AT)$(PYTHON) generateTemplatedCatch2Tests.py
 
-# -lflatbuffers: the generated tests exercise logJsonFormat, whose schema reflection
-# (flatbuffers::Parser::Deserialize/GenText) lives in the flatbuffers library.
-# stateCodes.cpp: the generated per-type tests round-trip state_change logs, whose
-# formatters call stateCodes::codeText().
+# The link needs -lflatbuffers because the generated tests exercise logJsonFormat.
+# Its schema reflection uses flatbuffers::Parser::Deserialize and GenText, which live
+# in the flatbuffers library. The build needs stateCodes.cpp because the generated
+# per-type tests round-trip state_change logs, whose formatters call
+# stateCodes::codeText().
 catch2_tests: ../generated/binarySchemata.inc $(GEN_TEST_FILES) catch2_tests.cpp
 	$(AT)g++ $(CXXFLAGS) -I. -I./../types $(GEN_TEST_FILES) catch2_tests.cpp ../../app/stateCodes.cpp -o $@ -lflatbuffers
 

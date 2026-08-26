@@ -273,11 +273,11 @@ struct software_log : public flatbuffer_log
         }
         else
         {
-            // file is a required const char* in every messageT constructor, always passed
-            // to builder.CreateString() -- file() is never nullptr. (Passing a null literal
-            // for file would itself be undefined behavior in CreateString, so this can't be
-            // exercised safely either.)
-            ret += "????"; // LCOV_EXCL_LINE
+            // file is a required const char* in every messageT constructor.
+            // Every constructor passes it to builder.CreateString() so file() is never nullptr.
+            // Passing a null pointer for file would itself be undefined behavior inside CreateString.
+            // A test cannot reach this branch safely.
+            ret += "????"; // LCOV_EXCL_LINE file() is never nullptr
         }
 
         ret += std::format( " LINE: {}", rgs->line() );
@@ -300,7 +300,7 @@ struct software_log : public flatbuffer_log
             ret += rgs->explanation()->c_str();
         }
         return ret;
-    } // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
+    } // LCOV_EXCL_LINE gcov reports this closing brace as a separate line that only runs during exception cleanup
 
     /// Get an empty logMetaDetail because meta data doesn't make sense for this log
     /**

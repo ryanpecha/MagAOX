@@ -1,5 +1,9 @@
 /** \file ImageStreamIO_test.cpp
- * \brief Catch2 tests for libMagAOX/ImageStreamIO/ImageStruct.hpp
+ * \brief Catch2 tests for the imageStructDataType traits in libMagAOX/ImageStreamIO/ImageStruct.hpp.
+ *
+ * These are compile time and in-memory tests. The type mapping is checked with
+ * STATIC_REQUIRE. The pointer setting is checked on a stack IMAGE structure. No shared
+ * memory stream is created.
  *
  * History:
  */
@@ -27,8 +31,10 @@ namespace ImageStreamIOTest
 namespace imageStructDataTypeTest
 {
 
-/// Each imageStructDataType<code> specialization maps to the right C++ type and sets the right IMAGE array member
-/**
+/// Each imageStructDataType<code> specialization maps to the right C++ type and sets the right IMAGE array member.
+/** One section per data type code checks the type, the size, the maximum value, and that
+ * setPointer() stores the pointer in the matching member of the IMAGE array union.
+ *
  * \ingroup ImageStreamIO_unit_test
  */
 TEST_CASE( "imageStructDataType maps a data type code to a C++ type and sets the IMAGE array pointer",

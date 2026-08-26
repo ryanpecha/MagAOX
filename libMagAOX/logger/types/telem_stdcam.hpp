@@ -245,7 +245,7 @@ struct telem_stdcam : public flatbuffer_log
             msg += "OFF";
 
         return msg;
-    } // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
+    } // LCOV_EXCL_LINE gcov reports this closing brace as a separate line that only runs during exception cleanup
 
     static std::string mode( void *msgBuffer )
     {
@@ -255,7 +255,7 @@ struct telem_stdcam : public flatbuffer_log
             return std::string( fbs->mode()->c_str() );
         }
         else
-            return ""; // LCOV_EXCL_LINE -- roi is always created by the only constructor
+            return ""; // LCOV_EXCL_LINE the only constructor always sets mode so the null check cannot fail
     }
 
     static float xcen( void *msgBuffer )
@@ -264,7 +264,7 @@ struct telem_stdcam : public flatbuffer_log
         if( fbs->roi() != nullptr )
             return fbs->roi()->xcen();
         else
-            return -1; // LCOV_EXCL_LINE -- roi is always created by the only constructor
+            return -1; // LCOV_EXCL_LINE the only constructor always sets roi so the null check cannot fail
     }
 
     static float ycen( void *msgBuffer )
@@ -273,7 +273,7 @@ struct telem_stdcam : public flatbuffer_log
         if( fbs->roi() != nullptr )
             return fbs->roi()->ycen();
         else
-            return -1; // LCOV_EXCL_LINE -- roi is always created by the only constructor
+            return -1; // LCOV_EXCL_LINE the only constructor always sets roi so the null check cannot fail
     }
 
     static int width( void *msgBuffer )
@@ -282,7 +282,7 @@ struct telem_stdcam : public flatbuffer_log
         if( fbs->roi() != nullptr )
             return fbs->roi()->w();
         else
-            return -1; // LCOV_EXCL_LINE -- roi is always created by the only constructor
+            return -1; // LCOV_EXCL_LINE the only constructor always sets roi so the null check cannot fail
     }
 
     static int height( void *msgBuffer )
@@ -291,7 +291,7 @@ struct telem_stdcam : public flatbuffer_log
         if( fbs->roi() != nullptr )
             return fbs->roi()->h();
         else
-            return -1; // LCOV_EXCL_LINE -- roi is always created by the only constructor
+            return -1; // LCOV_EXCL_LINE the only constructor always sets roi so the null check cannot fail
     }
 
     static int xbin( void *msgBuffer )
@@ -300,7 +300,7 @@ struct telem_stdcam : public flatbuffer_log
         if( fbs->roi() != nullptr )
             return fbs->roi()->xbin();
         else
-            return -1; // LCOV_EXCL_LINE -- roi is always created by the only constructor
+            return -1; // LCOV_EXCL_LINE the only constructor always sets roi so the null check cannot fail
     }
 
     static int ybin( void *msgBuffer )
@@ -309,7 +309,7 @@ struct telem_stdcam : public flatbuffer_log
         if( fbs->roi() != nullptr )
             return fbs->roi()->ybin();
         else
-            return -1; // LCOV_EXCL_LINE -- roi is always created by the only constructor
+            return -1; // LCOV_EXCL_LINE the only constructor always sets roi so the null check cannot fail
     }
 
     static float exptime( void *msgBuffer )
@@ -342,7 +342,7 @@ struct telem_stdcam : public flatbuffer_log
         if( fbs->tempCtrl() != nullptr )
             return fbs->tempCtrl()->temp();
         else
-            return -9999; // LCOV_EXCL_LINE -- tempCtrl is always created by the only constructor
+            return -9999; // LCOV_EXCL_LINE the only constructor always sets tempCtrl so the null check cannot fail
     }
 
     static float tempSetpt( void *msgBuffer )
@@ -351,7 +351,7 @@ struct telem_stdcam : public flatbuffer_log
         if( fbs->tempCtrl() != nullptr )
             return fbs->tempCtrl()->setpt();
         else
-            return -9999; // LCOV_EXCL_LINE -- tempCtrl is always created by the only constructor
+            return -9999; // LCOV_EXCL_LINE the only constructor always sets tempCtrl so the null check cannot fail
     }
 
     static int tempStatus( void *msgBuffer )
@@ -360,7 +360,7 @@ struct telem_stdcam : public flatbuffer_log
         if( fbs->tempCtrl() != nullptr )
             return fbs->tempCtrl()->status();
         else
-            return -9999; // LCOV_EXCL_LINE -- tempCtrl is always created by the only constructor
+            return -9999; // LCOV_EXCL_LINE the only constructor always sets tempCtrl so the null check cannot fail
     }
 
     static int tempOnTarget( void *msgBuffer )
@@ -369,7 +369,7 @@ struct telem_stdcam : public flatbuffer_log
         if( fbs->tempCtrl() != nullptr )
             return fbs->tempCtrl()->ontarget();
         else
-            return -9999; // LCOV_EXCL_LINE -- tempCtrl is always created by the only constructor
+            return -9999; // LCOV_EXCL_LINE the only constructor always sets tempCtrl so the null check cannot fail
     }
 
     static std::string tempStatusStr( void *msgBuffer )
@@ -380,7 +380,7 @@ struct telem_stdcam : public flatbuffer_log
             if( fbs->tempCtrl()->statusStr() )
                 return fbs->tempCtrl()->statusStr()->c_str();
             else
-                // LCOV_EXCL_START -- statusStr/tempCtrl are always created by the only constructor
+                // LCOV_EXCL_START the only constructor always sets tempCtrl and its statusStr so neither null check can fail
                 return "";
         }
         else
@@ -396,7 +396,7 @@ struct telem_stdcam : public flatbuffer_log
             if( fbs->shutter()->statusStr() )
                 return fbs->shutter()->statusStr()->c_str();
             else
-                // LCOV_EXCL_START -- shutterStatusSr/shutter are always created by the only constructor
+                // LCOV_EXCL_START the only constructor always sets shutter and its statusStr so neither null check can fail
                 return "";
         }
         else
@@ -419,7 +419,7 @@ struct telem_stdcam : public flatbuffer_log
                 return "INVALID";
         }
         else
-            return "INVALID"; // LCOV_EXCL_LINE -- shutter is always created by the only constructor
+            return "INVALID"; // LCOV_EXCL_LINE the only constructor always sets shutter so the null check cannot fail
     }
 
     static bool synchro( void *msgBuffer )
@@ -453,7 +453,7 @@ struct telem_stdcam : public flatbuffer_log
             return std::string( fbs->readout_speed()->c_str() );
         }
         else
-            return ""; // LCOV_EXCL_LINE -- readout_speed is always created by the only constructor
+            return ""; // LCOV_EXCL_LINE the only constructor always sets readout_speed so the null check cannot fail
     }
 
     static std::string fan_speed( void *msgBuffer )
@@ -464,7 +464,7 @@ struct telem_stdcam : public flatbuffer_log
             return std::string( fbs->fan_speed()->c_str() );
         }
         else
-            return ""; // LCOV_EXCL_LINE -- fan_speed is always created by the only constructor
+            return ""; // LCOV_EXCL_LINE the only constructor always sets fan_speed so the null check cannot fail
     }
 
     static std::string analog_gain( void *msgBuffer )
@@ -475,7 +475,7 @@ struct telem_stdcam : public flatbuffer_log
             return std::string( fbs->analog_gain()->c_str() );
         }
         else
-            return ""; // LCOV_EXCL_LINE -- analog_gain is always created by the only constructor
+            return ""; // LCOV_EXCL_LINE the only constructor always sets analog_gain so the null check cannot fail
     }
 
     static bool led( void *msgBuffer )

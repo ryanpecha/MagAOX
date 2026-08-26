@@ -1,5 +1,12 @@
 /** \file logManager_test.cpp
  * \brief Tests for the logManager class
+ *
+ * Technique: a mock parent records delivered messages, and a subclass exposes the
+ * protected log queue. Most tests call logThreadExec() directly on the test thread so
+ * they control exactly what is processed. The thread lifecycle tests start a real
+ * std::thread. Fault-injected builds of logManager and logFileRaw, compiled under test
+ * namespaces with XWCTEST_ macros, force the thread start and write failure branches.
+ * Log files and config files are written under /tmp.
  * \ingroup logger_files
  */
 
@@ -12,6 +19,11 @@
 #include <chrono>
 #include <vector>
 
+// Fault injection. Each block below compiles a production header a second time inside a
+// test namespace with one XWCTEST_ fault macro defined. The include guard is undefined
+// first so the header is really re-read.
+
+// Forces logThreadStart() to throw a std::runtime_error before constructing the thread.
 #undef logger_logManager_hpp
 #define XWCTEST_NAMESPACE XWCTEST_LOGMANAGER_LOGTHREADSTART_STD_EXCEPTION_ns
 #define XWCTEST_LOGMANAGER_LOGTHREADSTART_STD_EXCEPTION
@@ -19,6 +31,8 @@
 #undef XWCTEST_NAMESPACE
 #undef XWCTEST_LOGMANAGER_LOGTHREADSTART_STD_EXCEPTION
 
+// Forces logThreadStart() to throw a value that is not a std::exception before
+// constructing the thread.
 #undef logger_logManager_hpp
 #define XWCTEST_NAMESPACE XWCTEST_LOGMANAGER_LOGTHREADSTART_UNKNOWN_EXCEPTION_ns
 #define XWCTEST_LOGMANAGER_LOGTHREADSTART_UNKNOWN_EXCEPTION
@@ -26,6 +40,8 @@
 #undef XWCTEST_NAMESPACE
 #undef XWCTEST_LOGMANAGER_LOGTHREADSTART_UNKNOWN_EXCEPTION
 
+// Removes the std::thread construction from logThreadStart(), so its joinable() check
+// fails for real.
 #undef logger_logManager_hpp
 #define XWCTEST_NAMESPACE XWCTEST_LOGMANAGER_LOGTHREADSTART_NOT_JOINABLE_ns
 #define XWCTEST_LOGMANAGER_LOGTHREADSTART_NOT_JOINABLE
@@ -33,6 +49,8 @@
 #undef XWCTEST_NAMESPACE
 #undef XWCTEST_LOGMANAGER_LOGTHREADSTART_NOT_JOINABLE
 
+// Makes logFileRaw::writeLog() see fwrite report zero bytes written. This build is used
+// as the log file type of a logManager below, so the manager sees a write failure.
 #undef logger_logFileRaw_hpp
 #define XWCTEST_NAMESPACE XWCTEST_LOGFILERAW_WRITELOG_FWRITE_FAIL_ns
 #define XWCTEST_LOGFILERAW_WRITELOG_FWRITE_FAIL
@@ -56,7 +74,8 @@ namespace loggerTest
 namespace logManagerTest_ns
 {
 
-/// A minimal stand-in for a MagAOXApp-like parent, recording delivered messages instead of presenting them.
+/// A minimal stand-in for a MagAOXApp-like parent. It records delivered messages instead
+/// of presenting them.
 struct mockParent
 {
     std::vector<flatlogs::bufferPtrT> messages;
@@ -95,7 +114,8 @@ typedef MagAOX::logger::XWCTEST_LOGMANAGER_LOGTHREADSTART_NOT_JOINABLE_ns::
     logManager<mockParent, MagAOX::logger::logFileRaw<XWC_DEFAULT_VERBOSITY>>
         logManagerNotJoinableT;
 
-/// Construction, getters, and setters
+/// Construction, getters, and setters. Each section sets one value and reads it back,
+/// including the rejected and clamped cases.
 /**
  * \ingroup logManager_unit_test
  */
@@ -139,7 +159,7 @@ TEST_CASE( "logManager getters and setters", "[libMagAOX::logger::logManager]" )
         logManagerTestT lm;
 
         REQUIRE( lm.writePause( 0 ) == -1 );
-        REQUIRE( lm.writePause() == MAGAOX_default_writePause ); // unchanged
+        REQUIRE( lm.writePause() == MAGAOX_default_writePause ); // The value is unchanged.
 
         REQUIRE( lm.writePause( 12345 ) == 0 );
         REQUIRE( lm.writePause() == 12345 );
@@ -164,11 +184,12 @@ TEST_CASE( "logManager getters and setters", "[libMagAOX::logger::logManager]" )
         REQUIRE( lm.logThreadPrio() == 0 );
 
         REQUIRE( lm.logThreadPrio( 99 ) == -1 );
-        REQUIRE( lm.logThreadPrio() == 0 ); // unchanged from the clamp above
+        REQUIRE( lm.logThreadPrio() == 0 ); // The value is unchanged from the clamp above.
     }
 }
 
-/// setupConfig and loadConfig
+/// setupConfig and loadConfig. The sections write real config files under /tmp and read
+/// them back through an appConfigurator.
 /**
  * \ingroup logManager_unit_test
  */
@@ -272,7 +293,8 @@ TEST_CASE( "logManager configuration", "[libMagAOX::logger::logManager]" )
     }
 }
 
-/// The log<logT>() overloads and the level filter
+/// The log<logT>() overloads and the level filter. Each section queues one entry and
+/// checks the queue size.
 /**
  * \ingroup logManager_unit_test
  */
@@ -326,11 +348,12 @@ TEST_CASE( "logManager creates and queues log entries", "[libMagAOX::logger::log
         REQUIRE( lm.test_queueSize() == 1 );
     }
 
-    // Let the destructor drain whatever ended up queued -- see the "drains any remaining
+    // The destructor drains whatever ended up queued. See the "drains any remaining
     // queued entries" test case below for a check that this actually happens.
 }
 
-/// logThreadExec, called directly (synchronously) to precisely control what gets processed
+/// logThreadExec is called directly on the test thread, so the test controls exactly what
+/// gets processed.
 /**
  * \ingroup logManager_unit_test
  */
@@ -344,8 +367,8 @@ TEST_CASE( "logManager processes queued entries via logThreadExec", "[libMagAOX:
         std::string testPath = lm.logPath() + '/' + lm.logName();
         std::filesystem::remove_all( testPath );
 
-        // software_error defaults to LOG_ERROR, which is <= LOG_NOTICE, so this exercises
-        // the stderr-print branch (no parent is set).
+        // software_error defaults to LOG_ERROR, which is at or below LOG_NOTICE. No parent
+        // is set, so this exercises the stderr print branch.
         lm.log<MagAOX::logger::software_error>( { __FILE__, __LINE__, 0, 0, std::string( "printed" ) } );
 
         REQUIRE( lm.test_queueSize() == 1 );
@@ -365,8 +388,8 @@ TEST_CASE( "logManager processes queued entries via logThreadExec", "[libMagAOX:
         std::string testPath = lm.logPath() + '/' + lm.logName();
         std::filesystem::remove_all( testPath );
 
-        // text_log defaults to LOG_INFO, which is > LOG_NOTICE, so the stderr-print branch
-        // is skipped even though there is no parent.
+        // text_log defaults to LOG_INFO, which is above LOG_NOTICE. So the stderr print
+        // branch is skipped even though there is no parent.
         lm.log<MagAOX::logger::text_log>( std::string( "not printed" ) );
 
         REQUIRE( lm.test_queueSize() == 1 );
@@ -400,14 +423,14 @@ TEST_CASE( "logManager processes queued entries via logThreadExec", "[libMagAOX:
 
     SECTION( "an empty queue with shutdown already set never enters the processing loop" )
     {
-        // With shutdown already true and the queue empty, the while condition is false
-        // (!m_logShutdown || !m_logQueue.empty() = false || false) from the very first
-        // check, so the loop body -- including its flush() call -- never runs. This is
-        // a distinct path from the "drains a queued entry" sections below, where the
-        // queue is non-empty on entry so the loop runs exactly once. The empty-queue
-        // loop body itself (and its flush() call) is covered by the "pauses between
-        // empty-queue checks" thread-lifecycle test, which runs with shutdown initially
-        // false so the loop is actually entered.
+        // With shutdown already true and the queue empty, the while condition
+        // !m_logShutdown || !m_logQueue.empty() is false from the very first check. So
+        // the loop body never runs, and neither does its flush() call. This is a distinct
+        // path from the sections in this test case that drain a queued entry. There the
+        // queue is non-empty on entry, so the loop runs exactly once. The empty queue
+        // loop body and its flush() call are covered by the "pauses between empty-queue
+        // checks" thread lifecycle test. That test runs with shutdown initially false, so
+        // the loop is actually entered.
         logManagerTestT lm;
         lm.logPath( "/tmp" );
 
@@ -442,7 +465,8 @@ TEST_CASE( "logManager processes queued entries via logThreadExec", "[libMagAOX:
     }
 }
 
-/// logThreadStart, _logThreadStart, and the background thread's lifecycle
+/// logThreadStart, _logThreadStart, and the lifecycle of the background thread. These
+/// sections start a real std::thread and rely on the destructor to join it.
 /**
  * \ingroup logManager_unit_test
  */
@@ -456,13 +480,14 @@ TEST_CASE( "logManager thread lifecycle", "[libMagAOX::logger::logManager]" )
         std::string testPath = lm.logPath() + '/' + lm.logName();
         std::filesystem::remove_all( testPath );
 
-        // Shutting down before starting means the thread's first check of the loop
-        // condition is false (empty queue), so it exits almost immediately.
+        // Shutting down before starting means the first check of the loop condition by
+        // the thread is false, because the queue is empty. So the thread exits almost
+        // immediately.
         lm.logShutdown( true );
 
         REQUIRE( lm.logThreadStart() == 0 );
 
-        // lm's destructor joins the (already-exiting) thread.
+        // The destructor of lm joins the thread, which is already exiting.
     }
 
     SECTION( "reports an error when the scheduling priority can't be set" )
@@ -480,8 +505,8 @@ TEST_CASE( "logManager thread lifecycle", "[libMagAOX::logger::logManager]" )
 
         REQUIRE( lm.logThreadStart() == -1 );
 
-        // lm's destructor joins the (already-exiting) thread and drains the software_error
-        // log that logThreadStart() queued to report the failure.
+        // The destructor of lm joins the thread, which is already exiting, and drains the
+        // software_error log that logThreadStart() queued to report the failure.
     }
 
     SECTION( "pauses between empty-queue checks while running" )
@@ -492,16 +517,17 @@ TEST_CASE( "logManager thread lifecycle", "[libMagAOX::logger::logManager]" )
         std::string testPath = lm.logPath() + '/' + lm.logName();
         std::filesystem::remove_all( testPath );
 
-        lm.writePause( 1000 ); // 1 microsecond, so many empty-queue/sleep cycles happen quickly
+        lm.writePause( 1000 ); // This is 1 microsecond, so many empty queue and sleep cycles happen quickly.
 
         REQUIRE( lm.logThreadStart() == 0 );
 
-        // Give the thread a chance to spin through several empty-queue/sleep cycles.
+        // Give the thread a chance to spin through several empty queue and sleep cycles.
         std::this_thread::sleep_for( std::chrono::milliseconds( 100 ) );
 
         lm.logShutdown( true );
 
-        // lm's destructor joins the thread once it observes the shutdown flag.
+        // The destructor of lm joins the thread once the thread observes the shutdown
+        // flag.
     }
 
     SECTION( "reports an error when std::thread construction throws a std::exception" )
@@ -514,8 +540,8 @@ TEST_CASE( "logManager thread lifecycle", "[libMagAOX::logger::logManager]" )
 
         REQUIRE( lm.logThreadStart() == -1 );
 
-        // The thread was never created (the throw happens before construction), so
-        // lm's destructor has nothing to join. It does drain the software_error log
+        // The thread was never created because the throw happens before construction. So
+        // the destructor of lm has nothing to join. It does drain the software_error log
         // that logThreadStart() queued to report the exception.
     }
 
@@ -542,7 +568,7 @@ TEST_CASE( "logManager thread lifecycle", "[libMagAOX::logger::logManager]" )
     }
 }
 
-/// The destructor's final drain of any remaining queued entries
+/// The destructor drains any remaining queued entries before the object goes away.
 /**
  * \ingroup logManager_unit_test
  */
@@ -553,8 +579,8 @@ TEST_CASE( "logManager destructor drains any remaining queued entries", "[libMag
         logManagerTestT lm;
         lm.logPath( "/tmp" );
 
-        // Destructs immediately: the thread was never started (not joinable) and the
-        // queue is empty, so logThreadExec() is not called again.
+        // lm destructs immediately. The thread was never started, so it is not joinable.
+        // The queue is empty, so logThreadExec() is not called again.
     }
 
     SECTION( "a non-empty queue at destruction is drained by the destructor" )
@@ -569,8 +595,9 @@ TEST_CASE( "logManager destructor drains any remaining queued entries", "[libMag
 
         REQUIRE( lm.test_queueSize() == 1 );
 
-        // lm goes out of scope here: the thread was never started, so joinable() is false,
-        // but the queue is non-empty, so the destructor calls logThreadExec() once to drain it.
+        // lm goes out of scope here. The thread was never started, so joinable() is false.
+        // But the queue is non-empty, so the destructor calls logThreadExec() once to
+        // drain it.
     }
 }
 

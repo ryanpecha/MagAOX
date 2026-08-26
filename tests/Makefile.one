@@ -34,6 +34,8 @@ BASENAME=$(basename $(TARGET))
 PATHNAME=$(dir $(TARGET))
 OBJNAME = $(PATHNAME)$(notdir $(BASENAME)).o
 TESTNAME = $(PATHNAME)$(notdir $(BASENAME))
+# edtCamera_test is new on this branch. It is listed here so the EDT conditional below
+# removes -DMAGAOX_NOEDT for it, the same as for the other EDT camera tests.
 EDT_TESTS = ocam2KCtrl_test ocam2KCtrl_lifecycle_test cred2Ctrl_test cred2Ctrl_lifecycle_test edtCamera_test
 
 # add extra libraries for special cases
@@ -44,7 +46,8 @@ ifeq ($(notdir $(TESTNAME)),cursesINDI_test)
 else ifeq ($(notdir $(TESTNAME)),logdump_test)
 	LDLIBS = -lmxlib -lflatbuffers
 else ifeq ($(notdir $(TESTNAME)),logTypes_test)
-	# exercises logJsonFormat/msgJSON, whose schema reflection lives in libflatbuffers
+	# logTypes_test exercises logJsonFormat and msgJSON.
+	# Their schema reflection lives in libflatbuffers, so that library is linked in.
 	LDLIBS += -lflatbuffers
 else ifeq ($(notdir $(TESTNAME)),logstream_test)
 	LDLIBS = -lmxlib -lflatbuffers
@@ -113,8 +116,9 @@ pcommand:
 	@echo "Command to run test: " $(TESTNAME)
 
 .PHONY: magaox_git_version.h
-# Generate to a unique temp file and mv atomically: parallel per-test builds each
-# regenerate this header and previously raced, corrupting it mid-compile.
+# Generate the header into a temp file named with the shell PID, then rename it into place.
+# The rename is atomic. Parallel per-test builds each regenerate this header. Before this
+# change they raced, and one build could read a half-written header mid-compile.
 magaox_git_version.h:
 	@gengithead.sh $(abspath $(SELF_DIR)/../) $(SELF_DIR)/../magaox_git_version.h.tmp.$$$$ MAGAOX && mv -f $(SELF_DIR)/../magaox_git_version.h.tmp.$$$$ $(SELF_DIR)/../magaox_git_version.h
 

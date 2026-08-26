@@ -1,5 +1,8 @@
 /** \file common_exceptions_test.cpp
- * \brief Catch2 tests for libMagAOX/common/exceptions.hpp
+ * \brief Catch2 tests for the xwcException class in libMagAOX/common/exceptions.hpp.
+ *
+ * The tests construct exceptions directly and read back the message, source location, and
+ * code through the accessors. No setup is needed.
  *
  * History:
  */
@@ -25,8 +28,9 @@ namespace commonTest
 namespace xwcExceptionTest
 {
 
-/// Constructing xwcException and checking its accessors
-/**
+/// Construct xwcException with and without a code and check its accessors.
+/** The what() text must contain the message. The file name must be this file, which shows
+ * the source location is captured at the construction site. The line must be positive.
  * \ingroup common_unit_test
  */
 TEST_CASE( "xwcException contains the message, source location, and code", "[libMagAOX::xwcException]" )

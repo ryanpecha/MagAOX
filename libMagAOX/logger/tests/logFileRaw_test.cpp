@@ -7,6 +7,13 @@
 
 #include "../logFileRaw.hpp"
 
+// Fault injection. Each block below compiles logFileRaw.hpp a second time inside a test
+// namespace with one XWCTEST_ fault macro defined. The macro turns one production error
+// branch on that cannot be reached through the public interface, such as a failed fwrite
+// on a healthy file. The include guard is undefined first so the header is really
+// re-read. The tests at the end of this file use the namespaced logFileRaw types.
+
+// Forces logPath() to throw a std::bad_alloc inside its try block.
 #undef logger_logFileRaw_hpp
 #define XWCTEST_NAMESPACE XWCTEST_LOGFILERAW_LOGPATH_BAD_ALLOC_ns
 #define XWCTEST_LOGFILERAW_LOGPATH_BAD_ALLOC
@@ -14,6 +21,7 @@
 #undef XWCTEST_NAMESPACE
 #undef XWCTEST_LOGFILERAW_LOGPATH_BAD_ALLOC
 
+// Forces logPath() to throw a plain std::exception inside its try block.
 #undef logger_logFileRaw_hpp
 #define XWCTEST_NAMESPACE XWCTEST_LOGFILERAW_LOGPATH_EXCEPTION_ns
 #define XWCTEST_LOGFILERAW_LOGPATH_EXCEPTION
@@ -21,6 +29,7 @@
 #undef XWCTEST_NAMESPACE
 #undef XWCTEST_LOGFILERAW_LOGPATH_EXCEPTION
 
+// Forces logName() to throw a std::bad_alloc inside its try block.
 #undef logger_logFileRaw_hpp
 #define XWCTEST_NAMESPACE XWCTEST_LOGFILERAW_LOGNAME_BAD_ALLOC_ns
 #define XWCTEST_LOGFILERAW_LOGNAME_BAD_ALLOC
@@ -28,6 +37,7 @@
 #undef XWCTEST_NAMESPACE
 #undef XWCTEST_LOGFILERAW_LOGNAME_BAD_ALLOC
 
+// Forces logName() to throw a plain std::exception inside its try block.
 #undef logger_logFileRaw_hpp
 #define XWCTEST_NAMESPACE XWCTEST_LOGFILERAW_LOGNAME_EXCEPTION_ns
 #define XWCTEST_LOGFILERAW_LOGNAME_EXCEPTION
@@ -35,6 +45,7 @@
 #undef XWCTEST_NAMESPACE
 #undef XWCTEST_LOGFILERAW_LOGNAME_EXCEPTION
 
+// Forces logExt() to throw a std::bad_alloc inside its try block.
 #undef logger_logFileRaw_hpp
 #define XWCTEST_NAMESPACE XWCTEST_LOGFILERAW_LOGEXT_BAD_ALLOC_ns
 #define XWCTEST_LOGFILERAW_LOGEXT_BAD_ALLOC
@@ -42,6 +53,7 @@
 #undef XWCTEST_NAMESPACE
 #undef XWCTEST_LOGFILERAW_LOGEXT_BAD_ALLOC
 
+// Forces logExt() to throw a plain std::exception inside its try block.
 #undef logger_logFileRaw_hpp
 #define XWCTEST_NAMESPACE XWCTEST_LOGFILERAW_LOGEXT_EXCEPTION_ns
 #define XWCTEST_LOGFILERAW_LOGEXT_EXCEPTION
@@ -49,6 +61,7 @@
 #undef XWCTEST_NAMESPACE
 #undef XWCTEST_LOGFILERAW_LOGEXT_EXCEPTION
 
+// Makes writeLog() see fwrite report zero bytes written.
 #undef logger_logFileRaw_hpp
 #define XWCTEST_NAMESPACE XWCTEST_LOGFILERAW_WRITELOG_FWRITE_FAIL_ns
 #define XWCTEST_LOGFILERAW_WRITELOG_FWRITE_FAIL
@@ -56,6 +69,7 @@
 #undef XWCTEST_NAMESPACE
 #undef XWCTEST_LOGFILERAW_WRITELOG_FWRITE_FAIL
 
+// Makes flush() see fflush fail with an I/O error.
 #undef logger_logFileRaw_hpp
 #define XWCTEST_NAMESPACE XWCTEST_LOGFILERAW_FLUSH_FFLUSH_FAIL_ns
 #define XWCTEST_LOGFILERAW_FLUSH_FFLUSH_FAIL
@@ -63,6 +77,7 @@
 #undef XWCTEST_NAMESPACE
 #undef XWCTEST_LOGFILERAW_FLUSH_FFLUSH_FAIL
 
+// Makes close() see fclose fail with an I/O error.
 #undef logger_logFileRaw_hpp
 #define XWCTEST_NAMESPACE XWCTEST_LOGFILERAW_CLOSE_FCLOSE_FAIL_ns
 #define XWCTEST_LOGFILERAW_CLOSE_FCLOSE_FAIL
@@ -70,6 +85,8 @@
 #undef XWCTEST_NAMESPACE
 #undef XWCTEST_LOGFILERAW_CLOSE_FCLOSE_FAIL
 
+// Forces createFile() to throw right after fileTimeRelPath, so its catch block wraps
+// and rethrows the exception.
 #undef logger_logFileRaw_hpp
 #define XWCTEST_NAMESPACE XWCTEST_LOGFILERAW_CREATEFILE_EXCEPTION_ns
 #define XWCTEST_LOGFILERAW_CREATEFILE_EXCEPTION
@@ -77,6 +94,7 @@
 #undef XWCTEST_NAMESPACE
 #undef XWCTEST_LOGFILERAW_CREATEFILE_EXCEPTION
 
+// Makes the directory existence check in createFile() report a permission error.
 #undef logger_logFileRaw_hpp
 #define XWCTEST_NAMESPACE XWCTEST_LOGFILERAW_CREATEFILE_EXISTS_ERRC_ns
 #define XWCTEST_LOGFILERAW_CREATEFILE_EXISTS_ERRC
@@ -84,6 +102,7 @@
 #undef XWCTEST_NAMESPACE
 #undef XWCTEST_LOGFILERAW_CREATEFILE_EXISTS_ERRC
 
+// Closes the file that fopen just opened inside createFile() and pretends fopen failed.
 #undef logger_logFileRaw_hpp
 #define XWCTEST_NAMESPACE XWCTEST_LOGFILERAW_CREATEFILE_FOPEN_FAIL_ns
 #define XWCTEST_LOGFILERAW_CREATEFILE_FOPEN_FAIL
@@ -526,7 +545,10 @@ TEST_CASE( "Writing to a log file", "[libMagAOX::logger::logFileRaw]" )
     }
 }
 
-/// Exception paths in the string-valued setters
+/// The exception paths in the string-valued setters logPath, logName, and logExt. Each
+/// section uses a fault-injected build that throws inside the setter, and checks that a
+/// bad_alloc is nested in an xwcException while a plain std::exception becomes an error
+/// code.
 /**
  * \ingroup logFileRaw_unit_test
  */
@@ -614,7 +636,10 @@ TEST_CASE( "logFileRaw setter exception paths", "[libMagAOX::logger::logFileRaw]
     }
 }
 
-/// I/O error paths in writeLog, flush, close, and createFile
+/// The I/O error paths in writeLog, flush, close, and createFile. Fault-injected builds
+/// force fwrite, fflush, fclose, and fopen failures that cannot be triggered on a healthy
+/// file under /tmp. The last sections use the normal build for the paths that can be
+/// reached directly.
 /**
  * \ingroup logFileRaw_unit_test
  */
@@ -809,9 +834,10 @@ TEST_CASE( "logFileRaw internal I/O error paths", "[libMagAOX::logger::logFileRa
         flatlogs::bufferPtrT logbuff2;
         flatlogs::logHeader::createLog<dummyLog>( logbuff2, ts2, msg, flatlogs::logPrio::LOG_NOTICE );
 
-        // Exceeds maxLogSize, so createFile() runs again. This time m_fout is open, so its internal
-        // close() call actually fires -- and fails, since we're in the FCLOSE_FAIL namespace. createFile()
-        // should report that and continue on to open the new file rather than aborting.
+        // This write exceeds maxLogSize, so createFile() runs again. This time m_fout is
+        // open, so its internal close() call actually fires. That call fails because this
+        // is the FCLOSE_FAIL build. createFile() should report the failure and continue on
+        // to open the new file rather than aborting.
         mx::error_t rv = lfr.writeLog( logbuff2 );
 
         REQUIRE( rv == mx::error_t::noerror );

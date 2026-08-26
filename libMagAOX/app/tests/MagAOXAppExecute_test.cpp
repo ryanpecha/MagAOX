@@ -1,4 +1,20 @@
 // #define CATCH_CONFIG_MAIN
+/** \file MagAOXAppExecute_test.cpp
+  * \brief Catch2 tests for MagAOXApp<true>::execute() and its failure paths.
+  *
+  * Each section runs the real execute() main loop on the MagAOXApp_test harness declared in
+  * MagAOXApp_test.hpp. The tests create a real MagAO-X directory tree under
+  * /tmp/MagAOXApp_test with a config directory, a logs directory, and a FIFO directory, and
+  * point the MagAO-X path environment variable at it.
+  *
+  * Failure branches that no external condition can trigger are reached with the XWCTEST_*
+  * fault injection macros in MagAOXApp.hpp. Each combination of macros is compiled into its
+  * own XWCTEST_NAMESPACE copy of MagAOXApp and of the harness by re-including both headers.
+  * The NOTE comments below explain why every test that starts the log thread needs its own
+  * namespace, and why only one signal handler hook may be used in this file.
+  *
+  * \ingroup MagAOXApp_unit_test
+  */
 #include "../../../tests/catch2/catch.hpp"
 
 #include <filesystem>
@@ -132,13 +148,14 @@
 #undef XWCTEST_NAMESPACE
 #undef XWCTEST_MAGAOXAPP_EXEC_NORM
 
-// NOTE: MagAOXApp's log manager (m_log) is a per-type *static* singleton, and once its
-// background thread is started via logThreadStart() it is never joined/detached (by design --
-// a real app's log thread runs for the life of the process). Since std::thread's move-assign
-// operator calls std::terminate() if the target is already joinable, any XWCTEST_NAMESPACE type
-// whose execute() call gets far enough to call logThreadStart() successfully may only be used
-// ONCE, in ONE test, for the life of this binary. That's why so many near-identical namespaces
-// exist below -- each test that reaches the log thread start needs its own dedicated type.
+// NOTE: the MagAOXApp log manager m_log is a static singleton per type. Once its background
+// thread is started through logThreadStart() it is never joined or detached. That is by
+// design, because the log thread of a real app runs for the life of the process. The
+// std::thread move assignment operator calls std::terminate() if the target is already
+// joinable. Any XWCTEST_NAMESPACE type whose execute() call gets far enough to call
+// logThreadStart() successfully may therefore only be used once, in one test, for the life
+// of this binary. That is why so many near-identical namespaces exist below. Each test that
+// reaches the log thread start needs its own dedicated type.
 
 #undef app_MagAOXApp_hpp
 #undef app_tests_MagAOXApp_test_hpp
@@ -182,9 +199,10 @@
 #undef XWCTEST_MAGAOXAPP_SIGTERMH_SIGINT
 // NOTE: as in MagAOXApp_test.cpp, XWCTEST_MAGAOXAPP_SIGTERMH_SIGINT redefines the SIGINT macro
 // to SIGKILL inside setSigTermHandler(), and the header never restores it. That leaks for the
-// rest of this translation unit, so only one of the SIGTERMH_SIGTERM/SIGQUIT/SIGINT hooks may
-// be used per .cpp file. MagAOXApp_test.cpp already exercises SIGQUIT's branch this way; this
-// file independently exercises SIGINT's branch since it's a separate translation unit.
+// rest of this translation unit. Only one of the SIGTERMH_SIGTERM, SIGTERMH_SIGQUIT, and
+// SIGTERMH_SIGINT hooks may therefore be used per .cpp file. MagAOXApp_test.cpp already
+// exercises the SIGQUIT branch this way. This file is a separate translation unit, so it
+// independently exercises the SIGINT branch.
 
 
 namespace libXWCTest
@@ -273,14 +291,15 @@ TEST_CASE( "running execute", "[app::MagAOXApp]" )
                                   { "loopPause", "device", "channel", "element", "targetElement", "powerOnWait" },
                                   { "2500", "pdu9", "thisch", "thisel", "thistgtel", "5" } );
 
-        // Pass A: whilePowerOff() runs, then XWCTEST_MAGAOXAPP_EXEC_NORM's macro forces
-        // m_powerState to 1. Pass B: execute() sees state()==POWEROFF && m_powerState==1
-        // and transitions to POWERON, then calls appLogic() for the 1st time. Pass C:
-        // appLogic() runs a 2nd time -- our hook flips m_powerState back to 0 right there
-        // and arms onPowerOffFail. Pass D (needs the raised testTimesThrough>2 guard) sees
-        // state()==POWERON (unchanged) with m_powerState==0, and calls the now-failing
-        // onPowerOff() from *inside* the main loop (distinct from the one-time pre-loop
-        // onPowerOff() call already covered by the "stalled" fixture).
+        // The main loop makes four passes. Pass A: whilePowerOff() runs, then the
+        // XWCTEST_MAGAOXAPP_EXEC_NORM macro forces m_powerState to 1. Pass B: execute() sees
+        // state() == POWEROFF with m_powerState == 1, transitions to POWERON, and calls
+        // appLogic() for the first time. Pass C: appLogic() runs a second time. The harness
+        // hook flips m_powerState back to 0 right there and arms onPowerOffFail. Pass D needs
+        // the raised testTimesThrough > 2 guard. It sees state() still POWERON with
+        // m_powerState == 0, and calls the now failing onPowerOff() from inside the main
+        // loop. This is distinct from the one-time onPowerOff() call before the loop, which
+        // the "stalled" section already covers.
         XWCTEST_MAGAOXAPP_EXEC_POWEROFF_AGAIN_ns::MagAOXApp_test app( false );
         app.setPowerMgtEnabled( true );
         app.invokedName() = argv[0];
@@ -366,10 +385,11 @@ TEST_CASE( "running execute", "[app::MagAOXApp]" )
                                   { "loopPause", "device", "channel", "element", "targetElement", "powerOnWait" },
                                   { "2500", "pdu9", "thisch", "thisel", "thistgtel", "5" } );
 
-        // This namespace's execute() (XWCTEST_MAGAOXAPP_EXEC_LOG_DEATH) forces the log
-        // thread to stop right after it's confirmed running, so the *first* iteration of
-        // the main loop finds it already dead -- exercising the "log thread not running"
-        // check inside the loop, distinct from the one before appStartup().
+        // The XWCTEST_MAGAOXAPP_EXEC_LOG_DEATH macro in this namespace's execute() forces the
+        // log thread to stop right after it is confirmed running. The first iteration of the
+        // main loop therefore finds it already dead. This exercises the check for a log thread
+        // that is not running inside the loop, which is distinct from the check before
+        // appStartup().
         XWCTEST_MAGAOXAPP_EXEC_LOG_DEATH_ns::MagAOXApp_test app( false );
         app.setPowerMgtEnabled( true );
         app.invokedName() = argv[0];
@@ -630,7 +650,7 @@ TEST_CASE( "running execute", "[app::MagAOXApp]" )
 
         app.setup( argv.size() - 1, const_cast<char **>( argv.data() ) );
         app.appLogicFail = true;
-        int rv = app.execute(); // appLogic() failure just triggers shutdown; execute() still returns 0
+        int rv = app.execute(); // An appLogic() failure only triggers shutdown. execute() still returns 0.
         REQUIRE( rv == 0 );
     }
 
@@ -697,9 +717,9 @@ TEST_CASE( "running execute", "[app::MagAOXApp]" )
         mx::ioutils::createDirectories( "/tmp/MagAOXApp_test/config" );
         mx::ioutils::createDirectories( "/tmp/MagAOXApp_test/logs" );
         mx::ioutils::createDirectories( "/tmp/MagAOXApp_test/sys/testapp" );
-        // Deliberately do NOT create drivers/fifos, so mkfifo() inside createINDIFIFOS() fails
-        // with ENOENT (missing parent directory), which makes startINDI() -- and therefore
-        // execute() -- fail.
+        // Deliberately do not create drivers/fifos. mkfifo() inside createINDIFIFOS() then fails
+        // with ENOENT because the parent directory is missing. That makes startINDI() fail, and
+        // therefore execute() fails too.
 
         std::ofstream fout;
         fout.open( "/tmp/MagAOXApp_test/config/magaox.conf" );
@@ -713,7 +733,7 @@ TEST_CASE( "running execute", "[app::MagAOXApp]" )
         XWCTEST_MAGAOXAPP_EXEC_INDIFAIL_ns::MagAOXApp_test app( false );
         app.setPowerMgtEnabled( true );
         app.invokedName() = argv[0];
-        app.appShutdownFail = true; // also exercises the "error from appShutdown()" branch taken after INDI failure
+        app.appShutdownFail = true; // Also exercises the appShutdown() error branch taken after the INDI failure.
 
         app.setup( argv.size() - 1, const_cast<char **>( argv.data() ) );
 
@@ -741,10 +761,10 @@ TEST_CASE( "running execute", "[app::MagAOXApp]" )
         mx::ioutils::createDirectories( "/tmp/MagAOXApp_test/config" );
         mx::ioutils::createDirectories( "/tmp/MagAOXApp_test/logs" );
         mx::ioutils::createDirectories( "/tmp/MagAOXApp_test/sys/testapp" );
-        // Deliberately do NOT create drivers/fifos, so startINDI() fails, same as "INDI
-        // fails to start" above -- but this namespace also forces unlockPID() to fail
-        // unconditionally (XWCTEST_MAGAOXAPP_PID_UNLOCK_ERR), exercising the "error from
-        // unlockPID()" branch taken right after INDI's startup failure specifically.
+        // Deliberately do not create drivers/fifos, so startINDI() fails as in the "INDI fails
+        // to start" section above. This namespace also forces unlockPID() to fail
+        // unconditionally through XWCTEST_MAGAOXAPP_PID_UNLOCK_ERR. That exercises the
+        // unlockPID() error branch taken right after the INDI startup failure.
 
         std::ofstream fout;
         fout.open( "/tmp/MagAOXApp_test/config/magaox.conf" );
@@ -797,9 +817,9 @@ TEST_CASE( "running execute", "[app::MagAOXApp]" )
                                   { "loopPause", "device", "channel", "element", "targetElement", "powerOnWait" },
                                   { "2500", "pdu9", "thisch", "thisel", "thistgtel", "5" } );
 
-        // EXEC_NORM forces the power state to 0 (off) at startup (skipping the real wait) and
-        // limits the main loop to a couple of iterations, so whilePowerOff() runs for real
-        // while powered off.
+        // EXEC_NORM forces the power state to 0, which is off, at startup and skips the real
+        // wait. It also limits the main loop to a couple of iterations. whilePowerOff()
+        // therefore runs for real while powered off.
         XWCTEST_MAGAOXAPP_EXEC_WHILEPOWEROFF_ns::MagAOXApp_test app( false );
         app.setPowerMgtEnabled( true );
         app.invokedName() = argv[0];
@@ -807,7 +827,7 @@ TEST_CASE( "running execute", "[app::MagAOXApp]" )
 
         app.setup( argv.size() - 1, const_cast<char **>( argv.data() ) );
 
-        int rv = app.execute(); // whilePowerOff() failure just triggers shutdown; execute() still returns 0
+        int rv = app.execute(); // A whilePowerOff() failure only triggers shutdown. execute() still returns 0.
         REQUIRE( rv == 0 );
     }
 
@@ -843,10 +863,10 @@ TEST_CASE( "running execute", "[app::MagAOXApp]" )
                                   { "loopPause", "device", "channel", "element", "targetElement", "powerOnWait" },
                                   { "2500", "pdu9", "thisch", "thisel", "thistgtel", "5" } );
 
-        // No fault-injection toggle forces m_powerState here, so it stays at its startup
-        // value of -1 (unknown) for real. execute() blocks in a real sleep(1) loop for 30
-        // real seconds until it gives up ("stalled waiting for power state"), then falls
-        // through to the onPowerOff() call, which we make fail too.
+        // No fault injection toggle forces m_powerState here, so it stays at its startup
+        // value of -1, which means unknown. execute() blocks in a real sleep(1) loop for 30
+        // real seconds until it gives up with "stalled waiting for power state". It then
+        // falls through to the onPowerOff() call, which the test makes fail too.
         XWCTEST_MAGAOXAPP_EXEC_STALLED_ns::MagAOXApp_test app( false );
         app.setPowerMgtEnabled( true );
         app.invokedName() = argv[0];
@@ -859,16 +879,17 @@ TEST_CASE( "running execute", "[app::MagAOXApp]" )
     }
 }
 
-/// setSigTermHandler failing on the SIGINT sigaction call specifically
+/// Verify that setSigTermHandler() reports failure when the sigaction() call for SIGINT fails.
+/// The XWCTEST_MAGAOXAPP_SIGTERMH_SIGINT hook forces exactly that call to fail.
 /**
  * \ingroup MagAOXApp_unit_test
  */
 TEST_CASE( "Signal handler setup failure for SIGINT", "[app::MagAOXApp]" )
 {
-    // NOTE: see the comment near this hook's #include block at the top of this file --
-    // XWCTEST_MAGAOXAPP_SIGTERMH_SIGINT's redefinition of SIGINT to SIGKILL leaks for the rest
-    // of this translation unit, so it must be the only SIGTERMH_SIGTERM/SIGQUIT/SIGINT hook
-    // used here.
+    // NOTE: see the comment near the #include block for this hook at the top of this file.
+    // The XWCTEST_MAGAOXAPP_SIGTERMH_SIGINT redefinition of SIGINT to SIGKILL leaks for the
+    // rest of this translation unit, so it must be the only SIGTERMH_SIGTERM, SIGTERMH_SIGQUIT,
+    // or SIGTERMH_SIGINT hook used here.
     XWCTEST_MAGAOXAPP_SIGTERMH_SIGINT_ns::MagAOXApp_test app;
 
     REQUIRE( app.setSigTermHandler() == -1 );

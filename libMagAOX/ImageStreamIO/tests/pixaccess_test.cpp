@@ -1,5 +1,9 @@
 /** \file pixaccess_test.cpp
- * \brief Catch2 tests for libMagAOX/ImageStreamIO/pixaccess.hpp
+ * \brief Catch2 tests for the pixel access helpers in libMagAOX/ImageStreamIO/pixaccess.hpp.
+ *
+ * getPix() reads one pixel from a raw buffer and converts it to the requested type.
+ * getPixPointer() returns the getPix() instantiation for an ImageStreamIO data type code.
+ * The tests call these directly on small local arrays. No shared memory stream is needed.
  *
  * History:
  */
@@ -22,8 +26,9 @@ namespace ImageStreamIOTest
 namespace pixaccessTest
 {
 
-/// Direct calls to getPix<returnT,dataT>
-/**
+/// Direct calls to getPix<returnT,dataT> for every supported data type.
+/** Each section reads the minimum, zero, and maximum of one type and checks the value
+ * survives the cast. The last section checks a return type other than double.
  * \ingroup ImageStreamIO_unit_test
  */
 TEST_CASE( "getPix casts image data to the return type", "[libMagAOX::ImageStreamIO::pixaccess]" )
@@ -126,8 +131,9 @@ TEST_CASE( "getPix casts image data to the return type", "[libMagAOX::ImageStrea
     }
 }
 
-/// Direct calls to the compile-time getPixPointer<returnT,imageStructDataT>()
-/**
+/// Direct calls to the compile time getPixPointer<returnT,imageStructDataT>().
+/** For each data type code the returned function pointer must not be null and must read the
+ * pixel correctly when called.
  * \ingroup ImageStreamIO_unit_test
  */
 TEST_CASE( "getPixPointer<returnT,imageStructDataT> returns the getPix instantiation for that type",
@@ -234,8 +240,9 @@ TEST_CASE( "getPixPointer<returnT,imageStructDataT> returns the getPix instantia
     }
 }
 
-/// Runtime dispatch through getPixPointer<returnT>(int)
-/**
+/// Runtime dispatch through getPixPointer<returnT>(int).
+/** The data type code is passed as a runtime integer. Each supported code must return a
+ * working function pointer. Complex, event, and invalid codes must return nullptr.
  * \ingroup ImageStreamIO_unit_test
  */
 TEST_CASE( "getPixPointer<returnT>(int) dispatches on a runtime image data type code",

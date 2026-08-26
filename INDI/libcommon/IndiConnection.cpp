@@ -55,7 +55,8 @@ IndiConnection::IndiConnection( const string &szName, const string &szVersion, c
 /// Copy constructor.
 /// \param idRhs Another version of the driver.
 
-// Private and never called anywhere -- uncallable outside the class.
+// This copy constructor is private and nothing calls it.
+// It cannot run, so it is excluded from coverage.
 // LCOV_EXCL_START
 IndiConnection::IndiConnection( const IndiConnection &idRhs ) : Thread()
 {
@@ -70,7 +71,8 @@ IndiConnection::IndiConnection( const IndiConnection &idRhs ) : Thread()
 /// \param idRhs The right-hand side of the operation.
 /// \return This object.
 
-// Private and never called anywhere -- uncallable outside the class.
+// This assignment operator is private and nothing calls it.
+// It cannot run, so it is excluded from coverage.
 // LCOV_EXCL_START
 const IndiConnection &IndiConnection::operator=( const IndiConnection &idRhs )
 {
@@ -90,7 +92,8 @@ IndiConnection::~IndiConnection()
     {
         deactivate();
     }
-    // deactivate() does not throw in practice; guard is for teardown safety only.
+    // deactivate() stops and joins the threads. It does not throw in practice.
+    // This handler only protects the destructor from an unexpected exception.
     // LCOV_EXCL_START
     catch( ... )
     {
@@ -273,7 +276,9 @@ void *IndiConnection::pthreadProcess( void *pUnknown )
     {
         pThis->process();
     }
-    // LCOV_EXCL_START - process() catches all std exceptions internally, so this handler is unreachable
+    // process() catches every std::exception inside its own loop.
+    // No std::exception can reach this handler.
+    // LCOV_EXCL_START
     catch( const std::exception &excep )
     {
         std::cerr << "Process thread exited: " << excep.what() << std::endl;
@@ -413,7 +418,7 @@ void IndiConnection::sendXml( const string &szXml ) const
         }
 
         if( nwr < 0 && errno == EINTR )
-        // LCOV_EXCL_START -- a signal would have to land exactly during this write
+        // LCOV_EXCL_START EINTR needs a signal to arrive during this write() call. A test cannot force that.
         {
             continue;
         }

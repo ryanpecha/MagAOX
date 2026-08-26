@@ -1,5 +1,8 @@
 /** \file IndiMessage_test.cpp
-  * \brief Catch2 tests for pcf::IndiMessage (INDI/libcommon/IndiMessage.cpp).
+  * \brief Catch2 tests for pcf::IndiMessage in INDI/libcommon/IndiMessage.cpp.
+  *
+  * IndiMessage is a plain value class that pairs a message type with an IndiProperty.
+  * The tests build messages directly. No threads, sockets, or files are needed.
   */
 #include "../../tests/catch2/catch.hpp"
 
@@ -12,6 +15,8 @@ using pcf::IndiProperty;
 namespace IndiMessage_test
 {
 
+// Verifies construction, copying, assignment, property access, and the converters
+// between message types and strings in both directions.
 SCENARIO( "IndiMessage construction, assignment, and accessors", "[IndiMessage]" )
 {
    GIVEN( "messages built each way" )
@@ -35,10 +40,10 @@ SCENARIO( "IndiMessage construction, assignment, and accessors", "[IndiMessage]"
          IndiMessage m3;
          m3 = m1;
          REQUIRE( m3.getProperty().getDevice() == "dev" );
-         m3 = m3; // self-assignment branch
+         m3 = m3; // This takes the self-assignment branch.
          REQUIRE( m3.getType() == IndiMessage::Define );
 
-         // non-const getProperty and setProperty
+         // The non-const getProperty() allows in-place edits. setProperty() replaces the property.
          m3.getProperty().setName( "renamed" );
          REQUIRE( m3.getProperty().getName() == "renamed" );
 

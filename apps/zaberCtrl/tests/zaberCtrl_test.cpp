@@ -8,13 +8,13 @@
 #include "../../../tests/testXWC.hpp"
 #include "../../../tests/testMacrosINDI.hpp"
 
-// testMacrosINDI.hpp unconditionally #defines XWCTEST_INDI_CALLBACK_VALIDATION (needed only
-// for the XWCTEST_INDI_NEW_CALLBACK validation-rejection scenarios below), which would
-// otherwise make every INDI callback in zaberCtrl.hpp short-circuit to `return 0` on any
-// property match -- breaking the real state-transition behavior exercised elsewhere in this
-// file (e.g. applyStageState()). The wrong-device/wrong-name checks these macros test still
-// return -1 via the real (non-test-mode) validation path, so undefining this before including
-// the production header doesn't weaken those checks.
+// testMacrosINDI.hpp always defines XWCTEST_INDI_CALLBACK_VALIDATION. That macro is only
+// needed for the XWCTEST_INDI_NEW_CALLBACK validation-rejection scenarios below. If it stayed
+// defined, every INDI callback in zaberCtrl.hpp would return 0 as soon as the property matched.
+// That would break the real state-transition behavior exercised elsewhere in this file, for
+// example applyStageState(). The wrong-device and wrong-name checks made by those macros still
+// return -1 through the real validation path that runs outside test mode. Undefining the macro
+// before including the production header therefore does not weaken those checks.
 #undef XWCTEST_INDI_CALLBACK_VALIDATION
 
 #include "../zaberCtrl.hpp"
@@ -48,9 +48,9 @@ class zaberCtrl_test : public zaberCtrl
         m_configName = device;
         m_stageName  = "stage";
 
-        // sendNewProperty() (used by newCallBack_m_indiP_rawPos()) requires a non-null
-        // m_indiDriver since zaberCtrl uses MagAOXApp<true> -- this real-but-FIFO-less driver
-        // never connects to a live indiserver, so sendNewProperty() stays a harmless no-op.
+        // zaberCtrl uses MagAOXApp<true>, so sendNewProperty() needs a non-null m_indiDriver.
+        // newCallBack_m_indiP_rawPos() calls sendNewProperty(). This driver is real but has no
+        // FIFO and never connects to a live indiserver, so sendNewProperty() is a harmless no-op.
         m_indiDriver = dev::testHarness::makeFifolessIndiDriver<MagAOXApp<true>>( this, m_configName );
 
         XWCTEST_SETUP_INDI_NEW_PROP( pos );
@@ -213,18 +213,18 @@ SCENARIO( "INDI Callbacks", "[zaberCtrl]" )
 
     XWCTEST_INDI_NEW_CALLBACK( zaberCtrl, pos );
 
-    // KNOWN LIMITATION: rawPos/preset's "Right Device.Name" case (below, via this shared
-    // macro) fails under real (non-test-mode) callback behavior -- their real logic calls
-    // sendNewProperty(), which (unlike updateIfChanged()) does not catch its own failures: it
-    // lazily constructs a real indiClient targeting m_serverIPAddress:m_serverPort ("0"/"0"
-    // for any test harness, fifoless or not) and returns -1 when that connection attempt
-    // fails, which it always does without a live indiserver. Previously this was masked by
-    // testMacrosINDI.hpp's XWCTEST_INDI_CALLBACK_VALIDATION short-circuiting the callback
-    // before reaching sendNewProperty() at all; undefining that macro above (needed so the
-    // Homing-transition tests further down exercise real behavior) exposes it. Properly
-    // fixing this needs either mocking indiClient's connection or a live local INDI server,
-    // both out of scope here -- left as a known, documented pre-existing gap rather than
-    // fabricating a workaround.
+    // KNOWN LIMITATION: the "Right Device.Name" case of the shared macro below fails for rawPos
+    // and for preset when the callbacks run with their real behavior outside test mode. Their
+    // real logic calls sendNewProperty(). Unlike updateIfChanged(), sendNewProperty() does not
+    // catch its own failures. It lazily constructs a real indiClient that targets
+    // m_serverIPAddress and m_serverPort. Both are "0" in any test harness, with or without a
+    // FIFO. It returns -1 when that connection attempt fails, and it always fails without a
+    // live indiserver. Previously this was hidden because XWCTEST_INDI_CALLBACK_VALIDATION from
+    // testMacrosINDI.hpp made the callback return before reaching sendNewProperty(). Undefining
+    // that macro above exposes the failure. The macro had to be undefined so the Homing
+    // transition tests further down exercise real behavior. A proper fix needs either a mocked
+    // indiClient connection or a live local INDI server. Both are out of scope here. This is
+    // left as a known and documented pre-existing gap rather than adding a workaround.
     XWCTEST_INDI_NEW_CALLBACK( zaberCtrl, rawPos );
     XWCTEST_INDI_NEW_CALLBACK( zaberCtrl, preset );
     XWCTEST_INDI_NEW_CALLBACK( zaberCtrl, presetName );

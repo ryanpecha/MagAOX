@@ -25,8 +25,8 @@ namespace logger
 struct telem_sparkleclock : public flatbuffer_log
 {
    ///The event code
-   // (Previously TELEM_DMSPECK -- a copy-paste error that made every sparkle-clock
-   // log identify itself as a DM-speck log in the binary stream.)
+   // This was TELEM_DMSPECK before. That copy and paste error tagged every sparkle clock log entry
+   // with the dmspeck event code. Logs recorded before this fix still carry the old code.
    static const flatlogs::eventCodeT eventCode = eventCodes::TELEM_SPARKLECLOCK;
 
    ///The default level
@@ -96,8 +96,8 @@ struct telem_sparkleclock : public flatbuffer_log
       }
 
       msg += "seps: ";
-      // separations is not a required field, so a deserialized message can lack it
-      // entirely -- iterating without this null check dereferences NULL.
+      // separations is not a required field, so a message can be serialized without it.
+      // This null check prevents a crash from iterating a separations vector that is missing.
       if(fbs->separations() != nullptr)
       {
          for(flatbuffers::Vector<float>::const_iterator it = fbs->separations()->begin(); it != fbs->separations()->end(); ++it)
@@ -113,7 +113,7 @@ struct telem_sparkleclock : public flatbuffer_log
 
       return msg;
 
-   } // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
+   } // LCOV_EXCL_LINE gcov reports this closing brace as a separate line that only runs during exception cleanup
 
    static bool modulating( void * msgBuffer )
    {
@@ -139,13 +139,19 @@ struct telem_sparkleclock : public flatbuffer_log
 
       auto fbs = GetTelem_sparkleclock_fb(msgBuffer);
 
-      for(flatbuffers::Vector<float>::const_iterator it = fbs->separations()->begin(); it != fbs->separations()->end(); ++it)
+      // Bug fix. separations is not a required field, so a message can be serialized
+      // without it. The same null check as in formatMessage() above prevents a crash.
+      // An empty vector is returned when the field is missing.
+      if(fbs->separations() != nullptr)
       {
-         v.push_back(*it);
+         for(flatbuffers::Vector<float>::const_iterator it = fbs->separations()->begin(); it != fbs->separations()->end(); ++it)
+         {
+            v.push_back(*it);
+         }
       }
 
       return v;
-   } // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
+   } // LCOV_EXCL_LINE gcov reports this closing brace as a separate line that only runs during exception cleanup
 
    static float angleOffset( void * msgBuffer )
    {

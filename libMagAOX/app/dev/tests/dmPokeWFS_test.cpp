@@ -1,10 +1,18 @@
 /** \file dmPokeWFS_test.cpp
-  * \brief Catch2 tests for the dev::dmPokeWFS CRTP mixin (libMagAOX/app/dev/dmPokeWFS.hpp).
+  * \brief Catch2 tests for the MagAOX::app::dev::dmPokeWFS device mixin.
   *
-  * Drives the real poke sensor state machine under the harness in dmPokeWFS_test.hpp:
-  * real shmim streams, real semaphores, and a real WFS-frame-producing thread stand in
-  * for the camera, so the measurement loop (basicTimedPoke/basicRunSensor), its INDI
-  * callbacks, and its error paths all execute for real.
+  * The component under test is the CRTP mixin in libMagAOX/app/dev/dmPokeWFS.hpp. It pokes
+  * a deformable mirror channel and reads back wavefront sensor frames to measure the response.
+  *
+  * The tests drive the real poke sensor state machine through the dmPokeWFSTest harness
+  * declared in dmPokeWFS_test.hpp. The harness is a MagAOXApp<false> with two real
+  * shmimMonitor bases. Real shared memory image streams and real semaphores are used. A
+  * background thread in the test posts WFS frames and stands in for the camera. The
+  * measurement loop in basicTimedPoke() and basicRunSensor(), the INDI callbacks, and the
+  * error paths all run for real.
+  *
+  * The tests write config files under /tmp and create image streams under /tmp/dmtest/shm
+  * by setting MILK_SHM_DIR. Some tests install a SIGUSR1 handler and start the real wfs thread.
   */
 #include "../../../../tests/catch2/catch.hpp"
 
@@ -21,7 +29,8 @@
  * \ingroup app_dev_unit_tests
  */
 
-/// Test dmPokeWFS configuration, including the invalid-poke-spec error path.
+/// Verify that loadConfig() reads every pokecen value from a config file and rejects poke
+/// lists that are missing or have mismatched sizes.
 /**
  * \ingroup dmPokeWFS_tests
  */
@@ -138,7 +147,8 @@ TEST_CASE( "Test dmPokeWFS Configuration", "[dev::dmPokeWFS]" )
     }
 }
 
-/// Helper to load a minimal valid config into a dmPokeWFSTest for the given shmim/dm names.
+/// Write a minimal valid config file with the given stream and DM channel names and load it
+/// into the harness. The poke list has two points and one image per poke.
 static void loadBasicConfig( dmPokeWFS_tests::dmPokeWFSTest &pdt,
                               const std::string &wfsName,
                               const std::string &darkName,
@@ -182,9 +192,9 @@ static void loadBasicConfig( dmPokeWFS_tests::dmPokeWFSTest &pdt,
     REQUIRE( pdt.loadConfig( config ) == 0 );
 }
 
-/// Test allocate() and processImage() for both the WFS camera and dark shmims,
-/// including the dark-valid/invalid size-matching logic and the DM-channel-missing
-/// error branch.
+/// Verify allocate() and processImage() for both the WFS camera stream and the dark stream.
+/// Covers the dark valid flag, which depends on the two streams having matching sizes, and
+/// the error branch taken when the DM channel does not exist.
 /**
  * \ingroup dmPokeWFS_tests
  */
@@ -198,37 +208,39 @@ TEST_CASE( "Test dmPokeWFS allocate and processImage", "[dev::dmPokeWFS]" )
 
     dmPokeWFS_tests::dmPokeWFSTest pdt( "xx", false );
     loadBasicConfig( pdt, "pwfscamA", "pwfsdarkA", "pwfsdmA", "/tmp/dmPokeWFS_test_alloc.conf" );
-    // processImage() posts m_imageSemaphore; initialize it since we aren't calling
-    // appStartup() (which would normally do this) in this test.
+    // processImage() posts m_imageSemaphore. This test does not call appStartup(), which
+    // normally initializes the semaphore, so initialize it here.
     pdt.initSemaphoresForTest();
 
-    // dm channel doesn't exist yet -> allocate(wfsShmimT) fails
+    // The DM channel does not exist yet, so allocate() for the WFS stream fails.
     pdt.setWfsSize( 4, 4, IMAGESTRUCT_FLOAT );
     REQUIRE( pdt.allocate( dmPokeWFS_tests::dmPokeWFSTest::dmPokeWFST::wfsShmimT() ) == -1 );
 
     mx::improc::milkImage<float> dmChan;
     dmChan.create( "pwfsdmA", 4, 4 );
 
-    // dark not yet sized -> mismatched -> not valid
+    // The dark has not been sized yet, so the sizes mismatch and the dark is not valid.
     REQUIRE( pdt.allocate( dmPokeWFS_tests::dmPokeWFSTest::dmPokeWFST::wfsShmimT() ) == 0 );
     REQUIRE( pdt.darkValidFlag() == false );
 
-    // now size the dark to match -> allocate(darkShmimT) sees matching sizes -> valid
+    // Size the dark to match. allocate() for the dark stream now sees matching sizes and
+    // marks the dark valid.
     pdt.setDarkSize( 4, 4, IMAGESTRUCT_FLOAT );
     REQUIRE( pdt.allocate( dmPokeWFS_tests::dmPokeWFSTest::dmPokeWFST::darkShmimT() ) == 0 );
     REQUIRE( pdt.darkValidFlag() == true );
 
-    // processImage(darkShmimT): copies raw data into m_darkImage
+    // processImage() for the dark stream copies the raw data into m_darkImage.
     std::vector<float> darkFrame( 16, 2.0f );
     REQUIRE( pdt.processImage( darkFrame.data(), dmPokeWFS_tests::dmPokeWFSTest::dmPokeWFST::darkShmimT() ) == 0 );
     REQUIRE( pdt.darkImage().sum() == Approx( 16 * 2.0f ) );
 
-    // processImage(wfsShmimT): with dark valid, output = raw - dark
+    // processImage() for the WFS stream subtracts the dark when the dark is valid.
     std::vector<float> wfsFrame( 16, 10.0f );
     REQUIRE( pdt.processImage( wfsFrame.data(), dmPokeWFS_tests::dmPokeWFSTest::dmPokeWFST::wfsShmimT() ) == 0 );
     REQUIRE( pdt.rawImage()().sum() == Approx( 16 * ( 10.0f - 2.0f ) ) );
 
-    // now make dark invalid (mismatched sizes) and verify processImage(wfsShmimT) skips subtraction
+    // Make the dark invalid again with mismatched sizes. processImage() for the WFS stream
+    // must then skip the subtraction.
     pdt.setDarkSize( 5, 5, IMAGESTRUCT_FLOAT );
     REQUIRE( pdt.allocate( dmPokeWFS_tests::dmPokeWFSTest::dmPokeWFST::darkShmimT() ) == 0 );
     REQUIRE( pdt.darkValidFlag() == false );
@@ -237,8 +249,9 @@ TEST_CASE( "Test dmPokeWFS allocate and processImage", "[dev::dmPokeWFS]" )
     REQUIRE( pdt.rawImage()().sum() == Approx( 16 * 10.0f ) );
 }
 
-/// Test basicTimedPoke() and basicRunSensor(), including the "poke image not
-/// allocated" error branch.
+/// Verify basicTimedPoke() and basicRunSensor() with a background thread posting frames.
+/// Also covers the error returned when the poke image is not allocated and the early
+/// return taken when a stop has already been requested.
 /**
  * \ingroup dmPokeWFS_tests
  */
@@ -249,27 +262,27 @@ TEST_CASE( "Test dmPokeWFS basicTimedPoke and basicRunSensor", "[dev::dmPokeWFS]
 
     dmPokeWFS_tests::dmPokeWFSTest pdt( "xx", false );
     loadBasicConfig( pdt, "pwfscamB", "pwfsdarkB", "pwfsdmB", "/tmp/dmPokeWFS_test_run.conf" );
-    // basicTimedPoke()/processImage() use m_imageSemaphore; initialize it since we
-    // aren't calling appStartup() (which would normally do this) in this test.
+    // basicTimedPoke() and processImage() use m_imageSemaphore. This test does not call
+    // appStartup(), which normally initializes the semaphore, so initialize it here.
     pdt.initSemaphoresForTest();
 
-    // basicRunSensor() before allocate(): m_pokeImage is not valid -> error
+    // basicRunSensor() before allocate() finds m_pokeImage not valid and returns an error.
     REQUIRE( pdt.callBasicRunSensor() == -1 );
 
     mx::improc::milkImage<float> dmChan;
     dmChan.create( "pwfsdmB", 2, 2 );
 
     pdt.setWfsSize( 2, 2, IMAGESTRUCT_FLOAT );
-    // Leave the dark uninitialized/unallocated here (darkValid() stays false) so
-    // processImage(wfsShmimT) is a plain deterministic copy with no subtraction --
-    // dark subtraction itself is already covered by the allocate/processImage test.
+    // Leave the dark unallocated so darkValid() stays false. processImage() for the WFS
+    // stream is then a plain deterministic copy with no subtraction. Dark subtraction is
+    // already covered by the allocate and processImage test.
     REQUIRE( pdt.allocate( dmPokeWFS_tests::dmPokeWFSTest::dmPokeWFST::wfsShmimT() ) == 0 );
 
-    // A background "camera" thread that keeps posting frames via processImage(), which
-    // internally posts the image semaphore that basicTimedPoke()/basicRunSensor() wait on.
-    // Use CHECK (not REQUIRE) for assertions taken while this thread is running, and
-    // always stop/join it before returning, so a failed assertion can't leave a
-    // dangling reference to `pdt` running in the background.
+    // A background camera thread keeps posting frames through processImage(). That call
+    // posts the image semaphore that basicTimedPoke() and basicRunSensor() wait on.
+    // Assertions taken while this thread runs use CHECK rather than REQUIRE. The thread is
+    // always stopped and joined before returning. A failed REQUIRE would otherwise leave
+    // the thread running with a dangling reference to pdt.
     std::atomic<bool> keepPosting{ true };
     std::vector<float> frame( 4, 7.0f );
     std::thread        poster(
@@ -285,7 +298,7 @@ TEST_CASE( "Test dmPokeWFS basicTimedPoke and basicRunSensor", "[dev::dmPokeWFS]
     pdt.setPokeLocalZero();
     int rv = pdt.callBasicTimedPoke( 1.0 );
     CHECK( rv == 0 );
-    // one image of the constant frame was accumulated with sign +1
+    // One image of the constant frame was accumulated with sign +1.
     CHECK( pdt.pokeLocal().sum() == Approx( 4 * 7.0f ) );
 
     rv = pdt.callBasicRunSensor();
@@ -294,22 +307,24 @@ TEST_CASE( "Test dmPokeWFS basicTimedPoke and basicRunSensor", "[dev::dmPokeWFS]
     poster.join();
 
     CHECK( rv == 0 );
-    // symmetric +1/-1 poke of a constant "sensor" frame nets to zero
+    // A symmetric +1 and -1 poke of a constant sensor frame nets to zero.
     CHECK( pdt.pokeImage()().sum() == Approx( 0 ).margin( 1e-4 ) );
 
-    // -- an already-requested stop causes an immediate shutdown-style return --
-    // With m_stopMeasurement already true, both of basicTimedPoke()'s internal wait
-    // loops are skipped entirely and it returns 1 (zeroing the DM command).
+    // An already requested stop causes an immediate shutdown style return. With
+    // m_stopMeasurement already true, both internal wait loops in basicTimedPoke() are
+    // skipped and it returns 1 after zeroing the DM command.
     pdt.setStopMeasurement( true );
     REQUIRE( pdt.callBasicTimedPoke( 1.0 ) == 1 );
 
-    // basicRunSensor()'s positive-poke call sees the same rv==1 and propagates it.
+    // The positive poke call inside basicRunSensor() sees the same return value of 1 and
+    // propagates it.
     REQUIRE( pdt.callBasicRunSensor() == 1 );
 
     pdt.setStopMeasurement( false );
 }
 
-/// Test updateMeasurement().
+/// Verify that updateMeasurement() stores the given deltas and updates the measurement
+/// INDI property.
 /**
  * \ingroup dmPokeWFS_tests
  */
@@ -320,8 +335,8 @@ TEST_CASE( "Test dmPokeWFS updateMeasurement", "[dev::dmPokeWFS]" )
     dmPokeWFS_tests::dmPokeWFSTest pdt( "xx", false );
     REQUIRE( pdt.setupConfig( config ) == 0 );
     config.readConfig( "/tmp/dmPokeWFS_test_um.conf" );
-    // no pokeX/pokeY configured: loadConfig will fail, but updateMeasurement() itself
-    // does not depend on loadConfig having succeeded.
+    // No pokeX or pokeY is configured, so loadConfig() fails. updateMeasurement() itself
+    // does not depend on loadConfig() having succeeded.
     pdt.loadConfig( config );
     pdt.prepMeasurementIndiForTest();
 
@@ -330,7 +345,8 @@ TEST_CASE( "Test dmPokeWFS updateMeasurement", "[dev::dmPokeWFS]" )
     REQUIRE( pdt.testDeltaY() == Approx( -2.5 ) );
 }
 
-/// Test recordTelem()/recordPokeLoop(), including the forced and change-detection paths.
+/// Verify recordTelem() and recordPokeLoop(), including the forced path and the change
+/// detection path. The harness counts telem() calls.
 /**
  * \ingroup dmPokeWFS_tests
  */
@@ -343,26 +359,27 @@ TEST_CASE( "Test dmPokeWFS recordTelem and recordPokeLoop", "[dev::dmPokeWFS]" )
     config.readConfig( "/tmp/dmPokeWFS_test_telem.conf" );
     pdt.loadConfig( config );
 
-    // recordTelem() forces a telem() call
+    // recordTelem() forces a telem() call.
     REQUIRE( pdt.callRecordTelem() == 0 );
     REQUIRE( pdt.m_telemCount >= 1 );
 
     int before = pdt.m_telemCount;
 
-    // recordPokeLoop(false) with unchanged state (all defaults) does not telem() again
+    // recordPokeLoop(false) with unchanged default state does not call telem() again.
     REQUIRE( pdt.callRecordPokeLoop( false ) == 0 );
     REQUIRE( pdt.m_telemCount == before );
 
-    // force always calls telem()
+    // The force flag always calls telem().
     REQUIRE( pdt.callRecordPokeLoop( true ) == 0 );
     REQUIRE( pdt.m_telemCount == before + 1 );
 }
 
-/// Test appLogic()'s three independent "a monitored thread has exited" propagation
-/// branches (the wfs shmimMonitor, the dark shmimMonitor, and dmPokeWFS's own wfs
-/// measurement thread), using direct control of each std::thread's bookkeeping --
-/// mirroring shmimMonitor_test.cpp's setSmThread()/abandonSmThread() pattern -- so
-/// each branch can be exercised in isolation without a full, real appStartup().
+/// Verify the three independent branches in appLogic() that report a monitored thread has
+/// exited. The threads are the WFS shmimMonitor thread, the dark shmimMonitor thread, and
+/// the wfs measurement thread owned by dmPokeWFS. Each section installs its own std::thread
+/// objects into the harness so one branch can be exercised in isolation without a real
+/// appStartup(). This mirrors the setSmThread() and abandonSmThread() pattern in
+/// shmimMonitor_test.cpp.
 /**
  * \ingroup dmPokeWFS_tests
  */
@@ -459,17 +476,17 @@ TEST_CASE( "Test dmPokeWFS appLogic propagates thread-exited errors independentl
     }
 }
 
-/// Test the full appStartup/appLogic/appShutdown lifecycle, including the WFS
-/// thread's single-measurement and continuous+stop state machines, and the INDI
-/// callbacks (including their wrong-key error branches).
+/// Verify the full appStartup(), appLogic(), and appShutdown() lifecycle. Covers the single
+/// measurement state machine and the continuous plus stop state machine of the wfs thread,
+/// and the INDI callbacks including their wrong key error branches.
 /**
  * \ingroup dmPokeWFS_tests
  */
 TEST_CASE( "Test dmPokeWFS full lifecycle", "[dev::dmPokeWFS]" )
 {
-    // dmPokeWFS<>::appShutdown() sends SIGUSR1 to the wfs thread. shmimMonitor's own
-    // appStartup() installs the same no-op handler for its own threads; install it here
-    // too so it is guaranteed to be in place before anything relies on it.
+    // dmPokeWFS::appShutdown() sends SIGUSR1 to the wfs thread. The appStartup() of
+    // shmimMonitor installs the same no-op handler for its own threads. Install it here too
+    // so it is in place before anything relies on it.
     struct sigaction act;
     memset( &act, 0, sizeof( act ) );
     act.sa_sigaction = &MagAOX::app::sigUsr1Handler;
@@ -489,14 +506,14 @@ TEST_CASE( "Test dmPokeWFS full lifecycle", "[dev::dmPokeWFS]" )
     pdt.setWfsSize( 2, 2, IMAGESTRUCT_FLOAT );
     pdt.setDarkSize( 2, 2, IMAGESTRUCT_FLOAT );
 
-    // allocate() *before* appStartup() so m_pokeImage is already valid before the wfs
-    // thread could ever act on a triggered measurement (avoids an unbounded spin wait
-    // inside wfsThreadExec() for m_pokeImage.valid()).
+    // Call allocate() before appStartup() so m_pokeImage is already valid before the wfs
+    // thread can act on a triggered measurement. Otherwise wfsThreadExec() could spin
+    // without bound waiting for m_pokeImage.valid().
     REQUIRE( pdt.allocate( dmPokeWFS_tests::dmPokeWFSTest::dmPokeWFST::wfsShmimT() ) == 0 );
     REQUIRE( pdt.allocate( dmPokeWFS_tests::dmPokeWFSTest::dmPokeWFST::darkShmimT() ) == 0 );
 
-    // Use the fast, deterministic runSensor()/analyzeSensor() stubs (not the real
-    // basicRunSensor(), which requires a live image-posting thread).
+    // Use the fast and deterministic runSensor() and analyzeSensor() stubs. The real
+    // basicRunSensor() would need a live image posting thread.
     pdt.m_useRealRunSensor = false;
     pdt.m_runSensorRV      = 0;
     pdt.m_testDeltaX       = 3;
@@ -507,7 +524,7 @@ TEST_CASE( "Test dmPokeWFS full lifecycle", "[dev::dmPokeWFS]" )
 
     REQUIRE( pdt.appLogic() == 0 );
 
-    // -- INDI callback wrong-key branches --
+    // INDI callback wrong key branches. The device and name do not match any property.
     pcf::IndiProperty ipWrong( pcf::IndiProperty::Number );
     ipWrong.setDevice( "somethingelse" );
     ipWrong.setName( "notarealprop" );
@@ -522,12 +539,13 @@ TEST_CASE( "Test dmPokeWFS full lifecycle", "[dev::dmPokeWFS]" )
     REQUIRE( pdt.callNewCallBack_continuous( ipWrongSw ) == -1 );
     REQUIRE( pdt.callNewCallBack_stop( ipWrongSw ) == -1 );
 
-    // static callback trampolines (wrong-key branch, harmless to call again)
+    // The static callback trampolines take the same wrong key branch. Calling them again
+    // is harmless.
     REQUIRE( dmPokeWFS_tests::dmPokeWFSTest::callStNewCallBack_single( &pdt, ipWrongSw ) == -1 );
     REQUIRE( dmPokeWFS_tests::dmPokeWFSTest::callStNewCallBack_continuous( &pdt, ipWrongSw ) == -1 );
     REQUIRE( dmPokeWFS_tests::dmPokeWFSTest::callStNewCallBack_stop( &pdt, ipWrongSw ) == -1 );
 
-    // -- numeric target-update callbacks --
+    // Numeric target update callbacks.
     pcf::IndiProperty ipPokeAmp = pdt.indiP_pokeAmp();
     ipPokeAmp["target"].setValue( 0.75 );
     REQUIRE( pdt.callNewCallBack_pokeAmp( ipPokeAmp ) == 0 );
@@ -543,25 +561,25 @@ TEST_CASE( "Test dmPokeWFS full lifecycle", "[dev::dmPokeWFS]" )
     REQUIRE( pdt.callNewCallBack_nPokeAverage( ipNAvg ) == 0 );
     REQUIRE( dmPokeWFS_tests::dmPokeWFSTest::callStNewCallBack_nPokeAverage( &pdt, ipNAvg ) == 0 );
 
-    // -- wfsFps set-property callback --
+    // The wfsFps set property callback.
     pcf::IndiProperty ipFps = pdt.indiP_wfsFps();
     ipFps.add( pcf::IndiElement( "current" ) );
     ipFps["current"] = 100.0;
     REQUIRE( pdt.callSetCallBack_wfsFps( ipFps ) == 0 );
     REQUIRE( dmPokeWFS_tests::dmPokeWFSTest::callStSetCallBack_wfsFps( &pdt, ipFps ) == 0 );
 
-    // -- single measurement round trip --
-    // widen the measuring==1 window so appLogic() can reliably be called while it is
-    // active, to exercise the single-"On"/continuous-"Off" switch-reporting branch.
+    // Single measurement round trip. Widen the window in which measuring equals 1 so
+    // appLogic() can reliably be called while it is active. This exercises the switch
+    // reporting branch where single is On and continuous is Off.
     pdt.m_runSensorSleepMs = 150;
 
     pcf::IndiProperty ipSingle = pdt.indiP_single();
     ipSingle["toggle"].setSwitchState( pcf::IndiElement::On );
     REQUIRE( pdt.callNewCallBack_single( ipSingle ) == 0 );
 
-    // the wfs thread's own startup handshake (threadStart()'s internal sleep(1) poll
-    // waiting for m_wfsThreadInit to clear) can take up to ~1 real second even after
-    // appStartup() has returned, so this window must be generous.
+    // The startup handshake of the wfs thread can take about one real second even after
+    // appStartup() has returned. threadStart() polls with sleep(1) while waiting for
+    // m_wfsThreadInit to clear. This wait window must therefore be generous.
     bool caughtSingleMeasuring = false;
     for( int i = 0; i < 150 && !caughtSingleMeasuring; ++i )
     {
@@ -591,7 +609,7 @@ TEST_CASE( "Test dmPokeWFS full lifecycle", "[dev::dmPokeWFS]" )
     REQUIRE( pdt.testDeltaX() == Approx( 3 ) );
     REQUIRE( pdt.testDeltaY() == Approx( 4 ) );
 
-    // give the thread a moment to settle back to idle after the single measurement
+    // Give the thread a moment to settle back to idle after the single measurement.
     for( int i = 0; i < 50 && pdt.measuringState() != 0; ++i )
     {
         mx::sys::milliSleep( 20 );
@@ -600,12 +618,12 @@ TEST_CASE( "Test dmPokeWFS full lifecycle", "[dev::dmPokeWFS]" )
 
     REQUIRE( pdt.appLogic() == 0 );
 
-    // -- continuous measurement + stop --
+    // Continuous measurement followed by a stop.
     pcf::IndiProperty ipContinuous = pdt.indiP_continuous();
     ipContinuous["toggle"].setSwitchState( pcf::IndiElement::On );
     REQUIRE( pdt.callNewCallBack_continuous( ipContinuous ) == 0 );
 
-    // let it run for a few measurement cycles
+    // Let it run for a few measurement cycles.
     uint64_t counterAtStart = pdt.testCounter();
     bool     advanced       = false;
     for( int i = 0; i < 50; ++i )
@@ -620,11 +638,13 @@ TEST_CASE( "Test dmPokeWFS full lifecycle", "[dev::dmPokeWFS]" )
     REQUIRE( advanced == true );
     REQUIRE( pdt.appLogic() == 0 );
 
-    // Widen the window between runSensor() and analyzeSensor() so both the continuous
-    // callback's own Off/m_measuring!=0 branch (m_stopMeasurement=true) and the "stop"
-    // property callback's identical m_measuring!=0 branch (checked after runSensor()
-    // returns, before analyzeSensor()) can be reliably exercised together, mid-cycle,
-    // before the measurement loop notices either one and exits on its own.
+    // Widen the window between runSensor() and analyzeSensor(). This lets the test exercise
+    // two branches together in the middle of one cycle, before the measurement loop
+    // notices either one and exits on its own. The first is the branch of the continuous
+    // callback taken when the switch is Off and m_measuring is nonzero. It sets
+    // m_stopMeasurement to true. The second is the identical m_measuring nonzero branch in
+    // the stop property callback. The loop checks the flag after runSensor() returns and
+    // before analyzeSensor().
     pdt.m_runSensorSleepMs = 150;
     bool caughtContinuousMeasuring = false;
     for( int i = 0; i < 150 && !caughtContinuousMeasuring; ++i )
@@ -637,15 +657,15 @@ TEST_CASE( "Test dmPokeWFS full lifecycle", "[dev::dmPokeWFS]" )
     }
     REQUIRE( caughtContinuousMeasuring == true );
 
-    // toggling the continuous property itself to "Off" (as opposed to using the
-    // separate "stop" property below) is the normal INDI way to request a stop, and
-    // exercises the continuous callback's own Off/m_measuring!=0 branch.
+    // Toggling the continuous property itself to Off is the normal INDI way to request a
+    // stop. The separate stop property is used below. This exercises the branch of the
+    // continuous callback taken when the switch is Off and m_measuring is nonzero.
     pcf::IndiProperty ipContinuousOff = pdt.indiP_continuous();
     ipContinuousOff["toggle"].setSwitchState( pcf::IndiElement::Off );
     REQUIRE( pdt.callNewCallBack_continuous( ipContinuousOff ) == 0 );
 
-    // still mid-cycle (measuring hasn't reset yet) -- exercises the "stop" property
-    // callback's own, separate m_measuring!=0 branch.
+    // The loop is still in the middle of a cycle and measuring has not reset yet. This
+    // exercises the separate m_measuring nonzero branch in the stop property callback.
     REQUIRE( pdt.measuringState() != 0 );
     pcf::IndiProperty ipStop = pdt.indiP_stop();
     ipStop["request"].setSwitchState( pcf::IndiElement::On );
@@ -667,18 +687,18 @@ TEST_CASE( "Test dmPokeWFS full lifecycle", "[dev::dmPokeWFS]" )
 
     REQUIRE( pdt.appLogic() == 0 );
 
-    // dmPokeWFS<>::appShutdown() only signals the wfs thread; it does not itself set
-    // m_shutdown (that is normally done by the app's own signal handling/main loop
-    // before appShutdown() is called). The thread's outer loop only exits once
+    // dmPokeWFS::appShutdown() only signals the wfs thread. It does not set m_shutdown
+    // itself. The signal handling and main loop of the app normally do that before
+    // appShutdown() is called. The outer loop of the thread only exits once
     // derived().m_shutdown is nonzero, so set it explicitly here to avoid hanging.
     pdt.requestShutdown();
     REQUIRE( pdt.appShutdown() == 0 );
 }
 
-/// Test the INDI callbacks' "required element is missing" branches, which need a
-/// property with a matching device/name (to pass the INDI_VALIDATE_CALLBACK_PROPS_DERIVED
-/// key check) but without the specific element the callback looks for -- distinct from
-/// the wrong-device/name branch already tested above.
+/// Verify the branches of the INDI callbacks taken when a required element is missing.
+/// These need a property whose device and name match, so that the
+/// INDI_VALIDATE_CALLBACK_PROPS_DERIVED key check passes, but which lacks the element the
+/// callback looks for. This is distinct from the wrong device or name branch tested above.
 /**
  * \ingroup dmPokeWFS_tests
  */
@@ -700,6 +720,7 @@ TEST_CASE( "Test dmPokeWFS INDI callback missing-element branches", "[dev::dmPok
 
     REQUIRE( pdt.appStartup() == 0 );
 
+    // Build a property with the same type, device, and name as orig but with no elements.
     auto sameKeyNoElements = []( const pcf::IndiProperty &orig )
     {
         pcf::IndiProperty ip( orig.getType() );
@@ -720,14 +741,15 @@ TEST_CASE( "Test dmPokeWFS INDI callback missing-element branches", "[dev::dmPok
     REQUIRE( pdt.appShutdown() == 0 );
 }
 
-/// Test wfsThreadExec()'s runSensor()/analyzeSensor() failure-logging branches, its
-/// defensive neither-single-nor-continuous-set exit branch, and its wait for the poke
-/// image to become valid before measuring.
+/// Verify the failure logging branches of wfsThreadExec() when runSensor() or
+/// analyzeSensor() fails, its defensive exit branch when neither single nor continuous is
+/// set, and its wait for the poke image to become valid before measuring.
 /**
  * \ingroup dmPokeWFS_tests
  */
 TEST_CASE( "Test dmPokeWFS wfsThreadExec failure and edge-case paths", "[dev::dmPokeWFS]" )
 {
+    // Install the no-op SIGUSR1 handler that appShutdown() relies on to wake the wfs thread.
     struct sigaction act;
     memset( &act, 0, sizeof( act ) );
     act.sa_sigaction = &MagAOX::app::sigUsr1Handler;
@@ -755,10 +777,10 @@ TEST_CASE( "Test dmPokeWFS wfsThreadExec failure and edge-case paths", "[dev::dm
 
         pdt.m_runSensorRV = -1;
         REQUIRE( pdt.appStartup() == 0 );
-        // threadStart()'s internal sleep(1) poll (waiting for m_wfsThreadInit to
-        // clear) can take up to ~1 real second even after appStartup() has returned --
-        // wait comfortably past that worst case so the thread is guaranteed to already
-        // be parked on its semaphore wait before we post to it.
+        // threadStart() polls with sleep(1) while waiting for m_wfsThreadInit to clear.
+        // That can take about one real second even after appStartup() has returned. Wait
+        // comfortably past that worst case so the thread is already parked on its
+        // semaphore wait before the test posts to it.
         mx::sys::milliSleep( 1200 );
 
         pcf::IndiProperty ipSingle = pdt.indiP_single();
@@ -824,8 +846,8 @@ TEST_CASE( "Test dmPokeWFS wfsThreadExec failure and edge-case paths", "[dev::dm
         pdt.postWfsSemaphoreWithNoModeSet();
         mx::sys::milliSleep( 200 );
 
-        // the wfs thread has now returned entirely (not just gone idle) -- a
-        // subsequent single-measurement request is never serviced.
+        // The wfs thread has now returned entirely rather than just gone idle. A later
+        // single measurement request is never serviced.
         pcf::IndiProperty ipSingle = pdt.indiP_single();
         ipSingle["toggle"].setSwitchState( pcf::IndiElement::On );
         REQUIRE( pdt.callNewCallBack_single( ipSingle ) == 0 );
@@ -848,21 +870,21 @@ TEST_CASE( "Test dmPokeWFS wfsThreadExec failure and edge-case paths", "[dev::dm
 
     SECTION( "wfsThreadExec waits for the poke image to become valid before measuring" )
     {
-        // note: allocate() is deliberately *not* called before appStartup() here, so
-        // m_pokeImage is not yet valid when the wfs thread wakes up for a measurement.
+        // allocate() is deliberately not called before appStartup() here. m_pokeImage is
+        // therefore not yet valid when the wfs thread wakes up for a measurement.
         REQUIRE( pdt.appStartup() == 0 );
-        // wait comfortably past threadStart()'s worst-case ~1 second startup handshake
-        // so the thread is guaranteed to already be parked on its semaphore wait --
-        // otherwise it might not check m_pokeImage.valid() until well after the
-        // allocate() calls below, defeating the race this section is exercising.
+        // Wait comfortably past the worst case startup handshake of about one second in
+        // threadStart() so the thread is already parked on its semaphore wait. Otherwise
+        // it might not check m_pokeImage.valid() until well after the allocate() calls
+        // below, which would defeat the race this section exercises.
         mx::sys::milliSleep( 1200 );
 
         pcf::IndiProperty ipSingle = pdt.indiP_single();
         ipSingle["toggle"].setSwitchState( pcf::IndiElement::On );
         REQUIRE( pdt.callNewCallBack_single( ipSingle ) == 0 );
 
-        // give the thread a real chance to enter (and spin in) the "poke image not
-        // yet valid" wait loop before we make it valid.
+        // Give the thread a real chance to enter the wait loop for the poke image before
+        // making it valid.
         mx::sys::milliSleep( 100 );
         REQUIRE( pdt.allocate( dmPokeWFS_tests::dmPokeWFSTest::dmPokeWFST::wfsShmimT() ) == 0 );
         REQUIRE( pdt.allocate( dmPokeWFS_tests::dmPokeWFSTest::dmPokeWFST::darkShmimT() ) == 0 );

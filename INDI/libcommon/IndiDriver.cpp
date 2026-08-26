@@ -43,7 +43,8 @@ IndiDriver::IndiDriver( const string &szName,
 /// Copy constructor.
 /// \param idRhs Another version of the driver.
 
-// Private and never called anywhere -- uncallable outside the class.
+// This copy constructor is private and nothing calls it.
+// It cannot run, so it is excluded from coverage.
 // LCOV_EXCL_START
 IndiDriver::IndiDriver(const IndiDriver &idRhs ) : IndiConnection()
 //  : IndiConnection( idRhs )  // can't invoke - private
@@ -59,7 +60,8 @@ IndiDriver::IndiDriver(const IndiDriver &idRhs ) : IndiConnection()
 /// \param idRhs The right-hand side of the operation.
 /// \return This object.
 
-// Private and never called anywhere -- uncallable outside the class.
+// This assignment operator is private and nothing calls it.
+// It cannot run, so it is excluded from coverage.
 // LCOV_EXCL_START
 const IndiDriver &IndiDriver::operator= ( const IndiDriver &idRhs )
 //  : IndiConnection::operator= ( idRhs )  // can't invoke - private

@@ -22,6 +22,8 @@ using namespace mx::sys::tscomp;
 #include <flatlogs/flatlogs.hpp>
 #include "../file/stdFileName.hpp"
 #include "generated/logCodes.hpp"
+// Test-only fault hooks. Every XWCTEST_IF_ macro expands to an empty statement unless
+// a test defines the matching XWCTEST_ name before including this header.
 #include "tests/testMacros.hpp"
 
 #ifndef DEBUG_CRUMB
@@ -40,11 +42,10 @@ namespace MagAOX
 namespace logger
 {
 
-// Guarded separately from the main include guard: the test build re-includes this
-// header multiple times (undefining only logger_logMap_hpp) to compile distinctly-
-// namespaced copies of the classes below under XWCTEST_NAMESPACE. These free inline
-// helpers stay in the enclosing namespace and must only ever be defined once,
-// regardless of how many times that happens.
+// The helpers below have their own include guard. The test build includes this header
+// more than once and undefines only logger_logMap_hpp each time, so it can compile a
+// separate copy of the classes inside each XWCTEST_NAMESPACE. These free inline helpers
+// stay in the logger namespace, so they must be defined only once.
 #ifndef logger_logMap_helpers_hpp
 #define logger_logMap_helpers_hpp
 
@@ -163,6 +164,10 @@ inline char *logMapResync( char                *buffer,    /**< [in] failed flat
 
 #endif // logger_logMap_helpers_hpp
 
+// Test-only. A test can define XWCTEST_NAMESPACE and compile the classes below a second
+// time inside that namespace with one XWCTEST_ fault macro enabled. The faulted copy runs
+// the real error handling code, and its hits count toward these same source lines.
+// Production builds never define XWCTEST_NAMESPACE.
 #ifdef XWCTEST_NAMESPACE
 namespace XWCTEST_NAMESPACE
 {
@@ -312,9 +317,8 @@ mx::error_t logMap<verboseT>::addFileListToFileMap( const std::string           
 {
     try
     {
-        // Test-only fault hooks (XWCTEST_*): a test TU compiles this header with one
-        // of these defined to force this one site to fail, so the real handler below
-        // it runs. Production builds never define them.
+        // Test hooks. Each throw runs only when a test enables it, so the handler below
+        // runs for real. Production builds never enable them.
         XWCTEST_IF_LOGMAP_AFLTFM_XWCE( throw xwcException( "std::bad_alloc" ) );
         XWCTEST_IF_LOGMAP_AFLTFM_BADALL( throw std::bad_alloc() );
         XWCTEST_IF_LOGMAP_AFLTFM_EXCEPTION( throw std::exception() );
@@ -418,6 +422,7 @@ mx::error_t logMap<verboseT>::loadAppToFileMap( const std::string               
 
         isdir = mx::ioutils::dir_exists_is( basedir + subdir.path(), errc );
 
+        // Test hook. Pretends the directory check reported a permission error.
         XWCTEST_IF_LOGMAP_LATFM_DIREXISTS_ERRC( errc = mx::error_t::eacces );
 
         mx_error_check_code( errc );
@@ -499,7 +504,10 @@ mx::error_t logMap<verboseT>::loadAppToFileMap( const std::string               
 
             if( errc != mx::error_t::noerror )
             {
-                return mx::error_report<verboseT>( errc, "error from std::filesystem" ); // LCOV_EXCL_LINE -- dir_exists_is on a just-enumerated subdirectory only fails via exotic filesystem faults; the identical guard earlier in this function is exercised via its XWCTEST fault hook
+                // dir_exists_is() just listed this subdirectory, so it fails here only on an
+                // unusual filesystem fault. The same guard earlier in this function is
+                // covered through its test hook.
+                return mx::error_report<verboseT>( errc, "error from std::filesystem" ); // LCOV_EXCL_LINE
             }
 
             if( !isdir ) // this subdir doesn't exist so go around
@@ -603,6 +611,7 @@ mx::error_t logMap<verboseT>::loadAppToFileMap( const std::string               
             {
                 ++follLogFile_n;
 
+                // Test hook. Pushes the file index past the end of the list.
                 XWCTEST_IF_LOGMAP_LATFM_SIZEERR1( follLogFile_n = tmp_flist.size() + 1 );
 
                 if( follLogFile_n > tmp_flist.size() )
@@ -691,6 +700,7 @@ mx::error_t logMap<verboseT>::loadAppToFileMap( const std::string               
                 {
                     ++follLogFile_n;
 
+                    // Test hook. Pushes the file index past the end of the list.
                     XWCTEST_IF_LOGMAP_LATFM_SIZEERR2( follLogFile_n = tmp_flist.size() + 1 );
 
                     if( follLogFile_n > tmp_flist.size() )

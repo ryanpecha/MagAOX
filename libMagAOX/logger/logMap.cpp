@@ -7,6 +7,8 @@
  */
 
 #include "logMap.hpp"
+// Test-only fault hooks. Every XWCTEST_IF_ macro expands to an empty statement unless
+// a test defines the matching XWCTEST_ name before including this file.
 #include "tests/testMacros.hpp"
 
 #include <sys/stat.h>
@@ -25,10 +27,10 @@ namespace MagAOX
 namespace logger
 {
 
-// Test-only: when XWCTEST_NAMESPACE is defined, a test translation unit compiles a second
-// copy of this file inside that namespace with one of the XWCTEST_* fault macros below
-// enabled, so real error-handling branches execute and are counted against these same
-// source lines. Production builds never define these macros.
+// Test-only. A test can define XWCTEST_NAMESPACE and compile this file a second time
+// inside that namespace with one XWCTEST_ fault macro enabled. The faulted copy runs the
+// real error handling code, and its hits count toward these same source lines.
+// Production builds never define XWCTEST_NAMESPACE.
 #ifdef XWCTEST_NAMESPACE
 namespace XWCTEST_NAMESPACE
 {
@@ -54,6 +56,7 @@ int logInMemory::loadFile( file::stdFileName<verboseT> const &lfn )
 
     close( fd );
 
+    // Test hook. Pretends the read returned nothing so the short read check below fires.
     XWCTEST_IF_LOGINMEMORY_LOADFILE_SHORTREAD( nrd = 0 );
 
     if( nrd != fsz )
@@ -232,6 +235,8 @@ size_t logInMemory::sourceOffset( char *log ) const
 } // namespace XWCTEST_NAMESPACE
 #endif
 
+// The explicit instantiation belongs to the production copy only. Each test namespace
+// copy instantiates its own.
 #ifndef XWCTEST_NAMESPACE
 template class logMap<XWC_DEFAULT_VERBOSITY>;
 #endif

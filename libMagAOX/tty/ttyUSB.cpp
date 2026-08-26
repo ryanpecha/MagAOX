@@ -21,12 +21,12 @@
 #include "ttyErrors.hpp"
 
 
-// Test-only overrides (never redefined outside unit tests) letting tests point the sysfs
-// scan at a real, always-present, non-USB tty entry (e.g. "tty0"/"console") to reach the
-// "found a device but it has no usb parent" branch, or at a scratch directory to reach
-// the "not a real udev syspath" branch -- both using genuinely real OS state rather than
-// a mock, since no real ttyUSB hardware is available in a CI/build environment. The
-// defaults below are exactly the production behavior.
+// Test-only overrides. Only unit tests define these names. A test can point the sysfs
+// scan at a real tty entry that is not USB, such as tty0, to reach the branch for a
+// device with no USB parent. A test can also point it at a scratch directory to reach
+// the branch for a path that udev does not recognize. This uses real operating system
+// state instead of a mock, because no USB serial hardware exists on the build machine.
+// The defaults below are exactly the production values.
 #ifndef XWCTEST_TTYUSB_SYSFS_DIR
 #define XWCTEST_TTYUSB_SYSFS_DIR "/sys/class/tty/"
 #endif
@@ -39,10 +39,10 @@ namespace MagAOX
 namespace tty
 {
 
-// Test-only: when XWCTEST_NAMESPACE is defined, a test translation unit compiles a second
-// copy of this file inside that namespace with one of the XWCTEST_* fault macros below
-// enabled, so real error-handling branches execute and are counted against these same
-// source lines. Production builds never define these macros.
+// Test-only. A test can define XWCTEST_NAMESPACE and compile this file a second time
+// inside that namespace with the sysfs overrides above changed. The second copy runs the
+// real error handling code, and its hits count toward these same source lines.
+// Production builds never define XWCTEST_NAMESPACE.
 #ifdef XWCTEST_NAMESPACE
 namespace XWCTEST_NAMESPACE
 {
@@ -95,8 +95,9 @@ int ttyUSBDevName( std::string & devName,       // [out] the /dev/ttyUSBX device
          continue;
       }
 
-      // idVendor/idProduct/serial sysattrs, and a successful match, only exist on a real
-      // attached USB-serial device -- unreachable in a build/test environment without one.
+      // The idVendor, idProduct, and serial attributes exist only on a real USB serial
+      // device. No such device is attached on the build or test machine, so this block
+      // cannot run there.
       // LCOV_EXCL_START
       const char * idVendor = udev_device_get_sysattr_value( dev, "idVendor" );
 
@@ -201,8 +202,9 @@ int ttyUSBDevNames( std::vector<std::string> & devNames, // [out] the /dev/ttyUS
          continue;
       }
 
-      // idVendor/idProduct sysattrs, and a successful match, only exist on a real attached
-      // USB-serial device -- unreachable in a build/test environment without one.
+      // The idVendor and idProduct attributes exist only on a real USB serial device.
+      // No such device is attached on the build or test machine, so this block cannot
+      // run there.
       // LCOV_EXCL_START
       const char * idVendor = udev_device_get_sysattr_value( dev, "idVendor" );
 

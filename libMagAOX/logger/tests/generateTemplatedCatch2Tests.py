@@ -16,9 +16,9 @@ import random
 import getopt
 
 
-# Mirrors the reinterpret_cast<...(*)(void*)> targets already used throughout
-# logMeta.cpp to invoke a logMetaDetail's accessor function pointer for each
-# logMeta::valTypes enumerator.
+# Maps each logMeta::valTypes enumerator name to the C++ type that logMeta.cpp casts
+# the accessor function pointer of a logMetaDetail to before calling it. The generated
+# tests use the same cast, so the two must agree.
 VALTYPE_TO_CPP = {
     "String": "std::string",
     "Bool": "bool",
@@ -213,12 +213,13 @@ def isValidLogType(lines : list) -> bool:
     return (hasEventCode and hasDefaultLevel)
 
 '''
-Parse a type's own getAccessor(const std::string &member) implementation to recover,
-for each recognized member, the (member name, C++ return type, accessor function name)
-it registers. getAccessor() takes the address of every per-field accessor function
-regardless of which branch runs at runtime, so the type header itself is the source of
-truth for which accessors exist and how logMeta.cpp would cast/invoke each one -- this
-avoids re-deriving (and risking a mismatched) type mapping from field types directly.
+Parse the getAccessor(const std::string &member) implementation of a log type header.
+For each recognized member it recovers the member name, the C++ return type, and the
+accessor function name that getAccessor() registers. getAccessor() takes the address of
+every per-field accessor function regardless of which branch runs at runtime. So the type
+header itself is the source of truth for which accessors exist and how logMeta.cpp would
+cast and invoke each one. This avoids deriving a second type mapping from the field types
+directly, which could disagree with the first.
 '''
 def getAccessorFieldInfo(headerText : str) -> list:
     results = []
@@ -231,9 +232,9 @@ def getAccessorFieldInfo(headerText : str) -> list:
         body = branchMatch.group(2)
 
         valTypeMatch = re.search(r'logMeta::valTypes::(\w+)', body)
-        # the '&' before the function name is usually present but, since a bare function
-        # name already decays to its address, is sometimes omitted (e.g. ocam_temps'
-        # "water" accessor) -- tolerate both forms.
+        # The '&' before the function name is usually present. A bare function name
+        # already decays to its address, so it is sometimes omitted, for example in the
+        # "water" accessor of ocam_temps. Both forms are tolerated.
         funcMatch = re.search(r'reinterpret_cast\s*<\s*void\s*\*\s*>\s*\(\s*&?\s*(\w+)\s*\)', body)
         if valTypeMatch is None or funcMatch is None:
             continue
@@ -246,6 +247,9 @@ def getAccessorFieldInfo(headerText : str) -> list:
 
     return results
 
+# Maps each fixed-width integer typedef to the plain C++ type it resolves to on this
+# platform. This lets a vector element type taken from a field declaration compare equal
+# to the element type in VALTYPE_TO_CPP.
 TYPEDEF_ALIASES = {
     "uint8_t": "unsigned char",
     "int8_t": "char",
@@ -257,19 +261,20 @@ TYPEDEF_ALIASES = {
     "int64_t": "long",
 }
 
+# Strips whitespace and replaces a fixed-width typedef with its plain type.
 def normalizeCppType(t : str) -> str:
     t = t.strip()
     return TYPEDEF_ALIASES.get(t, t)
 
 '''
-Some accessor functions are pure pass-throughs of a field's raw flatbuffer value (safe to
-compare against the same raw value collected in the constructor), while others compute a
-derived/formatted value with a different C++ type (e.g. an integer "state" field with a
-string-formatting accessor, or a vector<uint8_t> field with a vector<bool> accessor) --
-comparing those against the raw field value wouldn't compile or wouldn't be meaningful.
-This decides, per accessor/field pairing, whether an exact-value REQUIRE is safe to emit;
-when it isn't, the generated test still invokes the accessor (for coverage of its body)
-without asserting a specific return value.
+Some accessor functions pass through the raw flatbuffer value of a field. Those are safe
+to compare against the same raw value collected in the constructor. Others compute a
+derived or formatted value with a different C++ type. For example an integer state field
+may have a string formatting accessor, and a vector<uint8_t> field may have a vector<bool>
+accessor. Comparing those against the raw field value would not compile or would not be
+meaningful. This function decides, for one accessor and field pairing, whether an exact
+value REQUIRE is safe to emit. When it is not safe, the generated test still invokes the
+accessor to cover its body, without asserting a specific return value.
 '''
 def valuesComparable(accessorCppType : str, field : dict) -> bool:
     fieldType = field["type"]
@@ -284,31 +289,33 @@ def valuesComparable(accessorCppType : str, field : dict) -> bool:
         vecType = normalizeCppType(field.get("vectorType", ""))
         return elemType == vecType
 
-    # A Bool-valued accessor wrapping a wider integral "flag" field isn't necessarily a
-    # plain truthy pass-through -- some types instead check e.g. "field == 1" as a
-    # tri-state (0/1/other-means-unset) convention. Both patterns exist in this codebase
-    # and aren't distinguishable without executing the accessor, so only assert equality
-    # here when the field is itself already a real bool (an exact, unambiguous match);
-    # otherwise still invoke the accessor (for coverage) without asserting its value.
+    # A Bool-valued accessor wrapping a wider integral flag field is not necessarily a
+    # plain truthy pass-through. Some types instead check whether the field equals 1, as
+    # a tri-state convention where 0 and 1 are values and anything else means unset. Both
+    # patterns exist in this codebase. They cannot be told apart without executing the
+    # accessor. So equality is only asserted here when the field is itself already a real
+    # bool, which is an exact and unambiguous match. Otherwise the accessor is still
+    # invoked for coverage without asserting its value.
     if accessorCppType == "bool":
         return fieldType == "bool"
 
-    # plain scalar (char/int/float/etc.) -- implicit conversions make these safe to
-    # compare against any other scalar field, but not against string/vector fields.
+    # This is a plain scalar such as char, int, or float. Implicit conversions make these
+    # safe to compare against any other scalar field, but not against string or vector
+    # fields.
     if "string" in fieldType or "vector" in fieldType:
         return False
     return True
 
 '''
-For each generated messageT variant (each entry in messageTypes), build the list of
-accessor checks to emit. Every accessor getAccessor() registers gets invoked (so its body
-is exercised for coverage regardless of naming), but the exact-value REQUIRE is only
-emitted when the accessor function's name happens to match one of this variant's own
-constructor field names with a comparable type -- e.g. telem_stdcam's "tempStatus"
-accessor has no corresponding "tempStatus" ctor field (the ctor names it "status" and
-routes it through a differently-named meta keyword), so there's no raw value here to
-compare against; and telem_pokecenter's "pokes" constructor variant never sets
-poke_x/poke_y as named ctor fields either. In both cases the accessor is still called.
+For each generated messageT variant, which is each entry in messageTypes, build the list
+of accessor checks to emit. Every accessor that getAccessor() registers gets invoked, so
+its body is exercised for coverage regardless of naming. The exact value REQUIRE is only
+emitted when the accessor function name matches one of the constructor field names of
+this variant and the types are comparable. For example the "tempStatus" accessor of
+telem_stdcam has no "tempStatus" constructor field. The constructor names it "status"
+and routes it through a differently named meta keyword, so there is no raw value here to
+compare against. The "pokes" constructor variant of telem_pokecenter never sets poke_x or
+poke_y as named constructor fields either. In both cases the accessor is still called.
 '''
 def filterAccessorChecks(accessorFieldInfo : list, messageTypes : list) -> list:
     result = []
@@ -391,6 +398,8 @@ def makeTestInfoDict(hppFname : str, baseTypesDict : dict) -> dict:
 
     returnInfo["messageTypes"] = getMessageFieldInfo(messageStructIdxs, headerLines, schemaFieldInfo)
 
+    # Collect the accessors this type registers, then decide per messageT variant which
+    # of them can be checked against a raw field value in the generated test.
     accessorFieldInfo = getAccessorFieldInfo("".join(headerLines))
     returnInfo["accessorChecksPerMsgType"] = filterAccessorChecks(accessorFieldInfo, returnInfo["messageTypes"])
 
@@ -770,9 +779,9 @@ def makeInheritedTypeInfoDict(typesFolderPath : str, baseName : str, logName : s
 
     returnInfo["messageTypes"] = [[]] if "empty_log" in baseName else msgFieldInfo
 
-    # getAccessor() is not inherited via any base messageT parsing above -- if logName's
-    # own header overrides getAccessor(), that's what MagAOX::logger::<logName>::getAccessor
-    # actually resolves to; otherwise it resolves to the base type's version.
+    # getAccessor() is not picked up by the base messageT parsing above. If the own header
+    # of logName overrides getAccessor(), that is what MagAOX::logger::<logName>::getAccessor
+    # actually resolves to. Otherwise it resolves to the version in the base type.
     ownFilePath = os.path.join(typesFolderPath, f"{logName}.hpp")
     accessorFieldInfo = []
     if os.path.isfile(ownFilePath):

@@ -1,4 +1,19 @@
 // #define CATCH_CONFIG_MAIN
+/** \file indiDriver_test.cpp
+  * \brief Catch2 tests for the MagAOX::app::indiDriver INDI driver wrapper and its indiClient helper.
+  *
+  * The driver is constructed against a small stand-in parent from indiDriver_test.hpp instead of a
+  * full MagAOXApp. Each scenario creates real FIFOs under /tmp/indiDriver_test for the driver's
+  * input, output, and control channels. Outgoing connections are tested against a real TCP
+  * listener on 127.0.0.1 that never accepts. A completed TCP handshake is enough for the client
+  * connect() call to succeed.
+  *
+  * Failure branches that no external condition can trigger are reached through the runtime
+  * fault-injection flags in indiDriver::xwcTestHooks. Those flags exist only when
+  * XWCTEST_INDIDRIVER_HOOKS is defined, which this file does before including the headers.
+  *
+  * \ingroup indiDriver_tests
+  */
 #include "../../../tests/catch2/catch.hpp"
 
 #include <filesystem>
@@ -10,23 +25,21 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 
-// Enables the xwcTestHooks member on MagAOX::app::indiDriver (see
-// indiDriver.hpp), which lets us reach a handful of branches that can't be
-// triggered by any real, reproducible external condition (e.g. a FIFO write
-// failing right after the FIFO opened successfully, or the outgoing INDI
-// client throwing/disconnecting at one very specific instant). The hooks are
-// runtime bools (default false, i.e. normal behavior), so this is a single
-// ordinary compile of indiDriver.hpp/MagAOXApp.hpp -- not the
-// multiply-recompiled-per-namespace XWCTEST_NAMESPACE pattern used elsewhere,
-// which would otherwise multiply this file's line count in the coverage
-// report once per variant.
+// Enables the xwcTestHooks member on MagAOX::app::indiDriver. See indiDriver.hpp.
+// The hooks let the tests reach a few branches that no real, reproducible external
+// condition can trigger. Examples are a FIFO write failing right after the FIFO opened,
+// or the outgoing INDI client throwing or disconnecting at one specific instant.
+// The hooks are runtime bools that default to false, which gives normal behavior.
+// This means indiDriver.hpp and MagAOXApp.hpp are compiled once in the ordinary way.
+// The XWCTEST_NAMESPACE pattern used elsewhere recompiles the header once per namespace.
+// That pattern is avoided here because it would multiply this file's line count in the
+// coverage report once per variant.
 #define XWCTEST_INDIDRIVER_HOOKS
 
-// indiDriver.hpp and MagAOXApp.hpp include each other (indiDriver.hpp needs
-// MagAOXApp's logger types, MagAOXApp needs indiDriver<MagAOXApp> as a
-// member type). MagAOXApp.hpp must be included first so that by the time it
-// reaches its own member declaration of indiDriver<MagAOXApp>, indiDriver.hpp
-// (pulled in from within MagAOXApp.hpp) has already been fully processed.
+// indiDriver.hpp and MagAOXApp.hpp include each other. indiDriver.hpp needs the logger
+// types from MagAOXApp, and MagAOXApp needs indiDriver<MagAOXApp> as a member type.
+// MagAOXApp.hpp must be included first. It pulls in indiDriver.hpp, so indiDriver.hpp is
+// fully processed by the time MagAOXApp.hpp declares its indiDriver<MagAOXApp> member.
 #include "../MagAOXApp.hpp"
 #include "../indiDriver.hpp"
 #include "indiDriver_test.hpp"
@@ -43,8 +56,8 @@ void makeFreshFifo( const std::string &path )
     REQUIRE( ::mkfifo( path.c_str(), S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP ) == 0 );
 }
 
-/// Build a simple, well-formed Number property with one element, suitable
-/// for use as a NEW property message (i.e. not of type Unknown).
+/// Build a simple, well-formed Number property with one element.
+/// It is suitable for use as a NEW property message because its type is not Unknown.
 pcf::IndiProperty makeNumberProperty( const std::string &device, const std::string &name )
 {
     pcf::IndiProperty ip( pcf::IndiProperty::Number );
@@ -55,10 +68,10 @@ pcf::IndiProperty makeNumberProperty( const std::string &device, const std::stri
     return ip;
 }
 
-/// A minimal TCP listener on 127.0.0.1, used only so that IndiClient's
-/// connect() call succeeds (a real INDI server on the other end is not
-/// required -- accept() is never called, the completed TCP handshake sitting
-/// in the kernel's backlog is enough for connect() to return success).
+/// A minimal TCP listener on 127.0.0.1, used only so that the IndiClient connect() call succeeds.
+/// A real INDI server on the other end is not required. accept() is never called. The completed
+/// TCP handshake sitting in the kernel backlog is enough for connect() to return success.
+/// The constructor binds to port 0 so the OS picks a free port, then records the chosen port.
 struct TcpListener
 {
     int fd{ -1 };
@@ -94,9 +107,9 @@ struct TcpListener
     }
 };
 
-/// RAII helper which sets a bool to true for the life of the guard, and
-/// restores it to false on scope exit (even if a REQUIRE throws), so that
-/// one test's fault-injection hook can never leak into another test.
+/// RAII helper which sets a bool to true for the life of the guard and restores it to
+/// false on scope exit. The reset also happens if a REQUIRE throws. This keeps one
+/// test's fault-injection hook from leaking into another test.
 struct HookGuard
 {
     bool &flag;
@@ -118,7 +131,9 @@ struct HookGuard
  * \ingroup app_unit_test
  */
 
-/// Test construction of indiDriver, including all the FIFO-related failure modes.
+/// Verify construction of indiDriver, including every FIFO-related failure mode.
+/// Each GIVEN block points the parent at real FIFOs under /tmp, or at paths that can not be
+/// opened, and checks good() after construction.
 /**
  * \ingroup indiDriver_tests
  */
@@ -216,8 +231,8 @@ SCENARIO( "Constructing an indiDriver", "[app::indiDriver]" )
 
         WHEN( "constructed with the ctrl-write-fail hook engaged" )
         {
-            // The hook is a static member (see indiDriver.hpp), so it can be
-            // armed before the object (and thus its constructor) exists.
+            // The hook is a static member of indiDriver, so it can be armed before the
+            // object exists. This is needed because the write happens in the constructor.
             HookGuard guard( indiDriverExposed<indiDriverTestParent>::xwcTestHooks.forceCtrlWriteFail );
 
             indiDriverExposed<indiDriverTestParent> drv( &parent, "test", "0", "0" );
@@ -230,8 +245,8 @@ SCENARIO( "Constructing an indiDriver", "[app::indiDriver]" )
     }
 }
 
-/// Test that the handleXXXProperty overrides forward to the parent, and are
-/// safe no-ops when the parent has been cleared.
+/// Verify that the handleXXXProperty overrides forward to the parent, and that they are
+/// safe no-ops when the parent pointer has been cleared. The stand-in parent counts each call.
 /**
  * \ingroup indiDriver_tests
  */
@@ -293,8 +308,9 @@ SCENARIO( "indiDriver property handlers", "[app::indiDriver]" )
     }
 }
 
-/// Test that execute()/update() run the underlying INDI processing loop
-/// and can be cleanly stopped.
+/// Verify that execute() and update() run the underlying INDI processing loop and can be
+/// stopped cleanly. execute() is run on a separate thread and stopped with quitProcess().
+/// Also verify that deleting a heap-allocated driver of the exact base type does not crash.
 /**
  * \ingroup indiDriver_tests
  */
@@ -333,13 +349,12 @@ SCENARIO( "indiDriver execute and update", "[app::indiDriver]" )
 
     GIVEN( "a heap-allocated indiDriver of the exact (non-derived) type" )
     {
-        // Exercises deletion via `delete ptr` on the exact
-        // MagAOX::app::indiDriver<parentT> type, matching how MagAOXApp
-        // itself owns and deletes its m_indiDriver (as opposed to the
-        // stack-allocated/automatic destruction used by every other test in
-        // this file, and unlike deleting via the derived indiDriverExposed
-        // test helper, which would invoke indiDriverExposed's own generated
-        // destructor entry point instead of indiDriver<parentT>'s).
+        // Exercises deletion through a pointer to the exact MagAOX::app::indiDriver<parentT>
+        // type. This matches how MagAOXApp owns and deletes its m_indiDriver member.
+        // Every other test in this file uses automatic destruction of a stack object.
+        // Deleting through the derived indiDriverExposed helper would not do the same thing.
+        // That would enter the generated destructor of indiDriverExposed instead of the
+        // destructor of indiDriver<parentT>.
         indiDriverTestParent parent;
         makeFreshFifo( "/tmp/indiDriver_test/heap.in" );
         makeFreshFifo( "/tmp/indiDriver_test/heap.out" );
@@ -363,9 +378,9 @@ SCENARIO( "indiDriver execute and update", "[app::indiDriver]" )
     }
 }
 
-/// Test indiClient (the small helper class used internally by indiDriver to
-/// send outgoing NEW property commands) directly, to exercise its execute()
-/// override.
+/// Verify the execute() override of indiClient directly. indiClient is the small helper
+/// class that indiDriver uses internally to send outgoing NEW property commands.
+/// The client is connected to a local listener, activated, left to run once, and torn down.
 /**
  * \ingroup indiDriver_tests
  */
@@ -376,9 +391,9 @@ SCENARIO( "indiClient execute", "[app::indiDriver]" )
     MagAOX::app::indiClient client( "indiClientTest", "127.0.0.1", listener.port );
 
     client.activate();
-    // Thread::runLoop() sleeps for its 1000ms interval before its *first*
-    // call to execute(), so we must wait longer than that here to guarantee
-    // execute() actually runs at least once before we tear the thread down.
+    // Thread::runLoop() sleeps for its 1000 ms interval before its first call to execute().
+    // The wait here must be longer than that so execute() runs at least once before the
+    // thread is torn down.
     std::this_thread::sleep_for( std::chrono::milliseconds( 1200 ) );
     client.quitProcess();
     client.deactivate();
@@ -386,9 +401,10 @@ SCENARIO( "indiClient execute", "[app::indiDriver]" )
     REQUIRE( client.getQuitProcess() == true );
 }
 
-/// Test the sendNewProperty connect/reconnect/reuse logic against a real
-/// (but never accept()-ed) local TCP listener, so that IndiClient's connect()
-/// call succeeds.
+/// Verify the connect, reuse, and reconnect logic of sendNewProperty. The driver is pointed
+/// at a real local TCP listener that never calls accept(). That is enough for the IndiClient
+/// connect() call to succeed. The three GIVEN blocks cover a first send, a second send on a
+/// good connection, and a send after the existing connection has quit.
 /**
  * \ingroup indiDriver_tests
  */
@@ -459,7 +475,9 @@ SCENARIO( "indiDriver sendNewProperty connects, reuses, and reconnects", "[app::
     }
 }
 
-/// Test the exception/disconnect handling paths in sendNewProperty.
+/// Verify the exception and disconnect handling paths in sendNewProperty. Each GIVEN block
+/// builds a fresh driver. A closed port, a property of Unknown type, and the xwcTestHooks
+/// fault-injection flags are used to reach each catch block and each early return.
 /**
  * \ingroup indiDriver_tests
  */
@@ -480,9 +498,8 @@ SCENARIO( "indiDriver sendNewProperty exception handling", "[app::indiDriver]" )
         indiDriverExposed<indiDriverTestParent> drv( &parent, "test", "0", "0" );
         REQUIRE( drv.good() == true );
 
-        // Nothing is listening on this port, so the connection attempt made
-        // while creating the outgoing IndiClient fails, which is caught by
-        // the generic catch(...) around client creation.
+        // Nothing is listening on port 1. The connection attempt made while creating the
+        // outgoing IndiClient fails. The generic catch(...) around client creation handles it.
         drv.setServer( "127.0.0.1", 1 );
 
         pcf::IndiProperty ip = makeNumberProperty( "test", "nprop" );
@@ -546,7 +563,7 @@ SCENARIO( "indiDriver sendNewProperty exception handling", "[app::indiDriver]" )
         TcpListener listener;
         drv.setServer( "127.0.0.1", listener.port );
 
-        pcf::IndiProperty badProp; // default-constructed: type == Unknown
+        pcf::IndiProperty badProp; // A default-constructed property has type Unknown.
 
         WHEN( "sendNewProperty is called" )
         {

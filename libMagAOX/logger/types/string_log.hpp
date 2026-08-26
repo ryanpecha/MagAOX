@@ -64,10 +64,10 @@ struct string_log : public flatbuffer_log
 
         auto rgs = GetString_log_fb( msgBuffer );
 
-        // message is a required parameter in both messageT constructors, always passed to
-        // builder.CreateString() -- message() is never nullptr.
+        // message is a required parameter in both messageT constructors.
+        // Both constructors pass it to builder.CreateString() so message() is never nullptr.
         if( rgs->message() == nullptr )
-            return ""; // LCOV_EXCL_LINE
+            return ""; // LCOV_EXCL_LINE message() is never nullptr
         else
             return rgs->message()->c_str();
     }
@@ -76,10 +76,10 @@ struct string_log : public flatbuffer_log
     static std::string message( void *msgBuffer /**< [in] Buffer containing the flatbuffer serialized message.*/ )
     {
         auto rgs = GetString_log_fb( msgBuffer );
-        // message is a required parameter in both messageT constructors, always passed to
-        // builder.CreateString() -- message() is never nullptr.
+        // message is a required parameter in both messageT constructors.
+        // Both constructors pass it to builder.CreateString() so message() is never nullptr.
         if( rgs->message() == nullptr )
-            return ""; // LCOV_EXCL_LINE
+            return ""; // LCOV_EXCL_LINE message() is never nullptr
         else
             return rgs->message()->c_str();
     }

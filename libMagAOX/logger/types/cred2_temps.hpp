@@ -90,7 +90,7 @@ struct cred2_temps : public flatbuffer_log
         msg += std::to_string( fbs->heatsink() ) + " C ";
 
         return msg;
-    } // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
+    } // LCOV_EXCL_LINE gcov reports this closing brace as a separate line that only runs during exception cleanup
 
     static float motherboard( void *msgBuffer /**< [in] buffer containing the flatbuffer serialized message */ )
     {

@@ -17,6 +17,8 @@
 
 #include "../common/exceptions.hpp"
 
+// Test-only fault hooks. Every XWCTEST_IF_ macro expands to an empty statement unless
+// a test defines the matching XWCTEST_ name before including this header.
 #include "tests/testMacros.hpp"
 
 namespace MagAOX
@@ -50,12 +52,13 @@ mx::error_t timestamp( std::string &tstamp, /**< [out] the timestamp string*/
 {
     try
     {
+        // Test hooks. Each throw runs only when a test enables it, so the handlers below run for real.
         XWCTEST_IF_TIMESTAMP_THROW_BAD_ALLOC( throw std::bad_alloc() );
         XWCTEST_IF_TIMESTAMP_THROW_FORMAT_ERROR( throw std::format_error( "testing format_error" ) );
         XWCTEST_IF_TIMESTAMP_THROW_EXCEPTION( throw std::exception() );
 
         tstamp = std::format( "{:04}{:02}{:02}{:02}{:02}{:02}{:09}",
-                              // LCOV_EXCL_START (gcov quirk: these two arithmetic-argument lines of this single call get spurious 0 hits; the call itself is covered)
+                              // LCOV_EXCL_START gcov gives these two argument lines zero hits even though the call runs
                               uttime.tm_year + 1900,
                               uttime.tm_mon + 1,
                               // LCOV_EXCL_STOP

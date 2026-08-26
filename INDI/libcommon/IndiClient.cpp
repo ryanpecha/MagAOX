@@ -42,7 +42,8 @@ IndiClient::IndiClient( const string &szName,
 /// Copy constructor.
 /// \param icRhs Another version of the driver.
 
-// Private and never called anywhere -- uncallable outside the class.
+// This copy constructor is private and nothing calls it.
+// It cannot run, so it is excluded from coverage.
 // LCOV_EXCL_START
 IndiClient::IndiClient( const IndiClient &icRhs ) : IndiConnection()
 //  : IndiConnection( icRhs )  // can't invoke - private
@@ -58,7 +59,8 @@ IndiClient::IndiClient( const IndiClient &icRhs ) : IndiConnection()
 /// \param icRhs The right-hand side of the operation.
 /// \return This object.
 
-// Private and never called anywhere -- uncallable outside the class.
+// This assignment operator is private and nothing calls it.
+// It cannot run, so it is excluded from coverage.
 // LCOV_EXCL_START
 const IndiClient &IndiClient::operator=( const IndiClient &icRhs )
 //  : IndiConnection::operator= ( icRhs )  // can't invoke - private
@@ -95,7 +97,9 @@ void IndiClient::setup( const string &szIPAddr, const int &port )
         // Set them by default to an invalid value.
         detachFds();
 
-        // LCOV_EXCL_START - setup() is private, called once per ctor with a fresh invalid socket
+        // setup() is private. Each constructor calls it once, and at that
+        // point the socket is new and not yet valid. This branch never runs.
+        // LCOV_EXCL_START
         if( m_socClient.isValid() == true )
         {
             detachFds();
@@ -127,10 +131,14 @@ void IndiClient::setup( const string &szIPAddr, const int &port )
     {
         detachFds();
         m_socClient.close();
-        // The close() above always throws here (the socket is already invalid
-        // after the failed connect), so this tail -- and the runtime_error
-        // catch below, which the more-derived handler above shadows for every
-        // exception this try block actually produces -- cannot be reached.
+        // A failed connect() closes its own socket before it throws.
+        // So the close() call above runs on a socket that is already
+        // invalid, and close() throws for an invalid socket.
+        // That throw leaves setup() before the two lines below can run.
+        // The runtime_error handler below is never reached either.
+        // SystemSocket::Error derives from runtime_error and is the only
+        // exception the try block throws in practice.
+        // The handler above catches it first.
         // LCOV_EXCL_START
         Thread::msleep( 10 );
         return;

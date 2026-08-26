@@ -1,5 +1,13 @@
 /** \file dssShutter_test.cpp
-  * \brief Catch2 tests for the dev::dssShutter mixin.
+  * \brief Catch2 tests for the MagAOX::app::dev::dssShutter device mixin.
+  *
+  * The mixin is exercised through a MagAOXApp<false> harness that never connects to INDI.
+  * The harness hides registerIndiPropertySet, threadStart, sendNewProperty, and recordCamera.
+  * This lets each test force a failure path and simulate the digital I/O hardware that drives
+  * and senses the shutter. The open and shut background threads are started for real.
+  * Log calls are captured in static members and checked by count and by message text.
+  *
+  * The configuration tests write /tmp/dssShutter_test.conf.
   *
   * \ingroup testing
   */
@@ -22,11 +30,11 @@ using namespace MagAOX::app;
 namespace dssShutter_tests
 {
 
-/// Test harness for dev::dssShutter
-/** Provides the members/methods dssShutter requires of its derived class, plus
-  * hooks that let the test suite force specific error paths (INDI property
-  * registration failures, thread-start failures) and simulate the digital I/O
-  * hardware (trigger/sensor state) that a real shutter would provide.
+/// Test harness for dev::dssShutter.
+/** Provides the members and methods that dssShutter requires of its derived class.
+  * It also provides hooks that let a test force specific error paths. Examples are
+  * INDI property registration failures and thread-start failures. The trigger and
+  * sensor state members stand in for the digital I/O hardware of a real shutter.
   *
   * \ingroup dssShutter_tests
   */
@@ -34,29 +42,29 @@ struct dssShutterTest : public MagAOXApp<false>, public dev::dssShutter<dssShutt
 {
    typedef dev::dssShutter<dssShutterTest> dssShutterT;
 
-   // -- members required by dssShutter via derived() --
+   // Members that dssShutter reads and writes through derived().
    std::string m_shutterStatus;
    int m_shutterState {-2};
 
-   // -- log capture (mirrors the MagAOXApp::log signature so it hides it) --
+   // Log capture. The log() below mirrors the MagAOXApp::log signature so it hides it.
    static std::string s_lastLogMessage;
    static logPrioT s_lastLogLevel;
    static int s_logCount;
 
-   // -- registerIndiPropertySet control --
+   // Flags that make registerIndiPropertySet fail for one property.
    bool m_failPowerRegister {false};
    bool m_failSensorRegister {false};
    bool m_failTriggerRegister {false};
 
-   // -- threadStart control --
+   // Flags that make threadStart fail for one thread.
    bool m_failOpenThreadStart {false};
    bool m_failShutThreadStart {false};
 
-   // -- recordCamera capture --
+   // Record of recordCamera calls.
    int m_recordCameraCalls {0};
    bool m_lastRecordCameraForce {false};
 
-   // -- sendNewProperty simulated hardware --
+   // Simulated hardware behind sendNewProperty.
    int m_sendNewPropertyCalls {0};
    bool m_triggerResponds {true}; ///< If true, the simulated trigger channel follows the commanded value.
    std::function<void(int)> m_sendNewPropertyHook; ///< Called with the 1-based call number after each sendNewProperty.
@@ -163,7 +171,7 @@ struct dssShutterTest : public MagAOXApp<false>, public dev::dssShutter<dssShutt
       return MagAOXApp<false>::threadStart( thrd, thrdInit, tpid, thProp, thrdPrio, cpuset, thrdName, thrdThis, std::forward<Function>(thrdStart) );
    }
 
-   /// Required by dssShutter via derived(). Simulates the camera-recording side effect.
+   /// Required by dssShutter via derived(). Counts calls instead of recording the camera.
    int recordCamera( bool force = false )
    {
       ++m_recordCameraCalls;
@@ -172,6 +180,10 @@ struct dssShutterTest : public MagAOXApp<false>, public dev::dssShutter<dssShutt
    }
 
    /// Required by dssShutter via derived(). Simulates the digital I/O hardware.
+   /** When m_triggerResponds is true the trigger state follows the commanded value.
+     * The optional hook runs after each call so a test can change the sensor or
+     * trigger behavior at a chosen point in the open or shut sequence.
+     */
    template<typename T>
    int sendNewProperty( const pcf::IndiProperty & ipSend, const std::string & el, const T & newVal )
    {
@@ -193,7 +205,7 @@ struct dssShutterTest : public MagAOXApp<false>, public dev::dssShutter<dssShutt
       return 0;
    }
 
-   // -- public wrappers around protected dssShutter/MagAOXApp state, for test control --
+   // Public wrappers around protected dssShutter and MagAOXApp state so tests can read and set it.
 
    void forceShutdown( int v )
    {
@@ -237,7 +249,7 @@ std::string dssShutterTest::s_lastLogMessage;
 logPrioT dssShutterTest::s_lastLogLevel = logPrio::LOG_DEFAULT;
 int dssShutterTest::s_logCount = 0;
 
-/// Write a complete dssShutter config file with the given wait/timeout values.
+/// Write a complete dssShutter config file to /tmp with the given wait and timeout values.
 void writeShutterConfig( const std::string &wait = "100", const std::string &timeout = "2000" )
 {
    mx::app::writeConfigFile( "/tmp/dssShutter_test.conf",
@@ -246,7 +258,7 @@ void writeShutterConfig( const std::string &wait = "100", const std::string &tim
       { "pdu",         "shutterPower", "dio",       "shutterSensor", "shutterTrigger",   wait,      timeout } );
 }
 
-/// dssShutter setupConfig/loadConfig
+/// Verify that setupConfig and loadConfig read every shutter option from a config file.
 /**
  * \ingroup dssShutter_tests
  */
@@ -277,8 +289,10 @@ SCENARIO( "dssShutter configuration", "[dev::dssShutter]" )
    }
 }
 
-/// dssShutter appStartup, normal operation and INDI-registration failures
-/**
+/// Verify that appStartup registers the three INDI properties and starts both worker threads.
+/** Each INDI registration failure and each thread-start failure is then forced in turn.
+ * Every forced failure must return -1 and produce exactly one log entry.
+ *
  * \ingroup dssShutter_tests
  */
 SCENARIO( "dssShutter appStartup", "[dev::dssShutter]" )
@@ -390,7 +404,7 @@ SCENARIO( "dssShutter appStartup", "[dev::dssShutter]" )
          REQUIRE( rv == -1 );
          REQUIRE( dssShutterTest::s_logCount == 1 );
 
-         // The open thread did start for real in this scenario, clean it up.
+         // The open thread did start for real in this case, so it must be stopped and joined.
          REQUIRE( sh.openThreadJoinable() == true );
          sh.forceShutdown(1);
          sh.appShutdown();
@@ -399,8 +413,9 @@ SCENARIO( "dssShutter appStartup", "[dev::dssShutter]" )
    }
 }
 
-/// dssShutter appLogic, onPowerOff, whilePowerOff
-/**
+/// Verify that appLogic derives the shutter status and state from the power and sensor states.
+/** Also verify that onPowerOff and whilePowerOff delegate to appLogic.
+ *
  * \ingroup dssShutter_tests
  */
 SCENARIO( "dssShutter appLogic", "[dev::dssShutter]" )
@@ -452,7 +467,7 @@ SCENARIO( "dssShutter appLogic", "[dev::dssShutter]" )
       {
          sh.setPowerState(1);
          sh.setSensorState(-1);
-         sh.m_shutterState = 42; //sentinel, should not be touched
+         sh.m_shutterState = 42; // Sentinel value. appLogic must leave it alone when the sensor state is unknown.
          int rv = sh.appLogic();
          REQUIRE( rv == 0 );
          REQUIRE( sh.m_shutterStatus == "READY" );
@@ -474,7 +489,7 @@ SCENARIO( "dssShutter appLogic", "[dev::dssShutter]" )
    }
 }
 
-/// dssShutter appShutdown without a prior appStartup
+/// Verify that appShutdown returns 0 when appStartup was never called and no threads exist.
 /**
  * \ingroup dssShutter_tests
  */
@@ -492,8 +507,10 @@ SCENARIO( "dssShutter appShutdown with no threads started", "[dev::dssShutter]" 
    }
 }
 
-/// dssShutter setShutterState and the open/shut background threads
-/**
+/// Verify that setShutterState rejects invalid requests and hands valid ones to the worker threads.
+/** The trigger is made to stick so that open() and shut() always fail. The test polls the
+ * request flags until the thread has processed the request and then checks the log count.
+ *
  * \ingroup dssShutter_tests
  */
 SCENARIO( "dssShutter setShutterState and background threads", "[dev::dssShutter]" )
@@ -512,7 +529,7 @@ SCENARIO( "dssShutter setShutterState and background threads", "[dev::dssShutter
       sh.setPowerState(1);
       sh.setSensorState(0);
       sh.setTriggerState(0);
-      sh.setTriggerResponds(false); //hardware never responds -> open()/shut() always fail
+      sh.setTriggerResponds(false); // The simulated hardware never responds, so open() and shut() always fail.
 
       REQUIRE( sh.appStartup() == 0 );
 
@@ -540,14 +557,14 @@ SCENARIO( "dssShutter setShutterState and background threads", "[dev::dssShutter
          }
          REQUIRE( processed == true );
 
-         //open() itself logs a software_error (trigger stuck), and openThreadExec logs
-         //another software_error because open() returned < 0.
+         // open() logs one software_error because the trigger is stuck.
+         // openThreadExec logs a second software_error because open() returned less than zero.
          REQUIRE( dssShutterTest::s_logCount == 2 );
       }
 
       WHEN("shut is requested and processed by the shut thread")
       {
-         sh.setSensorState(1); //so shut() does not think it is already shut
+         sh.setSensorState(1); // The sensor must read open or shut() returns early as already shut.
 
          dssShutterTest::resetLogState();
 
@@ -562,6 +579,7 @@ SCENARIO( "dssShutter setShutterState and background threads", "[dev::dssShutter
          }
          REQUIRE( processed == true );
 
+         // Same two log entries as the open case. One from shut() and one from shutThreadExec.
          REQUIRE( dssShutterTest::s_logCount == 2 );
       }
 
@@ -570,8 +588,12 @@ SCENARIO( "dssShutter setShutterState and background threads", "[dev::dssShutter
    }
 }
 
-/// dssShutter::open()
-/**
+/// Verify every return path of open().
+/** The cases are power off, already open, success on the first pulse, a trigger that never
+ * responds, a sensor that never confirms, a trigger that sticks on the second pulse, and
+ * success on the second pulse. The sendNewProperty hook changes the simulated hardware at
+ * the chosen pulse. Small wait and timeout values keep the retries fast.
+ *
  * \ingroup dssShutter_tests
  */
 SCENARIO( "dssShutter open", "[dev::dssShutter]" )
@@ -594,7 +616,7 @@ SCENARIO( "dssShutter open", "[dev::dssShutter]" )
          sh.setPowerState(1);
          sh.setSensorState(1);
          REQUIRE( sh.open() == 0 );
-         REQUIRE( sh.m_recordCameraCalls == 1 ); //the unconditional recordCamera call
+         REQUIRE( sh.m_recordCameraCalls == 1 ); // open() calls recordCamera once before it checks the sensor.
       }
 
       WHEN("the first attempt succeeds")
@@ -604,6 +626,7 @@ SCENARIO( "dssShutter open", "[dev::dssShutter]" )
          sh.setTriggerState(0);
 
          dssShutterTest::resetLogState();
+         // The sensor confirms open right after the first trigger pulse.
          sh.m_sendNewPropertyHook = [&sh](int callNum)
          {
             if(callNum == 1) sh.setSensorState(1);
@@ -650,6 +673,7 @@ SCENARIO( "dssShutter open", "[dev::dssShutter]" )
          sh.setTriggerState(0);
          sh.setTriggerResponds(true);
 
+         // The first pulse moves the trigger. The trigger then sticks for the second pulse.
          sh.m_sendNewPropertyHook = [&sh](int callNum)
          {
             if(callNum == 1) sh.setTriggerResponds(false);
@@ -669,6 +693,7 @@ SCENARIO( "dssShutter open", "[dev::dssShutter]" )
          sh.setTriggerState(0);
          sh.setTriggerResponds(true);
 
+         // The sensor confirms open only after the second trigger pulse.
          sh.m_sendNewPropertyHook = [&sh](int callNum)
          {
             if(callNum == 2) sh.setSensorState(1);
@@ -683,8 +708,9 @@ SCENARIO( "dssShutter open", "[dev::dssShutter]" )
    }
 }
 
-/// dssShutter::shut()
-/**
+/// Verify every return path of shut().
+/** The cases mirror the open() scenario with the sensor starting in the open state.
+ *
  * \ingroup dssShutter_tests
  */
 SCENARIO( "dssShutter shut", "[dev::dssShutter]" )
@@ -715,6 +741,7 @@ SCENARIO( "dssShutter shut", "[dev::dssShutter]" )
          sh.setTriggerState(0);
 
          dssShutterTest::resetLogState();
+         // The sensor confirms shut right after the first trigger pulse.
          sh.m_sendNewPropertyHook = [&sh](int callNum)
          {
             if(callNum == 1) sh.setSensorState(0);
@@ -761,6 +788,7 @@ SCENARIO( "dssShutter shut", "[dev::dssShutter]" )
          sh.setTriggerState(0);
          sh.setTriggerResponds(true);
 
+         // The first pulse moves the trigger. The trigger then sticks for the second pulse.
          sh.m_sendNewPropertyHook = [&sh](int callNum)
          {
             if(callNum == 1) sh.setTriggerResponds(false);
@@ -780,6 +808,7 @@ SCENARIO( "dssShutter shut", "[dev::dssShutter]" )
          sh.setTriggerState(0);
          sh.setTriggerResponds(true);
 
+         // The sensor confirms shut only after the second trigger pulse.
          sh.m_sendNewPropertyHook = [&sh](int callNum)
          {
             if(callNum == 2) sh.setSensorState(0);
@@ -794,8 +823,11 @@ SCENARIO( "dssShutter shut", "[dev::dssShutter]" )
    }
 }
 
-/// dssShutter INDI callbacks for the power, sensor, and trigger channels
-/**
+/// Verify the INDI callbacks for the power, sensor, and trigger channels.
+/** Each callback must ignore a property with the wrong device or name, ignore a property
+ * with no value element, map valid values to the matching state, and map any other value
+ * to unknown. The static st_ wrappers must forward to the member callbacks.
+ *
  * \ingroup dssShutter_tests
  */
 SCENARIO( "dssShutter INDI callbacks", "[dev::dssShutter]" )
@@ -823,7 +855,7 @@ SCENARIO( "dssShutter INDI callbacks", "[dev::dssShutter]" )
          pcf::IndiProperty ip;
          ip.setDevice("pdu");
          ip.setName("shutterPower");
-         REQUIRE( sh.setCallBack_powerChannel(ip) == 0 ); //no "state" element yet
+         REQUIRE( sh.setCallBack_powerChannel(ip) == 0 ); // There is no "state" element yet, so the state stays unknown.
          REQUIRE( sh.powerState() == -1 );
 
          ip.add( pcf::IndiElement("state", std::string("On")) );
@@ -854,7 +886,7 @@ SCENARIO( "dssShutter INDI callbacks", "[dev::dssShutter]" )
          pcf::IndiProperty ip;
          ip.setDevice("dio");
          ip.setName("shutterSensor");
-         REQUIRE( sh.setCallBack_sensorChannel(ip) == 0 ); //no "current" element yet
+         REQUIRE( sh.setCallBack_sensorChannel(ip) == 0 ); // There is no "current" element yet, so the state stays unknown.
          REQUIRE( sh.sensorState() == -1 );
 
          ip.add( pcf::IndiElement("current", (int) 1) );
@@ -885,7 +917,7 @@ SCENARIO( "dssShutter INDI callbacks", "[dev::dssShutter]" )
          pcf::IndiProperty ip;
          ip.setDevice("dio");
          ip.setName("shutterTrigger");
-         REQUIRE( sh.setCallBack_triggerChannel(ip) == 0 ); //no "current" element yet
+         REQUIRE( sh.setCallBack_triggerChannel(ip) == 0 ); // There is no "current" element yet, so the state stays unknown.
          REQUIRE( sh.triggerState() == -1 );
 
          ip.add( pcf::IndiElement("current", (int) 1) );
@@ -910,6 +942,7 @@ SCENARIO( "dssShutter INDI callbacks", "[dev::dssShutter]" )
    }
 }
 
+// This block is never compiled. It exists so Doxygen links this test file to the functions it covers.
 #ifdef DSSSHUTTER_TEST_DOXYGEN_REF
 MagAOX::app::dev::dssShutter<dssShutter_tests::dssShutterTest>::setupConfig(*(mx::app::appConfigurator*)0);
 MagAOX::app::dev::dssShutter<dssShutter_tests::dssShutterTest>::loadConfig(*(mx::app::appConfigurator*)0);

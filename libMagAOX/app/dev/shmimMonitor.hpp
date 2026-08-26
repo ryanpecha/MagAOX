@@ -441,8 +441,9 @@ int shmimMonitor<derivedT, specificT>::appStartup()
     act.sa_mask = set;
 
     errno = 0;
-    // sigaction() fails only for an invalid signal number or invalid flags, both fixed and
-    // valid here -- not reachable without corrupting process state.
+    // This block handles a failure of sigaction().
+    // sigaction() fails only for an invalid signal number or invalid flags.
+    // Both are fixed and valid here, so a test cannot reach this block.
     // LCOV_EXCL_START
     if( sigaction( SIGUSR1, &act, 0 ) < 0 )
     {
@@ -490,10 +491,10 @@ int shmimMonitor<derivedT, specificT>::appLogic()
 template <class derivedT, class specificT>
 int shmimMonitor<derivedT, specificT>::appShutdown()
 {
-    // Reliably racing a signal against a real thread's blocking wait to force the
-    // already-joined exception here (without risking an abort from a subsequently
-    // reaped/recycled thread ID) isn't practical -- see the identical, already-documented
-    // rationale in dm<>::appShutdown()'s equivalent pattern.
+    // The catch below handles a throw from join(). join() throws only if the thread
+    // was already joined. Forcing that needs a signal to race against the thread's
+    // blocking wait, and a recycled thread ID could then cause an abort.
+    // That is not practical in a test. See the same pattern in dm<>::appShutdown().
     if( m_smThread.joinable() )
     {
         pthread_kill( m_smThread.native_handle(), SIGUSR1 );
@@ -597,10 +598,10 @@ void shmimMonitor<derivedT, specificT>::smThreadExec()
                     struct stat buffer;
                     int         rv = stat( SM_fname, &buffer );
 
-                    // Reaching this only happens right after ImageStreamIO_openIm()
-                    // succeeded on this same path, so stat() failing here requires the
-                    // backing file to be deleted in that exact window -- a genuine race
-                    // not practical to force deterministically in a unit test.
+                    // This block handles a failure of stat() on the shared memory file.
+                    // It runs right after ImageStreamIO_openIm() succeeded on the same file.
+                    // So stat() can fail only if the file is deleted in that short window.
+                    // A unit test cannot force that race reliably.
                     // LCOV_EXCL_START
                     if( rv != 0 )
                     {
@@ -641,10 +642,10 @@ void shmimMonitor<derivedT, specificT>::smThreadExec()
                 return;
             }
 
-            // Reaching this with opened==true requires another thread to set the
-            // shutdown flag in the narrow window between the open-loop above exiting
-            // (because it just opened successfully) and this check -- a genuine race,
-            // not deterministically forceable without a test-only synchronization hook.
+            // These lines close the image when shutdown starts right after a successful open.
+            // Another thread must set the shutdown flag in the short window between the
+            // open loop above exiting and this check.
+            // A test cannot force that race without a test-only synchronization hook.
             // LCOV_EXCL_START
             ImageStreamIO_closeIm( &m_imageStream );
             return;
@@ -754,7 +755,8 @@ void shmimMonitor<derivedT, specificT>::smThreadExec()
 
             timespec ts;
 
-            // clock_gettime on CLOCK_REALTIME essentially never fails.
+            // This block handles a failure of clock_gettime().
+            // clock_gettime() with CLOCK_REALTIME does not fail in practice.
             // LCOV_EXCL_START
             if( clock_gettime( CLOCK_REALTIME, &ts ) < 0 )
             {
@@ -823,9 +825,8 @@ void shmimMonitor<derivedT, specificT>::smThreadExec()
                            // if flags set.
 
                 // ETIMEDOUT means we should check for deletion, and then wait more.
-                // Otherwise, report an error. Forcing sem_timedwait() to fail with some
-                // other errno (e.g. EINVAL) would require corrupting the real
-                // ImageStreamIO semaphore structure -- not practical to trigger safely.
+                // Otherwise, report an error. Any other errno, for example EINVAL, needs
+                // a corrupted ImageStreamIO semaphore. A test cannot force that safely.
                 // LCOV_EXCL_START
                 if( errno != ETIMEDOUT )
                 {
@@ -908,7 +909,8 @@ int shmimMonitor<derivedT, specificT>::create(
             return derivedT::template log<software_error, -1>( { __FILE__, __LINE__, "error from ImageStreamIO" } );
         }
 
-        // destroyIm on a handle that was just successfully opened essentially never fails.
+        // This block handles a failure of ImageStreamIO_destroyIm().
+        // The handle was opened successfully just above, so destroying it does not fail in practice.
         // LCOV_EXCL_START
         if( ImageStreamIO_destroyIm( &m_imageStream ) != IMAGESTREAMIO_SUCCESS )
         {
@@ -947,7 +949,8 @@ int shmimMonitor<derivedT, specificT>::create(
 
     imageStream.md->cnt1 = depth - 1;
 
-    // closeIm on a handle that was just successfully created essentially never fails.
+    // This block handles a failure of ImageStreamIO_closeIm().
+    // The handle was created successfully just above, so closing it does not fail in practice.
     // LCOV_EXCL_START
     if( ImageStreamIO_closeIm( &imageStream ) != IMAGESTREAMIO_SUCCESS )
     {

@@ -300,7 +300,7 @@ std::string logMeta::fitsKeyword() const
     }
 
     return keyw;
-} // LCOV_EXCL_LINE -- gcov attributes this closing brace to the compiler-generated exception-unwind cleanup for the local std::string `keyw`; it only fires if an exception propagates through the return, never induced by any realistic input
+} // LCOV_EXCL_LINE: gcov charges this closing brace to the compiler-generated exception cleanup of the local std::string keyw. That cleanup runs only if an exception passes through the return. No realistic input causes that.
 
 logMeta::logMeta( const logMetaSpec &lms )
 {
@@ -346,7 +346,7 @@ int logMeta::setLog( const logMetaSpec &lms )
         case valTypes::Bool:
             m_spec.format = "%d";
             break;
-        case valTypes::Char: // LCOV_EXCL_START -- Char/UChar/Short/UShort are not produced by any generated log type's getAccessor() (verified by grepping every types/*.hpp), and setLog() only sees real accessors
+        case valTypes::Char: // LCOV_EXCL_START: No generated log type's getAccessor() produces Char, UChar, Short, or UShort. This was checked by grepping every types/*.hpp file. setLog() only sees real accessors.
             m_spec.format = "%d";
             break;
         case valTypes::UChar:
@@ -364,7 +364,7 @@ int logMeta::setLog( const logMetaSpec &lms )
         case valTypes::UInt:
             m_spec.format = "%u";
             break;
-        case valTypes::Long: // LCOV_EXCL_START -- Long/ULong half of the never-produced value types listed above
+        case valTypes::Long: // LCOV_EXCL_START: Long and ULong are also never produced. See the note on the Char case above.
             m_spec.format = "%ld";
             break;
         case valTypes::ULong:
@@ -987,7 +987,7 @@ std::string logMeta::valueString( logMap<verboseT>          &lm,
         std::cerr << "String type specified as something other than state\n";
     }
     return val;
-} // LCOV_EXCL_LINE -- gcov attributes this closing brace to the compiler-generated exception-unwind cleanup for the local std::string `val`; it only fires if an exception propagates through the return, never induced by any realistic input
+} // LCOV_EXCL_LINE: gcov charges this closing brace to the compiler-generated exception cleanup of the local std::string val. That cleanup runs only if an exception passes through the return. No realistic input causes that.
 
 mx::fits::fitsHeaderCard<logMeta::verboseT> logMeta::unavailableCard() const
 {

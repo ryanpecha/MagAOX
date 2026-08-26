@@ -1,8 +1,9 @@
 /** \file IndiXmlParser_test.cpp
-  * \brief Catch2 tests for pcf::IndiXmlParser (INDI/libcommon/IndiXmlParser.cpp).
+  * \brief Catch2 tests for pcf::IndiXmlParser in INDI/libcommon/IndiXmlParser.cpp.
   *
-  * Round-trips every (message type x property type) combination through XML
-  * generation and back through the real lilxml-based parser.
+  * Round-trips every combination of message type and property type through XML
+  * generation and back through the real lilxml based parser. No mocks are used.
+  * No threads, sockets, or files are needed.
   */
 #include "../../tests/catch2/catch.hpp"
 
@@ -21,8 +22,8 @@ using pcf::IndiXmlParser;
 namespace IndiXmlParser_test
 {
 
-/// A property with every "implied" attribute populated, so the generators emit
-/// every optional attribute.
+/// Builds a property with every optional attribute set, so the generators emit
+/// every optional attribute. The element values depend on the property type.
 static IndiProperty fullProp( IndiProperty::Type tType )
 {
    IndiProperty ip( tType, "dev", "prop", IndiProperty::Ok, IndiProperty::ReadWrite,
@@ -80,8 +81,8 @@ static IndiProperty fullProp( IndiProperty::Type tType )
    return ip;
 }
 
-/// A property with only the required attributes, so the generators skip every
-/// optional attribute.
+/// Builds a property with only the required attributes, so the generators skip
+/// every optional attribute.
 static IndiProperty minProp( IndiProperty::Type tType )
 {
    IndiProperty ip( tType, "dev", "prop", IndiProperty::Idle, IndiProperty::ReadOnly,
@@ -90,7 +91,8 @@ static IndiProperty minProp( IndiProperty::Type tType )
    return ip;
 }
 
-/// Generate the XML for a message, parse it back, and return the parsed message.
+/// Generates the XML for a message, parses it back, and returns the parsed message.
+/// It requires the parse to finish with no error and in the complete state.
 static IndiMessage roundTrip( const IndiMessage &im )
 {
    IndiXmlParser gen( im );
@@ -106,6 +108,9 @@ static IndiMessage roundTrip( const IndiMessage &im )
    return parse.createIndiMessage();
 }
 
+// Verifies that XML generated from each message type and property type parses back
+// into a message with the same type, device, and name. It also verifies that
+// generation throws when a required attribute is missing.
 SCENARIO( "IndiXmlParser round-trips every message and property type", "[IndiXmlParser]" )
 {
    GIVEN( "fully-populated properties of every type" )
@@ -180,7 +185,7 @@ SCENARIO( "IndiXmlParser round-trips every message and property type", "[IndiXml
          IndiMessage delOut = roundTrip( IndiMessage( IndiMessage::Delete, del ) );
          REQUIRE( delOut.getType() == IndiMessage::Delete );
 
-         // Delete with only a device (whole-device delete).
+         // A Delete with only a device deletes the whole device.
          IndiProperty delDev( IndiProperty::Text );
          delDev.setDevice( "dev" );
          IndiMessage delDevOut = roundTrip( IndiMessage( IndiMessage::Delete, delDev ) );
@@ -193,7 +198,7 @@ SCENARIO( "IndiXmlParser round-trips every message and property type", "[IndiXml
          IndiMessage getOut = roundTrip( IndiMessage( IndiMessage::GetProperties, get ) );
          REQUIRE( getOut.getType() == IndiMessage::GetProperties );
 
-         // GetProperties with no device: an all-devices query.
+         // A GetProperties with no device queries all devices.
          IndiProperty getAll( IndiProperty::Text );
          getAll.setVersion( "1.7" );
          IndiMessage getAllOut = roundTrip( IndiMessage( IndiMessage::GetProperties, getAll ) );
@@ -218,7 +223,7 @@ SCENARIO( "IndiXmlParser round-trips every message and property type", "[IndiXml
    {
       WHEN( "generating from unknown types throws" )
       {
-         IndiProperty unk; // Unknown property type
+         IndiProperty unk; // The default property type is Unknown.
          unk.setDevice( "dev" );
          unk.setName( "prop" );
          REQUIRE_THROWS( IndiXmlParser( IndiMessage( IndiMessage::Define, unk ) ) );
@@ -261,7 +266,7 @@ SCENARIO( "IndiXmlParser round-trips every message and property type", "[IndiXml
             noPerm.setDevice( "dev" );
             noPerm.setName( "prop" );
             noPerm.setState( IndiProperty::Ok );
-            if( t != IndiProperty::Light ) // defLightVector has no perm attribute
+            if( t != IndiProperty::Light ) // A defLightVector has no perm attribute.
             {
                REQUIRE_THROWS( IndiXmlParser( IndiMessage( IndiMessage::Define, noPerm ) ) );
             }
@@ -277,15 +282,15 @@ SCENARIO( "IndiXmlParser round-trips every message and property type", "[IndiXml
             }
          }
 
-         // A Message with no device is legal (a server-wide message); EnableBLOB
-         // and Delete both require a device.
+         // A Message with no device is legal. It is a server-wide message.
+         // EnableBLOB and Delete both require a device.
          IndiProperty bare( IndiProperty::Text );
          IndiXmlParser bareMsg( IndiMessage( IndiMessage::Message, bare ) );
          REQUIRE( bareMsg.createXmlString().find( "message" ) != std::string::npos );
          REQUIRE_THROWS( IndiXmlParser( IndiMessage( IndiMessage::EnableBLOB, bare ) ) );
          REQUIRE_THROWS( IndiXmlParser( IndiMessage( IndiMessage::Delete, bare ) ) );
 
-         // EnableBLOB with a device but no property name: a device-wide enable.
+         // An EnableBLOB with a device but no property name is a device-wide enable.
          IndiProperty ebDev( IndiProperty::Text );
          ebDev.setDevice( "dev" );
          ebDev.setBLOBEnable( IndiProperty::Only );
@@ -295,6 +300,9 @@ SCENARIO( "IndiXmlParser round-trips every message and property type", "[IndiXml
    }
 }
 
+// Verifies the parsing mechanics. It covers chunked input, the char pointer overload,
+// clear(), the stream operators, error reporting and recovery, serializing from the
+// parse tree, element attribute validation, and the XML escape helper.
 SCENARIO( "IndiXmlParser parsing mechanics and utilities", "[IndiXmlParser]" )
 {
    GIVEN( "a generated XML document" )
@@ -341,15 +349,15 @@ SCENARIO( "IndiXmlParser parsing mechanics and utilities", "[IndiXmlParser]" )
 
       WHEN( "the stream operators parse and emit XML" )
       {
-         // operator>> consumes one newline-delimited chunk per call, so feed
-         // the document line by line.
+         // operator>> consumes one newline delimited chunk per call. So the
+         // document is fed line by line.
          IndiXmlParser parse;
          std::istringstream iss( xml );
          while( iss.good() && parse.getState() != IndiXmlParser::CompleteState )
          {
             iss >> parse;
             iss.clear();
-            iss.ignore( 2, '\n' ); // skip the \r\n the get() left behind
+            iss.ignore( 2, '\n' ); // Skip the \r\n that get() left behind.
          }
          REQUIRE( parse.getState() == IndiXmlParser::CompleteState );
 
@@ -360,8 +368,8 @@ SCENARIO( "IndiXmlParser parsing mechanics and utilities", "[IndiXmlParser]" )
 
       WHEN( "createIndiMessage before any parse returns an Unknown message" )
       {
-         // (The message *type* is left uninitialized on this path, so only the
-         // empty property can be asserted.)
+         // The message type is left uninitialized on this path. So only the
+         // empty property can be asserted.
          IndiXmlParser fresh;
          IndiMessage   out = fresh.createIndiMessage();
          REQUIRE( out.getProperty().getName() == "" );
@@ -414,7 +422,7 @@ SCENARIO( "IndiXmlParser parsing mechanics and utilities", "[IndiXmlParser]" )
          parse.parseXml( gen.createXmlString(), err );
          REQUIRE( parse.getState() == IndiXmlParser::CompleteState );
 
-         std::string out = parse.createXmlString(); // m_pxeRoot path
+         std::string out = parse.createXmlString(); // This serializes from the parse tree root m_pxeRoot.
          REQUIRE( out.find( "defTextVector" ) != std::string::npos );
          REQUIRE( out.find( "prop" ) != std::string::npos );
       }
@@ -426,7 +434,7 @@ SCENARIO( "IndiXmlParser parsing mechanics and utilities", "[IndiXmlParser]" )
       {
          IndiProperty ip( IndiProperty::Number, "dev", "prop", IndiProperty::Ok,
                           IndiProperty::ReadWrite, IndiProperty::OneOfMany );
-         // The defaults are all valid, so blank each one in turn.
+         // The default attribute values are all valid. So each one is blanked in turn.
          IndiElement el( "el" );
          el.setFormat( std::string( "" ) );
          ip.add( el );
@@ -465,7 +473,7 @@ SCENARIO( "IndiXmlParser parsing mechanics and utilities", "[IndiXmlParser]" )
          IndiProperty ip( IndiProperty::BLOB, "dev", "prop", IndiProperty::Ok,
                           IndiProperty::ReadWrite, IndiProperty::OneOfMany );
          IndiElement el( "el" );
-         el.setSize( std::string( "" ) ); // blank size (the default is valid)
+         el.setSize( std::string( "" ) ); // Blank the size. The default size is valid.
          ip.add( el );
          REQUIRE_THROWS_AS( IndiXmlParser( IndiMessage( IndiMessage::SetProperty, ip ) ),
                             std::runtime_error );
@@ -473,7 +481,7 @@ SCENARIO( "IndiXmlParser parsing mechanics and utilities", "[IndiXmlParser]" )
                             std::runtime_error );
 
          ip["el"].setSize( std::string( "4" ) );
-         ip["el"].setFormat( std::string( "" ) ); // now blank format
+         ip["el"].setFormat( std::string( "" ) ); // Restore the size and blank the format instead.
          REQUIRE_THROWS_AS( IndiXmlParser( IndiMessage( IndiMessage::SetProperty, ip ) ),
                             std::runtime_error );
          REQUIRE_THROWS_AS( IndiXmlParser( IndiMessage( IndiMessage::NewProperty, ip ) ),

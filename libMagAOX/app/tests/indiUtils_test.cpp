@@ -1,4 +1,12 @@
 //#define CATCH_CONFIG_MAIN
+/** \file indiUtils_test.cpp
+  * \brief Catch2 tests for the MagAOX::app::indi utility functions.
+  *
+  * Covers parseIndiKey(), addTextElement(), addNumberElement(), and the family of
+  * updateIfChanged() helpers. The update helpers are exercised against real pcf::IndiProperty
+  * objects and a fakeIndiDriver stand-in that counts sends and can be made to throw.
+  * No INDI server, shared memory, or files are needed.
+  */
 #include "../../../tests/catch2/catch.hpp"
 
 #include "../indiUtils.hpp"
@@ -7,13 +15,13 @@ using namespace MagAOX::app::indi;
 namespace
 {
 
-/// Minimal stand-in for a MagAOX INDI driver, satisfying the interface
-/// required by the various updateXXXIfChanged()/updatesIfChanged()
-/// functions: just a sendSetProperty(pcf::IndiProperty&) method. Can be told
-/// to throw on send (either a std::exception or a non-standard type) so that
-/// tests can exercise the catch blocks in the functions under test -- this is
-/// ordinary dependency-injection test-doubling, not a modification of the
-/// code under test.
+/// Minimal stand-in for a MagAOX INDI driver.
+/// It satisfies the interface required by the updateXXXIfChanged() and updatesIfChanged()
+/// functions, which is just a sendSetProperty(pcf::IndiProperty&) method. It counts sends and
+/// keeps a copy of the last property sent. It can be told to throw on send, either a
+/// std::exception or a non-standard type, so tests can exercise the catch blocks in the
+/// functions under test. This is ordinary dependency-injection test-doubling. The code under
+/// test is not modified.
 struct fakeIndiDriver
 {
     int                sendCount{ 0 };
@@ -113,6 +121,7 @@ SCENARIO( "Parsing INDI unique key", "[indiUtils]" )
     }
 }
 
+/// Verify that addTextElement() adds a text element to a property, with and without a label.
 SCENARIO( "Adding a standard INDI text element", "[indiUtils]" )
 {
     GIVEN( "a property" )
@@ -145,6 +154,8 @@ SCENARIO( "Adding a standard INDI text element", "[indiUtils]" )
     }
 }
 
+/// Verify that addNumberElement() adds a number element and records its min, max, step,
+/// format, and optional label. Both the int and double template instantiations are covered.
 SCENARIO( "Adding a standard INDI number element", "[indiUtils]" )
 {
     GIVEN( "a property" )
@@ -193,6 +204,9 @@ SCENARIO( "Adding a standard INDI number element", "[indiUtils]" )
     }
 }
 
+/// Verify the single-element updateIfChanged(). A fakeIndiDriver counts sends. The cases are a
+/// null driver, no change, a value change, a state-only change, a missing element name, and
+/// a driver that throws on send.
 SCENARIO( "updateIfChanged for a single element", "[indiUtils]" )
 {
     GIVEN( "a property with one numeric element" )
@@ -275,6 +289,8 @@ SCENARIO( "updateIfChanged for a single element", "[indiUtils]" )
     }
 }
 
+/// Verify the vector form of updateIfChanged() with the same set of cases as the single-element
+/// form. One changed value out of three must trigger exactly one send.
 SCENARIO( "updateIfChanged for a vector of elements", "[indiUtils]" )
 {
     GIVEN( "a property with three numeric elements" )
@@ -376,11 +392,11 @@ SCENARIO( "updateIfChanged for a vector of elements", "[indiUtils]" )
     }
 }
 
-/// updatesIfChanged is templated on the element-name container type, and is
-/// exposed via two thin overloads (std::vector<std::string> and
-/// std::vector<const char *>) which each forward to the generic template --
-/// each is therefore a separate instantiation, so both are exercised with the
-/// full set of branches here.
+/// Verify updatesIfChanged() with std::vector<std::string> element names.
+/// updatesIfChanged() is templated on the element-name container type. It is exposed through two
+/// thin overloads, one for std::vector<std::string> and one for std::vector<const char *>. Each
+/// overload forwards to the generic template and is a separate instantiation. Both are
+/// therefore exercised with the full set of branches, here and in the next scenario.
 SCENARIO( "updatesIfChanged with std::string element names", "[indiUtils]" )
 {
     GIVEN( "a property with three numeric elements" )
@@ -482,6 +498,8 @@ SCENARIO( "updatesIfChanged with std::string element names", "[indiUtils]" )
     }
 }
 
+/// Verify updatesIfChanged() with std::vector<const char *> element names. The cases mirror
+/// the std::string scenario above.
 SCENARIO( "updatesIfChanged with const char* element names", "[indiUtils]" )
 {
     GIVEN( "a property with three numeric elements" )
@@ -583,6 +601,9 @@ SCENARIO( "updatesIfChanged with const char* element names", "[indiUtils]" )
     }
 }
 
+/// Verify updateSwitchIfChanged() on a property with one switch element. A send must happen
+/// only when the switch state or the property state changes. A missing element name must be
+/// caught without a send.
 SCENARIO( "updateSwitchIfChanged", "[indiUtils]" )
 {
     GIVEN( "a property with one switch element" )
@@ -651,6 +672,9 @@ SCENARIO( "updateSwitchIfChanged", "[indiUtils]" )
     }
 }
 
+/// Verify updateSelectionSwitchIfChanged() on a one-of-many switch property with three elements.
+/// Selecting a different element must turn that element on and every other element off, and
+/// send once. A missing element name logs an error and does not send.
 SCENARIO( "updateSelectionSwitchIfChanged", "[indiUtils]" )
 {
     GIVEN( "a one-of-many switch property with three elements" )

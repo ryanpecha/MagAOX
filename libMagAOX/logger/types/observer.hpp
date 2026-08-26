@@ -91,10 +91,10 @@ struct observer : public flatbuffer_log
       if(fbs->email())
       {
          msg += fbs->email()->c_str();
-         // institution is a required std::string in the only messageT constructor, so
-         // builder.CreateString() always creates it -- institution() is never nullptr.
+         // institution is a required std::string in the only messageT constructor.
+         // The constructor always passes it to builder.CreateString() so institution() is never nullptr.
          if(fbs->institution()) msg += ", ";
-         else msg += " "; // LCOV_EXCL_LINE
+         else msg += " "; // LCOV_EXCL_LINE institution() is never nullptr
       }
 
       if(fbs->institution())
@@ -104,7 +104,7 @@ struct observer : public flatbuffer_log
 
       return msg;
 
-   } // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
+   } // LCOV_EXCL_LINE gcov reports this closing brace as a separate line that only runs during exception cleanup
 
    /// Get an empty logMetaDetail because meta data doesn't make sense for this log
    /**

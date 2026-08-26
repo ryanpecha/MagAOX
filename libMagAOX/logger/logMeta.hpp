@@ -426,7 +426,7 @@ char *getNextVerifiedLog( logMap<verboseT>  &lm,                 /**< [in] loade
 
     while( lm.getNextLog( candidate, current, appName ) == 0 )
     {
-        if( candidate == nullptr ) // LCOV_EXCL_START -- defensive: getNextLog only returns 0 after setting a non-null entry pointer
+        if( candidate == nullptr ) // LCOV_EXCL_START: Defensive check. getNextLog() returns 0 only after it sets a non-null entry pointer.
         {
             return nullptr;
         } // LCOV_EXCL_STOP
@@ -517,7 +517,7 @@ int getLogStateVal( valT                      &val,
         return logMetaFail( failureReason, "due to missing prior telemetry" );
     }
 
-    if( stprior == nullptr || flatlogs::logHeader::eventCode( stprior ) != ev ) // LCOV_EXCL_START -- defensive: the merged getPriorLog only returns non-null entries of the requested code
+    if( stprior == nullptr || flatlogs::logHeader::eventCode( stprior ) != ev ) // LCOV_EXCL_START: Defensive check. The merged getPriorLog() returns only non-null entries with the requested code.
     {
         return logMetaFail( failureReason, "due to missing prior telemetry" );
     } // LCOV_EXCL_STOP
@@ -554,7 +554,7 @@ int getLogStateVal( valT                      &val,
 
         return logMetaFail( failureReason, "due to missing following telemetry" );
     }
-    if( atprior == nullptr ) // LCOV_EXCL_START -- defensive: getNextLog only returns 0 after setting a non-null entry pointer
+    if( atprior == nullptr ) // LCOV_EXCL_START: Defensive check. getNextLog() returns 0 only after it sets a non-null entry pointer.
     {
         if( logMetaGapValid( flatlogs::logHeader::timespec( stprior ), atime, maxGap ) )
         {
@@ -607,7 +607,7 @@ int getLogStateVal( valT                      &val,
 
             return logMetaFail( failureReason, "due to missing following telemetry" );
         }
-        if( atprior == nullptr ) // LCOV_EXCL_START -- defensive: getNextLog only returns 0 after setting a non-null entry pointer
+        if( atprior == nullptr ) // LCOV_EXCL_START: Defensive check. getNextLog() returns 0 only after it sets a non-null entry pointer.
         {
             if( logMetaGapValid( flatlogs::logHeader::timespec( stprior ), atime, maxGap ) )
             {
@@ -673,7 +673,7 @@ int getLogContVal( valT                      &val,
         return logMetaFail( failureReason, "due to missing prior telemetry", 1 );
     }
 
-    if( stprior == nullptr || flatlogs::logHeader::eventCode( stprior ) != ev ) // LCOV_EXCL_START -- defensive: the merged getPriorLog only returns non-null entries of the requested code
+    if( stprior == nullptr || flatlogs::logHeader::eventCode( stprior ) != ev ) // LCOV_EXCL_START: Defensive check. The merged getPriorLog() returns only non-null entries with the requested code.
     {
         return logMetaFail( failureReason, "due to missing prior telemetry", 1 );
     } // LCOV_EXCL_STOP
@@ -703,7 +703,7 @@ int getLogContVal( valT                      &val,
 #endif
         return logMetaFail( failureReason, "due to missing following telemetry", 1 );
     }
-    if( atafter == nullptr ) // LCOV_EXCL_START -- defensive: getNextLog only returns 0 after setting a non-null entry pointer
+    if( atafter == nullptr ) // LCOV_EXCL_START: Defensive check. getNextLog() returns 0 only after it sets a non-null entry pointer.
     {
         return logMetaFail( failureReason, "due to missing following telemetry", 1 );
     } // LCOV_EXCL_STOP

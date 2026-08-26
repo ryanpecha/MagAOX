@@ -33,6 +33,16 @@
   * \ingroup xindiserver
   */
 
+// Forward declaration of the test harness so the friend declaration in the class can
+// name it. The harness is defined in the test file inside this nested namespace.
+namespace libXWCTest
+{
+namespace xindiserverTest
+{
+struct xindiserver_test;
+}
+}
+
 namespace MagAOX
 {
 namespace app
@@ -116,35 +126,29 @@ int loadSSHTunnelConfigs( tunnelMapT & tmap, ///< [out] the tunnel map which wil
 class xindiserver : public MagAOXApp<false>
 {
 
-   //Give the test harness access.
-   friend class xindiserver_test;
+   // Give the test harness access. The harness struct lives in the test namespace
+   // libXWCTest::xindiserverTest, so the friend declaration must name it in full. The
+   // old unqualified name referred to a class in this namespace that does not exist,
+   // so the harness never had access.
+   friend struct libXWCTest::xindiserverTest::xindiserver_test;
 
 protected:
 
-   // Test-harness-accessed members are public below (the `friend class xindiserver_test`
-   // above doesn't actually apply -- the real test struct lives in a different, nested
-   // test namespace, so an unqualified friend declaration here doesn't bind to it).
-public:
    int indiserver_m {-1};  ///< The indiserver MB behind setting (passed to indiserver)
    bool indiserver_n {false}; ///< The indiserver ignore /tmp/noindi flag (passed to indiserver)
    int indiserver_p {-1}; ///< The indiserver port (passed to indiserver)
    int indiserver_v {-1}; ///< The indiserver verbosity (passed to indiserver)
    bool indiserver_x {false}; ///< The indiserver terminate after last exit flag (passed to indiserver)
 
-protected:
    std::string m_driverPath; ///< The path to the local drivers
-public:
    std::vector<std::string> m_local; ///< List of local drivers passed in by config
    std::vector<std::string> m_remote; ///< List of remote drivers passed in by config
-protected:
    std::unordered_set<std::string> m_driverNames; ///< List of driver names processed for command line, used to prevent duplication.
 
    std::vector<std::string> m_remoteServers; ///< List of other INDI server config files to read remote drivers from.
 
-public:
    tunnelMapT m_tunnels; ///< Map of the ssh tunnels, used for processing the remote drivers in m_remote.
 
-protected:
    std::vector<std::string> m_indiserverCommand; ///< The command line arguments to indiserver
 
    pid_t m_isPID {0}; ///< The PID of the indiserver process

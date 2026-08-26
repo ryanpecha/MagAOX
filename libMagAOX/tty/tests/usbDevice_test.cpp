@@ -1,5 +1,10 @@
 /** \file usbDevice_test.cpp
-  * \brief Catch2 tests for usbDevice
+  * \brief Catch2 tests for the usbDevice class in libMagAOX/tty/usbDevice.hpp.
+  *
+  * The configuration tests write real config files under /tmp and read them back through a
+  * real mx::app::appConfigurator. loadConfig() then calls the real udev based device lookup,
+  * which fails because no matching hardware is attached. The connect tests use a device path
+  * that does not exist. No mocks are used. No USB serial hardware is needed.
   */
 #include "../../../tests/catch2/catch.hpp"
 
@@ -11,6 +16,8 @@ namespace libXWCTest
 namespace ttyTest
 {
 
+// Each accepted baud string in the config file must set m_baudRate to the matching termios
+// constant. The loop writes one config file per rate and reads it back.
 TEST_CASE( "usbDevice::loadConfig maps every recognized baud rate string to its speed_t constant",
            "[libMagAOX::tty::usbDevice]" )
 {
@@ -38,14 +45,16 @@ TEST_CASE( "usbDevice::loadConfig maps every recognized baud rate string to its 
     }
 }
 
+// connect() must close a descriptor it already holds before it opens the device again.
+// The check is that m_fileDescrip is reset to zero even though the reopen fails.
 TEST_CASE( "usbDevice::connect closes an already-open file descriptor before reopening", "[libMagAOX::tty::usbDevice]" )
 {
     MagAOX::tty::usbDevice dev;
     dev.m_deviceName = "/dev/xwctest-no-such-tty";
     dev.m_baudRate   = B9600;
 
-    // Any valid, harmless fd stands in for a previously-opened device -- connect() should
-    // close it (rather than leak it) before attempting to reopen m_deviceName.
+    // Any valid, harmless descriptor stands in for a previously opened device. connect()
+    // should close it instead of leaking it before it tries to reopen m_deviceName.
     dev.m_fileDescrip = ::dup( STDIN_FILENO );
     REQUIRE( dev.m_fileDescrip > 0 );
 
@@ -53,6 +62,7 @@ TEST_CASE( "usbDevice::connect closes an already-open file descriptor before reo
     REQUIRE( dev.m_fileDescrip == 0 );
 }
 
+// setupConfig() adds the usb section options to the configurator and returns zero.
 TEST_CASE( "usbDevice::setupConfig registers the usb section options", "[libMagAOX::tty::usbDevice]" )
 {
     mx::app::appConfigurator config;
@@ -61,6 +71,9 @@ TEST_CASE( "usbDevice::setupConfig registers the usb section options", "[libMagA
     REQUIRE( dev.setupConfig( config ) == 0 );
 }
 
+// loadConfig() copies the vendor, product, serial, and baud settings into the members and
+// then looks the device up through udev. A baud value it does not recognize, or no baud
+// value at all, must be rejected with TTY_E_BADBAUDRATE before the lookup.
 TEST_CASE( "usbDevice::loadConfig reads vendor/product/serial/baud and rejects a bad baud rate",
            "[libMagAOX::tty::usbDevice]" )
 {
@@ -77,8 +90,8 @@ TEST_CASE( "usbDevice::loadConfig reads vendor/product/serial/baud and rejects a
         REQUIRE( dev.setupConfig( config ) == 0 );
         config.readConfig( "/tmp/usbDevice_test.conf" );
 
-        // No real device has this vendor/product/serial, so loadConfig's internal
-        // getDeviceName() call legitimately fails to find a match.
+        // No real device has this vendor, product, and serial. The getDeviceName() call inside
+        // loadConfig() therefore fails to find a match, and loadConfig() returns an error.
         int rv = dev.loadConfig( config );
 
         REQUIRE( dev.m_idVendor == "ffff" );
@@ -112,6 +125,8 @@ TEST_CASE( "usbDevice::loadConfig reads vendor/product/serial/baud and rejects a
     }
 }
 
+// connect() on a device path that does not exist must return an error and leave
+// m_fileDescrip at zero.
 TEST_CASE( "usbDevice::connect fails cleanly when there is no matching device", "[libMagAOX::tty::usbDevice]" )
 {
     MagAOX::tty::usbDevice dev;

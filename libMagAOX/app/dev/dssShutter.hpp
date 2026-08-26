@@ -385,8 +385,9 @@ int dssShutter<derivedT>::appStartup()
    act.sa_mask = set;
 
    errno = 0;
-   // sigaction() fails only for an invalid signal number or invalid flags, both fixed and
-   // valid here -- not reachable without corrupting process state.
+   // This block handles a failure of sigaction().
+   // sigaction() fails only for an invalid signal number or invalid flags.
+   // Both are fixed and valid here, so a test cannot reach this block.
    // LCOV_EXCL_START
    if( sigaction(SIGUSR1, &act, 0) < 0 )
    {
@@ -450,17 +451,17 @@ int dssShutter<derivedT>::appShutdown()
       pthread_kill(m_shutThread.native_handle(), SIGUSR1);
    }
 
-   // Reliably racing a signal against a real thread's blocking wait to force the
-   // already-joined exception here (without risking an abort from a subsequently
-   // reaped/recycled thread ID) isn't practical -- see the identical, already-documented
-   // rationale in dm<>::appShutdown()'s equivalent pattern.
+   // The two catch blocks below handle a throw from join(). join() throws only if the
+   // thread was already joined. Forcing that needs a signal to race against the thread's
+   // blocking wait, and a recycled thread ID could then cause an abort.
+   // That is not practical in a test. See the same pattern in dm<>::appShutdown().
    if(m_openThread.joinable())
    {
       try
       {
          m_openThread.join(); //this will throw if it was already joined
       }
-      // LCOV_EXCL_START
+      // LCOV_EXCL_START: see the join() note above.
       catch(...)
       {
       }
@@ -473,7 +474,7 @@ int dssShutter<derivedT>::appShutdown()
       {
          m_shutThread.join(); //this will throw if it was already joined
       }
-      // LCOV_EXCL_START
+      // LCOV_EXCL_START: see the join() note above.
       catch(...)
       {
       }

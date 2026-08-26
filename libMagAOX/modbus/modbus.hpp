@@ -18,10 +18,10 @@
 
 #define MAX_MSG_LENGTH 260
 
-// Guarded separately from MODBUSPP_MODBUS_H: the XWCTEST_NAMESPACE test build re-includes
-// this file multiple times (undefining only MODBUSPP_MODBUS_H) to get distinctly-namespaced
-// `modbus` classes in one translation unit. These plain (unscoped) enums aren't namespaced,
-// so they must only ever be declared once, regardless of how many times that happens.
+// These enums have their own include guard. The test build includes this file more than
+// once and undefines only MODBUSPP_MODBUS_H each time, so it can compile a separate modbus
+// class inside each XWCTEST_NAMESPACE. The enums are not inside a namespace, so they must
+// be declared only once.
 #ifndef MODBUSPP_MODBUS_CONSTANTS_H
 #define MODBUSPP_MODBUS_CONSTANTS_H
 
@@ -53,6 +53,9 @@ enum
 
 #endif // MODBUSPP_MODBUS_CONSTANTS_H
 
+// Test-only. A test can define XWCTEST_NAMESPACE and compile this class a second time
+// inside that namespace with one XWCTEST_ fault macro enabled. Production builds never
+// define XWCTEST_NAMESPACE.
 #ifdef XWCTEST_NAMESPACE
 namespace XWCTEST_NAMESPACE
 {

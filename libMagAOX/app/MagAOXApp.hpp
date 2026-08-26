@@ -41,6 +41,8 @@
 #include "indiMacros.hpp"
 #include "indiUtils.hpp"
 
+// Test-only fault hooks. Every XWCTEST_IF_ macro expands to an empty statement unless
+// a test defines the matching XWCTEST_ name before including this header.
 #include "tests/testMacros.hpp"
 
 using namespace mx::app;
@@ -1659,11 +1661,10 @@ void MagAOXApp<_useINDI>::checkConfig() // virtual
         if( it->second.used == false )
         {
             std::string msg = it->second.name;
-            // Every config target MagAOXApp itself (and its dev:: mixins used in this
-            // codebase's tests) defines via config.add() is always subsequently read
-            // via a matching config(...) call, so an unused target never has recorded
-            // sources here in practice -- not reachable without a derived class that
-            // defines a config option but never reads it.
+            // Every config target that MagAOXApp and its dev mixins register with
+            // config.add() is later read with a matching config() call. So an unused
+            // target never has recorded sources here. Reaching this needs a derived
+            // class that registers an option and never reads it.
             // LCOV_EXCL_START
             if( config.m_sources && it->second.sources.size() > 0 )
             {
@@ -1680,9 +1681,8 @@ void MagAOXApp<_useINDI>::checkConfig() // virtual
     {
         for( auto it = config.m_unusedConfigs.begin(); it != config.m_unusedConfigs.end(); ++it )
         {
-            // An unrecognized config/CLI setting is never independently marked "used"
-            // elsewhere in this codebase's config handling, so this defensive skip is
-            // not reachable via a safe test.
+            // Nothing in the config handling marks an unrecognized setting as used, so
+            // this skip cannot be reached from a test.
             // LCOV_EXCL_START
             if( it->second.used == true )
             {
@@ -1746,6 +1746,7 @@ int MagAOXApp<_useINDI>::execute() // virtual
         return -1;
     }
 
+    // Test hook. Pretends the log directory is owned by another user.
     XWCTEST_IF_MAGAOXAPP_EXEC_WRONG_USER( logstat.st_uid = geteuid()+1 );
 
     if( logstat.st_uid != geteuid() )
@@ -1781,6 +1782,7 @@ int MagAOXApp<_useINDI>::execute() // virtual
     /* ***************************** */
     m_log.logThreadStart(); // no return type
 
+    // Test hook. Stops the log thread right after it starts so the check below fails.
     XWCTEST_IF_MAGAOXAPP_EXEC_LOG_START( m_log.logShutdown(true) );
 
     // Give up to 2 secs to make sure log thread has time to get started and try to open a file.
@@ -1809,8 +1811,8 @@ int MagAOXApp<_useINDI>::execute() // virtual
         return -1;
     }
 
-    // Test hook: shut down the log thread right now (and wait for it to actually die)
-    // so the log-thread-death check inside the main loop below genuinely fires.
+    // Test hook. Shuts the log thread down now and waits until it has really stopped,
+    // so the log thread check inside the main loop below fails for real.
     // clang-format off
     #ifdef XWCTEST_MAGAOXAPP_EXEC_LOG_DEATH
     // LCOV_EXCL_START
@@ -1921,15 +1923,14 @@ int MagAOXApp<_useINDI>::execute() // virtual
                 m_shutdown = 1;
             }
 
+            // Test hook. Sets the power state so the wait above ends.
             XWCTEST_IF_MAGAOXAPP_EXEC_NORM( m_powerState = 0 );
         }
 
-        // This pre-loop transition is logically identical to (and immediately followed
-        // by) the same POWERON/POWEROFF transition check inside the main event loop
-        // below, which the existing execute() test fixtures already exercise via
-        // m_powerState toggling -- forcing this specific *pre-loop* instant would need
-        // yet another dedicated XWCTEST_NAMESPACE fault-injection variant for no
-        // additional behavioral coverage.
+        // This transition before the loop is the same POWERON or POWEROFF check that
+        // the main loop below makes on every pass. The execute() tests already cover
+        // that check by toggling m_powerState. Covering this one instant would need one
+        // more fault injection build for no new behavior.
         // LCOV_EXCL_START
         if( m_powerState > 0 )
         {
@@ -1961,6 +1962,7 @@ int MagAOXApp<_useINDI>::execute() // virtual
     {
         // clang-format off
         #ifdef XWCTEST_MAGAOXAPP_EXEC_NORM
+             // Test hook. Ends the loop after three passes.
              // LCOV_EXCL_START
              if(testTimesThrough > 2)
              {
@@ -2028,6 +2030,7 @@ int MagAOXApp<_useINDI>::execute() // virtual
                 continue;
             }
 
+            // Test hook. Turns the power state on so the next pass runs appLogic().
             XWCTEST_IF_MAGAOXAPP_EXEC_NORM( m_powerState = 1 );
         }
 
@@ -2053,6 +2056,7 @@ int MagAOXApp<_useINDI>::execute() // virtual
             std::this_thread::sleep_for( std::chrono::duration<unsigned long, std::nano>( m_loopPause ) );
         }
 
+        // Test hook. Counts loop passes for the hook at the top of the loop.
         XWCTEST_IF_MAGAOXAPP_EXEC_NORM( ++testTimesThrough );
     }
 
@@ -2068,10 +2072,10 @@ int MagAOXApp<_useINDI>::execute() // virtual
     {
         pcf::IndiProperty ipSend;
         ipSend.setDevice( m_configName );
-        // pcf::IndiDriver::sendDelProperty() ultimately calls sendXml(), which is a
-        // best-effort raw write() that never throws (a closed/invalid fd is silently
-        // ignored) -- so this catch guards message construction for states we have no way
-        // to construct via the public API.
+        // pcf::IndiDriver::sendDelProperty() ends in sendXml(), which is a plain write()
+        // that never throws. A closed or invalid descriptor is ignored. This handler
+        // only guards message construction for states that cannot be built through the
+        // public API.
         // LCOV_EXCL_START
         try
         {
@@ -2149,8 +2153,8 @@ void MagAOXApp<_useINDI>::logMessage( bufferPtrT &b )
 
         msg.setTimeStamp( pcf::TimeStamp( tv ) );
 
-        // See the LCOV_EXCL note on sendGetPropertySetList()'s sendGetProperties() catch --
-        // sendXml() never throws, so this is unreachable via the public API.
+        // sendMessage() ends in sendXml(), which never throws. See the note on the
+        // sendGetProperties() handler in sendGetPropertySetList().
         // LCOV_EXCL_START
         try
         {
@@ -2207,16 +2211,14 @@ int MagAOXApp<_useINDI>::setSigTermHandler()
     act.sa_mask = set;
 
     errno = 0;
-    // The SIGQUIT and SIGINT sigaction() failures below are each exercised in a dedicated
-    // translation unit via this codebase's own XWCTEST_MAGAOXAPP_SIGTERMH_SIGQUIT/SIGINT
-    // hooks (MagAOXApp_test.cpp and MagAOXAppExecute_test.cpp respectively), which redefine
-    // that one signal's macro to SIGKILL so its sigaction() call genuinely fails. That
-    // redefinition leaks for the rest of the translation unit (it's a raw token
-    // substitution, not scoped to a namespace), so each file can only afford to sacrifice
-    // ONE of the three signals -- both existing files still need real, working SIGTERM
-    // registration for their many other "normal successful execute()" scenarios. Testing
-    // this SIGTERM branch the same way would require a third translation unit with no
-    // other test depending on real SIGTERM handling, solely for symmetry with the other two.
+    // The SIGQUIT and SIGINT failures below are each covered in a separate test file.
+    // MagAOXApp_test.cpp defines XWCTEST_MAGAOXAPP_SIGTERMH_SIGQUIT and
+    // MagAOXAppExecute_test.cpp defines XWCTEST_MAGAOXAPP_SIGTERMH_SIGINT. Each define
+    // replaces that one signal with SIGKILL for the whole file, so sigaction() fails
+    // for real. Because the replacement lasts for the whole file, each test file can
+    // give up only one signal, and both files need a working SIGTERM handler for their
+    // other scenarios. Covering this SIGTERM branch would need a third test file that
+    // exists only for this one branch.
     // LCOV_EXCL_START
     if( sigaction( SIGTERM, &act, 0 ) < 0 )
     {
@@ -2402,8 +2404,8 @@ int MagAOXApp<_useINDI>::lockPID()
             std::ifstream procIn;
             std::string   pidCmdLine;
 
-            // procIn never has exceptions() enabled, so open()/good()/>>/close() never
-            // throw here -- this catch is unreachable defensive code.
+            // procIn never enables exceptions, so open(), good(), the read, and close()
+            // never throw here. This handler cannot be reached.
             // LCOV_EXCL_START
             try
             {
@@ -2433,6 +2435,7 @@ int MagAOXApp<_useINDI>::lockPID()
                 configPos = pidCmdLine.find( m_configName );
             }
 
+            // Test hook. Pretends the pid file belongs to a running copy of this app.
             XWCTEST_IF_MAGAOXAPP_PID_LOCKED( (invokedPos = 0, configPos = 0) );
 
             // Check if PID is already locked by this program+config combo:
@@ -2455,6 +2458,7 @@ int MagAOXApp<_useINDI>::lockPID()
     std::ofstream pidOut;
     pidOut.open( pidFileName );
 
+    // Test hook. Closes the pid file so the write below fails.
     XWCTEST_IF_MAGAOXAPP_PID_WRITE_FAIL( pidOut.close() );
 
     if( !( pidOut << m_pid ) )
@@ -2512,11 +2516,10 @@ int MagAOXApp<_useINDI>::threadStart( std::thread &thrd,
     {
         thrd = std::thread( thrdStart, thrdThis );
     }
-    // Forcing std::thread's pthread_create() to genuinely fail requires exhausting a
-    // resource limit like RLIMIT_NPROC, which is process-wide but enforced per-UID --
-    // lowering it in-process risks starving other, unrelated processes owned by the same
-    // user (this was verified to actually happen and abort the test process), so it's not
-    // done here.
+    // Making std::thread fail for real means exhausting a limit such as RLIMIT_NPROC.
+    // That limit is enforced per user, so lowering it inside the test process starves
+    // other processes owned by the same user. This was tried and it aborted the test
+    // process. So these handlers are not covered.
     // LCOV_EXCL_START
     catch( const std::exception &e )
     {
@@ -2531,8 +2534,8 @@ int MagAOXApp<_useINDI>::threadStart( std::thread &thrd,
     }
     // LCOV_EXCL_STOP
 
-    // A std::thread is joinable immediately after a successful, non-throwing construction
-    // (the case above), so this is unreachable defensive code.
+    // A std::thread is joinable right after a construction that did not throw, so this
+    // check cannot fail.
     // LCOV_EXCL_START
     if( !thrd.joinable() )
     {
@@ -2566,9 +2569,10 @@ int MagAOXApp<_useINDI>::threadStart( std::thread &thrd,
             rv = pthread_setschedparam( thrd.native_handle(), SCHED_OTHER, &sp );
     }
 
-    // pthread_setschedparam() returns 0 on success or a positive errno value on failure --
-    // unlike most syscalls, it never returns -1. (Found via real-fault testing: a genuine
-    // EPERM failure returned 1, not -1, so the old `rv < 0` check could never fire.)
+    // Bug fix. pthread_setschedparam() returns 0 on success or a positive errno value
+    // on failure. It never returns -1. A real EPERM failure returned 1, so the old check
+    // for rv < 0 could never fire and the failure was never logged. The log now reports
+    // rv, which holds the real error code.
     if( rv != 0 )
     {
         log<software_error>(
@@ -2631,12 +2635,10 @@ int MagAOXApp<_useINDI>::threadStart( std::thread &thrd,
             snprintf( pids, sizeof( pids ), "%d", tpid );
 
             int w = write( wfd, pids, strnlen( pids, sizeof( pids ) ) );
-            // Forcing a real short/failed write() here (the fd was just opened
-            // successfully) would need either destructive rlimit/signal manipulation
-            // (RLIMIT_FSIZE + overriding SIGXFSZ's default terminate-the-process
-            // disposition for the rest of this shared test binary) or filesystem quotas
-            // not available in this environment -- not done for the same reason RLIMIT_NPROC
-            // fault injection is avoided elsewhere in this codebase's tests.
+            // The descriptor was just opened, so making this write() fail for real would
+            // need RLIMIT_FSIZE with the SIGXFSZ default changed for the whole test
+            // process, or a filesystem quota that this environment does not have. It is
+            // left uncovered for the same reason as the RLIMIT_NPROC case above.
             // LCOV_EXCL_START
             if( w != (int)strnlen( pids, sizeof(pids) ) )
             {
@@ -3063,10 +3065,9 @@ int MagAOXApp<_useINDI>::registerIndiPropertyReadOnly( pcf::IndiProperty &prop )
 
         return 0;
     }
-    // std::map::insert with a std::string key only throws on allocation failure --
-    // not reachable without exhausting process memory. The same reasoning applies to
-    // every other registerIndiProperty*() overload's identically-shaped catch blocks
-    // below.
+    // std::map::insert with a std::string key throws only when memory runs out. That
+    // cannot be reached without exhausting process memory. The same reason applies to
+    // the handlers in the other registerIndiProperty overloads below.
     // LCOV_EXCL_START
     catch( std::exception &e )
     {
@@ -3111,7 +3112,7 @@ int MagAOXApp<_useINDI>::registerIndiPropertyReadOnly( pcf::IndiProperty &prop,
 
         return 0;
     }
-    // LCOV_EXCL_START -- see the rationale on registerIndiPropertyReadOnly()'s first catch above
+    // LCOV_EXCL_START see the reason on the first registerIndiPropertyReadOnly() handler above
     catch( std::exception &e )
     {
         return log<software_error, -1>( { __FILE__, __LINE__, std::string( "Exception caught: " ) + e.what() } );
@@ -3145,7 +3146,7 @@ int MagAOXApp<_useINDI>::registerIndiPropertyNew( pcf::IndiProperty &prop,
 
         return 0;
     }
-    // LCOV_EXCL_START -- see the rationale on registerIndiPropertyReadOnly()'s first catch above
+    // LCOV_EXCL_START see the reason on the first registerIndiPropertyReadOnly() handler above
     catch( std::exception &e )
     {
         return log<software_error, -1>( { __FILE__, __LINE__, std::string( "Exception caught: " ) + e.what() } );
@@ -3225,7 +3226,7 @@ int MagAOXApp<_useINDI>::registerIndiPropertySet( pcf::IndiProperty &prop,
                 { __FILE__, __LINE__, "failed to insert INDI property: " + prop.createUniqueKey() + ". Possible duplicate." } );
         }
     }
-    // LCOV_EXCL_START -- see the rationale on registerIndiPropertyReadOnly()'s first catch above
+    // LCOV_EXCL_START see the reason on the first registerIndiPropertyReadOnly() handler above
     catch( std::exception &e )
     {
         return log<software_error, -1>( { __FILE__, __LINE__, std::string( "Exception caught: " ) + e.what() } );
@@ -3376,11 +3377,10 @@ int MagAOXApp<_useINDI>::startINDI()
     //======= Instantiate the indiDriver
     try
     {
-        // Calling startINDI() a second time on an already-activated driver requires
-        // deactivate() to stop()+join() a real, running IndiConnection execute thread.
-        // Confirmed via direct testing that doing so outside a real indiserver-managed
-        // process lifecycle (i.e. with no indiserver on the other end of the FIFOs) is
-        // genuinely unsafe -- it segfaults -- so this is not exercised in unit tests.
+        // Calling startINDI() again on an active driver makes deactivate() stop and join
+        // a real running IndiConnection thread. Testing showed that doing this with no
+        // indiserver on the other end of the FIFOs crashes with a segfault. So this
+        // block is not run in unit tests.
         // LCOV_EXCL_START
         if( m_indiDriver != nullptr )
         {
@@ -3394,8 +3394,8 @@ int MagAOXApp<_useINDI>::startINDI()
 
         m_indiDriver = new indiDriver<MagAOXApp>( this, m_configName, "0", "0" );
     }
-    // Forcing indiDriver's own constructor to throw would require corrupting the just-
-    // verified-present FIFOs or exhausting memory -- not practical to trigger safely.
+    // Making the indiDriver constructor throw would need the FIFOs that were just
+    // checked to be corrupted, or memory to run out. Neither is safe to force.
     // LCOV_EXCL_START
     catch( ... )
     {
@@ -3405,8 +3405,8 @@ int MagAOXApp<_useINDI>::startINDI()
     // LCOV_EXCL_STOP
 
     // Check for INDI failure
-    // `new` never returns nullptr (it throws, caught above), so this is unreachable
-    // defensive code, not a real branch to exercise.
+    // new never returns nullptr. It throws instead, and that is caught above. So this
+    // check cannot fail.
     // LCOV_EXCL_START
     if( m_indiDriver == nullptr )
     {
@@ -3505,10 +3505,10 @@ void MagAOXApp<_useINDI>::sendGetPropertySetList( bool all )
 
     for( auto * prop : propsToGet )
     {
-        // pcf::IndiDriver::sendGetProperties() ultimately calls sendXml(), which is a
-        // best-effort raw write() that never throws (a closed/invalid fd is silently
-        // ignored) -- so this catch guards message construction (IndiXmlParser /
-        // getProtocolVersion()) for states we have no way to construct via the public API.
+        // pcf::IndiDriver::sendGetProperties() ends in sendXml(), which is a plain
+        // write() that never throws. A closed or invalid descriptor is ignored. This
+        // handler only guards message construction for states that cannot be built
+        // through the public API.
         // LCOV_EXCL_START
         try
         {
@@ -3570,8 +3570,8 @@ void MagAOXApp<_useINDI>::handleGetProperties( const pcf::IndiProperty &ipRecv )
 
         for( auto * prop : propsToSend )
         {
-            // See the LCOV_EXCL note on the sendGetProperties() catch above -- sendXml()
-            // never throws, so this is unreachable via the public API.
+            // sendDefProperty() ends in sendXml(), which never throws. See the note on
+            // the sendGetProperties() handler above.
             // LCOV_EXCL_START
             try
             {
@@ -3607,8 +3607,8 @@ void MagAOXApp<_useINDI>::handleGetProperties( const pcf::IndiProperty &ipRecv )
     // Otherwise send just the requested property, if property is not null
     if( prop )
     {
-        // See the LCOV_EXCL note on the sendGetProperties() catch above -- sendXml()
-        // never throws, so this is unreachable via the public API.
+        // sendDefProperty() ends in sendXml(), which never throws. See the note on the
+        // sendGetProperties() handler above.
         // LCOV_EXCL_START
         try
         {
@@ -3835,9 +3835,8 @@ int MagAOXApp<_useINDI>::indiTargetUpdate( pcf::IndiProperty &localProperty,
         }
     }
 
-    // Unreachable: the early return above already guarantees find("target") ||
-    // find("current"), and each of the two branches above sets `set = true`
-    // unconditionally whenever its element is found -- so `set` is always true here.
+    // The early return above guarantees that target or current exists, and each branch
+    // above sets set to true when it finds its element. So set is always true here.
     // LCOV_EXCL_START
     if( !set )
     {
@@ -3891,9 +3890,8 @@ int MagAOXApp<_useINDI>::sendNewProperty( const pcf::IndiProperty &ipSend, const
         return -1;
     }
 
-    // indiDriver::sendNewProperty() only returns >=0 once it has a live, connected
-    // indiClient -- which requires an actual indiserver process to connect to. Not
-    // available in a unit test environment.
+    // indiDriver::sendNewProperty() returns 0 only when it has a live indiClient, and
+    // that needs a real indiserver process. No unit test has one.
     return 0; // LCOV_EXCL_LINE
 }
 
@@ -3915,8 +3913,8 @@ int MagAOXApp<_useINDI>::sendNewProperty( const pcf::IndiProperty &ipSend )
         return log<software_error, -1>( { __FILE__, __LINE__ } );
     }
 
-    // See the LCOV_EXCL note in the other sendNewProperty() overload above -- reaching
-    // this success path needs a real indiserver connection.
+    // Reaching this success path needs a real indiserver connection. See the note in
+    // the other sendNewProperty() overload above.
     return 0; // LCOV_EXCL_LINE
 }
 
@@ -3928,9 +3926,9 @@ int MagAOXApp<_useINDI>::sendNewStandardIndiToggle( const std::string &device, c
 
     pcf::IndiProperty ipSend( pcf::IndiProperty::Switch );
 
-    // IndiProperty::setDevice()/setName()/add() are trivial std::string/map assignments
-    // that never throw for normal string values (verified by reading their
-    // implementation) -- this catch guards only OOM, not practically triggerable here.
+    // IndiProperty::setDevice(), setName(), and add() are plain string and map
+    // assignments that never throw for normal values. This handler guards only memory
+    // exhaustion, which cannot be forced here.
     // LCOV_EXCL_START
     try
     {
@@ -3959,8 +3957,8 @@ int MagAOXApp<_useINDI>::sendNewStandardIndiToggle( const std::string &device, c
             { __FILE__, __LINE__, "sendNewProperty failed for " + device + "." + property } );
     }
 
-    // See the LCOV_EXCL note on sendNewProperty()'s own success path above -- reaching
-    // this needs a real indiserver connection too.
+    // Reaching this success path needs a real indiserver connection. See the note on
+    // sendNewProperty() above.
     return 0; // LCOV_EXCL_LINE
 }
 

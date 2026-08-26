@@ -1,4 +1,19 @@
 //#define CATCH_CONFIG_MAIN
+/** \file shmimMonitor_test.cpp
+  * \brief Catch2 tests for the MagAOX::app::dev::shmimMonitor device mixin.
+  *
+  * The tests drive the real shmimMonitor code through a MagAOXApp<false> harness that
+  * records every allocate() and processImage() call and can make either one fail.
+  * The monitoring thread smThreadExec() runs on a real background thread against real
+  * ImageStreamIO shared memory streams and real semaphores. Frames are written into the
+  * streams by hand to stand in for an upstream source process.
+  *
+  * The tests point MILK_SHM_DIR at /tmp/shmimMonitor_test/shm and wipe that directory
+  * at startup. They write config files under /tmp. A no-op SIGUSR1 handler is installed
+  * so the monitor thread can be interrupted out of a blocking semaphore wait.
+  *
+  * \ingroup app_dev_unit_tests
+  */
 #include "../../../../tests/catch2/catch.hpp"
 
 #include <atomic>
@@ -35,18 +50,19 @@ using namespace MagAOX::app;
 namespace shmimMonitor_tests
 {
 
-// A single shared memory directory for the whole test binary.  ImageStreamIO caches
-// the shared memory directory the first time it is queried (static local in
-// ImageStreamIO_shmdirname), so MILK_SHM_DIR must be set before any ImageStreamIO
-// call happens anywhere in this process.  Doing this in a namespace-scope static
-// initializer guarantees it runs before any TEST_CASE body (all global constructors
-// run before main()).
+// A single shared memory directory for the whole test binary. ImageStreamIO caches
+// the shared memory directory the first time it is queried. The cache is a static
+// local in ImageStreamIO_shmdirname. So MILK_SHM_DIR must be set before any
+// ImageStreamIO call happens anywhere in this process. Doing this in a namespace-scope
+// static initializer guarantees it runs before any TEST_CASE body, because all global
+// constructors run before main().
 const std::string g_shmDir = "/tmp/shmimMonitor_test/shm";
 
+/// Wipe and recreate the shared memory directory, then point MILK_SHM_DIR at it.
 int setupShmDir()
 {
-    // Remove any shmim files left behind by a prior run of this binary -- stale
-    // semaphores/inodes under the same names would otherwise make the tests
+    // Remove any shmim files left behind by a prior run of this binary. Stale
+    // semaphores and inodes under the same names would otherwise make the tests
     // non-idempotent across repeated invocations.
     std::filesystem::remove_all( g_shmDir );
     mx::ioutils::createDirectories( g_shmDir );
@@ -55,12 +71,14 @@ int setupShmDir()
 }
 static int g_shmDirSetup = setupShmDir();
 
-// A no-op handler for SIGUSR1 so that sending it to a thread interrupts a blocking
-// syscall (EINTR) instead of the default action (which would terminate the process).
+// A no-op handler for SIGUSR1. With it installed, sending SIGUSR1 to a thread
+// interrupts a blocking syscall with EINTR. Without it the default action would
+// terminate the process.
 void noopUsr1Handler( int )
 {
 }
 
+/// Install noopUsr1Handler for SIGUSR1 from a static initializer.
 int setupUsr1Handler()
 {
     struct sigaction act;
@@ -73,15 +91,15 @@ int setupUsr1Handler()
 }
 static int g_usr1Setup = setupUsr1Handler();
 
+/// Return the path of the shmim file for a stream name under g_shmDir.
 std::string shmimPath( const std::string &name )
 {
     return g_shmDir + "/" + name + ".im.shm";
 }
 
-/// Directly create an IMAGE with full control over naxis/size/nbsem, bypassing both
-/// milkImage (which always uses naxis=3) and shmimMonitor::create() (which also always
-/// uses naxis=3), so that the naxis==1 and naxis==2 branches in shmimMonitor can be
-/// exercised.
+/// Directly create a float IMAGE with full control over naxis, size, and nbsem. This
+/// bypasses both milkImage and shmimMonitor::create(), which always use naxis=3, so
+/// that the naxis==1 and naxis==2 branches in shmimMonitor can be exercised.
 int rawCreate( IMAGE &image,
                const std::string &name,
                long naxis,
@@ -100,8 +118,8 @@ int rawCreate( IMAGE &image,
     return 0;
 }
 
-/// Write a constant-valued frame into slice `sliceIndex` of a (possibly circular
-/// buffer) float image, bump cnt1 to that slice, and post all semaphores -- mimics
+/// Write a constant-valued frame into slice `sliceIndex` of a float image, set cnt1 to
+/// that slice, and post all semaphores. The image may be a circular buffer. This mimics
 /// what a real upstream source process does on every new frame.
 void writeFrame( IMAGE &image, uint32_t width, uint32_t height, uint32_t sliceIndex, float value )
 {
@@ -113,16 +131,20 @@ void writeFrame( IMAGE &image, uint32_t width, uint32_t height, uint32_t sliceIn
     ImageStreamIO_sempost( &image, -1 );
 }
 
-/// Mark every semaphore slot as already owned by another (always-alive) process, so
-/// that ImageStreamIO_getsemwaitindex() can't find or adopt any of them.
+/// Mark every semaphore slot as already owned by another process that is always alive,
+/// so that ImageStreamIO_getsemwaitindex() cannot find or adopt any of them.
 void exhaustSemaphores( IMAGE &image )
 {
     for( int i = 0; i < IMAGE_NB_SEMAPHORE; ++i )
-        image.semReadPID[i] = 1; // pid 1 (init) is always alive
+        image.semReadPID[i] = 1; // Process 1 is init, which is always alive.
 }
 
-/// Test harness for dev::shmimMonitor
-/**
+/// Test harness for dev::shmimMonitor.
+/** It forwards the MagAOXApp lifecycle calls to the mixin. It records every
+ * allocate() and processImage() call and can make either one fail or mutate the
+ * stream metadata to provoke a reconnect. It also name-hides registerIndiPropertyNew()
+ * and threadStart() so appStartup() failures can be injected, and it exposes the
+ * protected thread and state members for direct control.
  * \ingroup shmimMonitor_tests
  */
 struct smTest : public MagAOX::app::MagAOXApp<false>, public MAPPNS::shmimMonitor<smTest>
@@ -134,17 +156,17 @@ struct smTest : public MagAOX::app::MagAOXApp<false>, public MAPPNS::shmimMonito
     // ---- allocate()/processImage() instrumentation -------------------------------
     int m_allocateCount{ 0 };
     bool m_failAllocate{ false };
-    bool m_mutateOnAllocate{ false }; ///< if true, mutate size[0] right after the *first* allocate() call
+    bool m_mutateOnAllocate{ false }; ///< If true, mutate size[0] right after the first allocate() call only.
 
     std::atomic<int> m_processImageCount{ 0 };
     bool m_failProcessImage{ false };
-    int m_mutateAtProcessCount{ -1 }; ///< if m_processImageCount == this value, mutate size[0] & repost
+    int m_mutateAtProcessCount{ -1 }; ///< When m_processImageCount reaches this value, mutate size[0] and repost.
 
     std::vector<char> m_lastFrame;
     std::mutex m_frameMutex;
 
     // ---- appStartup() failure injection --------------------------------------------
-    std::string m_failRegisterName; ///< if non-empty, registerIndiPropertyNew fails for this INDI property name
+    std::string m_failRegisterName; ///< If non-empty, registerIndiPropertyNew fails for this INDI property name.
     bool m_failThreadStart{ false };
 
     smTest() : MagAOX::app::MagAOXApp<false>( "", false )
@@ -156,9 +178,9 @@ struct smTest : public MagAOX::app::MagAOXApp<false>, public MAPPNS::shmimMonito
     {
     }
 
-    // Constructs a real (but FIFO-less) indiDriver so m_indiDriver != nullptr, the same
-    // pattern MagAOXApp_test.hpp's setConfigName() uses -- indi::updateIfChanged() catches
-    // its own send failures, so this doesn't need a live, connected INDI server.
+    // Construct a real indiDriver with no FIFOs so m_indiDriver is not nullptr. This is
+    // the same pattern setConfigName() in MagAOXApp_test.hpp uses. indi::updateIfChanged()
+    // catches its own send failures, so this does not need a live, connected INDI server.
     void setConfigNameWithDriver( const std::string &cn )
     {
         m_configName = cn;
@@ -233,7 +255,7 @@ struct smTest : public MagAOX::app::MagAOXApp<false>, public MAPPNS::shmimMonito
         return 0;
     }
 
-    // ---- exposing protected shmimMonitor members/methods for testing -------------
+    // ---- exposing protected shmimMonitor members and methods for testing ---------
 
     int doCreate( uint32_t w, uint32_t h, uint32_t d, uint8_t dt, void *initData = nullptr )
     {
@@ -245,9 +267,10 @@ struct smTest : public MagAOX::app::MagAOXApp<false>, public MAPPNS::shmimMonito
         shmimMonitorT::smThreadExec();
     }
 
+    /// Run smThreadExec() on a background thread without going through threadStart().
     void startMonitorThread()
     {
-        m_smThreadInit = false; // skip the thread-priority-setup synchronizer wait
+        m_smThreadInit = false; // Skip the thread-priority-setup synchronizer wait.
         m_smThread = std::thread( &smTest::runSmThreadExec, this );
     }
 
@@ -262,20 +285,21 @@ struct smTest : public MagAOX::app::MagAOXApp<false>, public MAPPNS::shmimMonito
             m_smThread.join();
     }
 
+    /// Send SIGUSR1 to the monitor thread to interrupt a blocking semaphore wait.
     void killMonitorThread()
     {
         if( m_smThread.joinable() )
             pthread_kill( m_smThread.native_handle(), SIGUSR1 );
     }
 
-    /// Safely abandon m_smThread's bookkeeping after its underlying OS thread has
-    /// already been reaped by a raw pthread_tryjoin_np() call (as appLogic() does
-    /// when it detects the thread has exited).  std::thread has no public API for
-    /// this -- join()/detach() both require the OS-level thread to still be valid,
-    /// and the destructor terminates the process if joinable() is (wrongly) still
-    /// true.  swap() has no such check, so we swap the stale id into a throwaway
-    /// local and reinitialize *that* via placement-new instead of ever invoking its
-    /// destructor while it holds the stale id.
+    /// Safely abandon the m_smThread bookkeeping after its underlying OS thread has
+    /// already been reaped by a raw pthread_tryjoin_np() call. appLogic() does that
+    /// when it detects the thread has exited. std::thread has no public API for this.
+    /// Both join() and detach() require the OS-level thread to still be valid, and the
+    /// destructor terminates the process if joinable() is wrongly still true. swap()
+    /// has no such check. So the stale id is swapped into a throwaway local, and that
+    /// local is reinitialized with placement-new instead of ever running its destructor
+    /// while it holds the stale id.
     void abandonSmThread()
     {
         std::thread tmp;
@@ -313,6 +337,7 @@ struct smTest : public MagAOX::app::MagAOXApp<false>, public MAPPNS::shmimMonito
         m_shmimName = name;
     }
 
+    /// Zero the semaphore count in the stream metadata to simulate a source that cleaned up.
     void corruptSemCount()
     {
         m_imageStream.md[0].sem = 0;
@@ -323,7 +348,7 @@ struct smTest : public MagAOX::app::MagAOXApp<false>, public MAPPNS::shmimMonito
         m_getExistingFirst = b;
     }
 
-    // ---- appStartup() failure injection hooks (name-hides the MagAOXApp base) ----
+    // ---- appStartup() failure injection hooks. These name-hide the MagAOXApp base. ----
 
     int registerIndiPropertyNew( pcf::IndiProperty &prop, int ( *callBack )( void *, const pcf::IndiProperty & ) )
     {
@@ -352,11 +377,11 @@ struct smTest : public MagAOX::app::MagAOXApp<false>, public MAPPNS::shmimMonito
     }
 };
 
-/// RAII guard to make sure a test's background monitor thread never outlives the
-/// harness object, even if a REQUIRE fails partway through a test (Catch2 unwinds the
-/// stack on a failed REQUIRE, so this destructor still runs).  Without this, a stray
-/// joinable std::thread member at harness-destruction time would call
-/// std::terminate() and abort the whole test binary (and lose all coverage data).
+/// RAII guard to make sure the background monitor thread of a test never outlives the
+/// harness object, even if a REQUIRE fails partway through a test. Catch2 unwinds the
+/// stack on a failed REQUIRE, so this destructor still runs. Without this, a stray
+/// joinable std::thread member at harness-destruction time would call std::terminate()
+/// and abort the whole test binary, which would also lose all coverage data.
 struct ThreadGuard
 {
     smTest &m_app;
@@ -382,7 +407,7 @@ struct ThreadGuard
     }
 };
 
-/// Poll a condition until it is true or a timeout elapses.
+/// Poll a condition until it is true or a timeout elapses. Returns false on timeout.
 template <typename Pred>
 bool waitFor( Pred pred, int timeoutMs = 3000, int stepMs = 10 )
 {
@@ -401,7 +426,9 @@ bool waitFor( Pred pred, int timeoutMs = 3000, int stepMs = 10 )
 
 using namespace shmimMonitor_tests;
 
-/// shmimMonitor Configuration
+/// Verify that setupConfig() and loadConfig() apply the defaults and then every
+/// [shmimMonitor] config key. Config files are written under /tmp and read back
+/// through a real appConfigurator.
 /**
  * \ingroup shmimMonitor_tests
  */
@@ -424,7 +451,7 @@ SCENARIO( "shmimMonitor Configuration", "[dev::shmimMonitor]" )
         rv = pdt.loadConfig( config );
         REQUIRE( rv == 0 );
 
-        // setupConfig sets m_shmimName to configName() by default
+        // setupConfig() sets m_shmimName to configName() by default.
         REQUIRE( pdt.shmimName() == "shmimMonitorTest" );
         REQUIRE( pdt.width() == 0 );
         REQUIRE( pdt.height() == 0 );
@@ -472,7 +499,10 @@ SCENARIO( "shmimMonitor Configuration", "[dev::shmimMonitor]" )
     }
 }
 
-/// shmimMonitor appStartup, appLogic, and appShutdown
+/// Verify the appStartup(), appLogic(), and appShutdown() lifecycle. appStartup() must
+/// start the monitor thread and must fail when INDI registration or threadStart()
+/// fails. appLogic() and appShutdown() are then run against hand-built threads so the
+/// thread-alive, thread-exited, and blocked-in-syscall cases can each be forced.
 /**
  * \ingroup shmimMonitor_tests
  */
@@ -491,17 +521,18 @@ SCENARIO( "shmimMonitor appStartup, appLogic, appShutdown", "[dev::shmimMonitor]
             REQUIRE( rv == 0 );
             REQUIRE( pdt.smThreadJoinable() == true );
 
-            // The real monitor thread is now blocked waiting for state()==OPERATING
-            // (never set here) -- appShutdown() only signals/joins, it does not set
-            // the shutdown flag itself (that's the main app loop's job), so we must
-            // set it first or the join below would hang forever.
+            // The real monitor thread is now blocked waiting for state() to become
+            // OPERATING, which never happens here. appShutdown() only signals and joins
+            // the thread. It does not set the shutdown flag itself, because that is the
+            // job of the main app loop. So the flag must be set first or the join below
+            // would hang forever.
             pdt.setShutdownFlag( 1 );
 
             rv = pdt.appShutdown();
             REQUIRE( rv == 0 );
             REQUIRE( pdt.smThreadJoinable() == false );
 
-            // calling appShutdown again on an already-joined thread is a no-op
+            // Calling appShutdown() again on an already-joined thread is a no-op.
             rv = pdt.appShutdown();
             REQUIRE( rv == 0 );
         }
@@ -574,12 +605,13 @@ SCENARIO( "shmimMonitor appStartup, appLogic, appShutdown", "[dev::shmimMonitor]
 
             pdt.setSmThread( std::thread( [](){} ) );
 
-            // give the thread time to actually finish running (not just be started)
+            // Give the thread time to finish running, not just to be started.
             REQUIRE( waitFor(
                 [&pdt]()
                 {
-                    // appLogic itself performs the (destructive) tryjoin check, so we
-                    // can't poll non-destructively here -- just give it a moment.
+                    // appLogic() itself performs the destructive tryjoin check, so the
+                    // test cannot poll for thread exit without consuming it. The
+                    // predicate is always true and the sleep below gives it a moment.
                     return true;
                 },
                 100 ) );
@@ -588,9 +620,9 @@ SCENARIO( "shmimMonitor appStartup, appLogic, appShutdown", "[dev::shmimMonitor]
             int rv = pdt.appLogic();
             REQUIRE( rv == -1 );
 
-            // appLogic()'s pthread_tryjoin_np() call has already reaped the OS thread;
-            // std::thread doesn't know that, so we must neutralize it without a real
-            // join()/detach() (see abandonSmThread doc).
+            // The pthread_tryjoin_np() call inside appLogic() has already reaped the OS
+            // thread. std::thread does not know that, so it must be neutralized without
+            // a real join() or detach(). See the abandonSmThread() comment.
             pdt.abandonSmThread();
             REQUIRE( pdt.smThreadJoinable() == false );
         }
@@ -612,12 +644,11 @@ SCENARIO( "shmimMonitor appStartup, appLogic, appShutdown", "[dev::shmimMonitor]
             smTest pdt;
             ThreadGuard guard( pdt );
 
-            // Note: the thread must actually be blocked in pause() before
-            // appShutdown() sends SIGUSR1 -- if the signal arrives while the thread
-            // is still starting up (before it reaches pause()), it gets handled
-            // (no-op) and consumed right there, and pause() then blocks forever with
-            // no second signal ever coming.  Synchronize on a flag set immediately
-            // before the pause() call to make that race negligible.
+            // The thread must actually be blocked in pause() before appShutdown() sends
+            // SIGUSR1. If the signal arrives while the thread is still starting up and
+            // has not reached pause(), the no-op handler consumes it right there. pause()
+            // then blocks forever because no second signal ever comes. Synchronize on a
+            // flag set immediately before the pause() call to make that race negligible.
             std::atomic<bool> aboutToPause{ false };
             pdt.setSmThread( std::thread(
                 [&aboutToPause]()
@@ -635,7 +666,9 @@ SCENARIO( "shmimMonitor appStartup, appLogic, appShutdown", "[dev::shmimMonitor]
     }
 }
 
-/// shmimMonitor::create()
+/// Verify that shmimMonitor::create() makes a new stream, fills it with initial data
+/// when given, replaces an existing stream, and fails on a corrupt file or an invalid
+/// data type. The results are checked by opening the stream with milkImage.
 /**
  * \ingroup shmimMonitor_tests
  */
@@ -693,9 +726,9 @@ SCENARIO( "shmimMonitor create()", "[dev::shmimMonitor]" )
 
         WHEN( "the existing file can't be opened by ImageStreamIO (corrupt)" )
         {
-            // Put a too-small junk file where the shmim would be -- raw open()
-            // succeeds (it's a real file) but ImageStreamIO_openIm fails because
-            // the file is smaller than IMAGE_METADATA.
+            // Put a too-small junk file where the shmim would be. A raw open() succeeds
+            // because it is a real file, but ImageStreamIO_openIm fails because the file
+            // is smaller than IMAGE_METADATA.
             std::string path = shmimPath( "smCreateCorrupt" );
             FILE *f = fopen( path.c_str(), "w" );
             REQUIRE( f != nullptr );
@@ -710,13 +743,14 @@ SCENARIO( "shmimMonitor create()", "[dev::shmimMonitor]" )
         WHEN( "ImageStreamIO_createIm_gpu itself fails (invalid datatype code)" )
         {
             pdt.setShmimName( "smCreateBadType" );
-            int rv = pdt.doCreate( 4, 4, 2, 255 ); // 255 is not a valid ImageStreamIO datatype code
+            int rv = pdt.doCreate( 4, 4, 2, 255 ); // 255 is not a valid ImageStreamIO datatype code.
             REQUIRE( rv == -1 );
         }
     }
 }
 
-/// shmimMonitor::updateINDI()
+/// Verify that updateINDI() returns 0 with no INDI driver and also publishes its
+/// properties when a real indiDriver with no FIFOs is attached.
 /**
  * \ingroup shmimMonitor_tests
  */
@@ -732,9 +766,9 @@ SCENARIO( "shmimMonitor updateINDI", "[dev::shmimMonitor]" )
 
     GIVEN( "a shmimMonitor with a real (FIFO-less) indiDriver connected" )
     {
-        // indi::updateIfChanged() catches its own send failures internally (already
-        // covered directly in indiUtils_test.cpp), so a FIFO-less driver here is enough
-        // to exercise updateINDI()'s publishing branch without a live INDI server.
+        // indi::updateIfChanged() catches its own send failures internally. Those are
+        // covered directly in indiUtils_test.cpp. So a driver with no FIFOs is enough to
+        // exercise the publishing branch of updateINDI() without a live INDI server.
         smTest pdt;
         ThreadGuard guard( pdt );
         pdt.setShmimName( "smUpdateIndi" );
@@ -747,8 +781,13 @@ SCENARIO( "shmimMonitor updateINDI", "[dev::shmimMonitor]" )
     }
 }
 
-/// shmimMonitor's monitoring thread (smThreadExec), driven against real
-/// ImageStreamIO shared memory segments.
+/// Verify the monitoring thread smThreadExec() against real ImageStreamIO shared
+/// memory streams. Each case starts the thread, creates or damages a stream, writes
+/// frames by hand, and polls the harness counters and state with waitFor(). The cases
+/// cover connecting, every naxis value, corrupt and under-provisioned streams, restart
+/// and state interruptions, allocate() and processImage() failures, metadata changes,
+/// a vanished or replaced stream, and semaphore exhaustion. Several cases sleep past
+/// the one second semaphore timeout inside the monitor loop.
 /**
  * \ingroup shmimMonitor_tests
  */
@@ -768,7 +807,7 @@ SCENARIO( "shmimMonitor thread lifecycle", "[dev::shmimMonitor]" )
             REQUIRE( waitFor( [&pdt]() { return pdt.smState() == MAPPNS::shmimMonitorState::notfound; } ) );
 
             IMAGE img;
-            REQUIRE( rawCreate( img, "smLifeA", 3, 6, 4, 2 ) == 0 ); // naxis=3, 6x4, depth 2
+            REQUIRE( rawCreate( img, "smLifeA", 3, 6, 4, 2 ) == 0 ); // naxis=3, 6x4, depth 2.
 
             REQUIRE( waitFor( [&pdt]() { return pdt.smState() == MAPPNS::shmimMonitorState::connected; } ) );
             REQUIRE( waitFor( [&pdt]() { return pdt.m_allocateCount == 1; } ) );
@@ -779,7 +818,7 @@ SCENARIO( "shmimMonitor thread lifecycle", "[dev::shmimMonitor]" )
             writeFrame( img, 6, 4, 0, 42.0f );
             REQUIRE( waitFor( [&pdt]() { return pdt.m_processImageCount.load() == 1; } ) );
 
-            // Clean shutdown: SIGUSR1 interrupts the blocked sem_timedwait (EINTR path).
+            // Clean shutdown. SIGUSR1 interrupts the blocked sem_timedwait, which is the EINTR path.
             pdt.setShutdownFlag( 1 );
             pdt.killMonitorThread();
             pdt.joinMonitorThread();
@@ -802,7 +841,7 @@ SCENARIO( "shmimMonitor thread lifecycle", "[dev::shmimMonitor]" )
 
             IMAGE img;
             REQUIRE( rawCreate( img, "smLifeNaxis1", 1, 10, 0, 0 ) == 0 );
-            writeFrame( img, 10, 1, 0, 1.0f ); // pre-existing frame
+            writeFrame( img, 10, 1, 0, 1.0f ); // A pre-existing frame, delivered through getExistingFirst.
 
             pdt.startMonitorThread();
 
@@ -811,7 +850,7 @@ SCENARIO( "shmimMonitor thread lifecycle", "[dev::shmimMonitor]" )
             REQUIRE( pdt.depth() == 1 );
             REQUIRE( waitFor( [&pdt]() { return pdt.m_processImageCount.load() >= 1; } ) );
 
-            writeFrame( img, 10, 1, 0, 2.0f ); // live frame through the main loop
+            writeFrame( img, 10, 1, 0, 2.0f ); // A live frame, delivered through the main loop.
             REQUIRE( waitFor( [&pdt]() { return pdt.m_processImageCount.load() >= 2; } ) );
 
             pdt.setShutdownFlag( 1 );
@@ -869,7 +908,8 @@ SCENARIO( "shmimMonitor thread lifecycle", "[dev::shmimMonitor]" )
 
             pdt.startMonitorThread();
 
-            // give it time to hit the "raw open() ok, ImageStreamIO_openIm fails" retry
+            // Give the thread time to hit the retry where raw open() succeeds but
+            // ImageStreamIO_openIm fails.
             std::this_thread::sleep_for( std::chrono::milliseconds( 1200 ) );
             REQUIRE( pdt.smState() != MAPPNS::shmimMonitorState::connected );
 
@@ -897,7 +937,7 @@ SCENARIO( "shmimMonitor thread lifecycle", "[dev::shmimMonitor]" )
             pdt.state( stateCodes::OPERATING );
 
             IMAGE img;
-            REQUIRE( rawCreate( img, "smLifeSemWait", 3, 4, 4, 1, 1 ) == 0 ); // nbsem=1 < SEMAPHORE_MAXVAL
+            REQUIRE( rawCreate( img, "smLifeSemWait", 3, 4, 4, 1, 1 ) == 0 ); // nbsem=1 is less than SEMAPHORE_MAXVAL.
 
             pdt.startMonitorThread();
 
@@ -905,7 +945,7 @@ SCENARIO( "shmimMonitor thread lifecycle", "[dev::shmimMonitor]" )
             REQUIRE( pdt.smState() != MAPPNS::shmimMonitorState::connected );
 
             ImageStreamIO_destroyIm( &img );
-            REQUIRE( rawCreate( img, "smLifeSemWait", 3, 4, 4, 1 ) == 0 ); // default nbsem == IMAGE_NB_SEMAPHORE
+            REQUIRE( rawCreate( img, "smLifeSemWait", 3, 4, 4, 1 ) == 0 ); // The default nbsem is IMAGE_NB_SEMAPHORE.
 
             REQUIRE( waitFor( [&pdt]() { return pdt.smState() == MAPPNS::shmimMonitorState::connected; }, 5000 ) );
 
@@ -929,11 +969,11 @@ SCENARIO( "shmimMonitor thread lifecycle", "[dev::shmimMonitor]" )
 
             REQUIRE( waitFor( [&pdt]() { return pdt.smState() == MAPPNS::shmimMonitorState::notfound; } ) );
 
-            // (1) trip "if (m_restart) continue;" while searching
+            // First, trip the "if (m_restart) continue;" check while searching.
             pdt.setRestart( true );
-            REQUIRE( waitFor( [&pdt]() { return pdt.getRestart() == false; } ) ); // reset at top of next outer pass
+            REQUIRE( waitFor( [&pdt]() { return pdt.getRestart() == false; } ) ); // Reset at the top of the next outer pass.
 
-            // (2) trip "if (state()!=target) continue;" while searching
+            // Second, trip the "if (state()!=target) continue;" check while searching.
             pdt.state( stateCodes::READY );
             std::this_thread::sleep_for( std::chrono::milliseconds( 1200 ) );
             pdt.state( stateCodes::OPERATING );
@@ -954,7 +994,7 @@ SCENARIO( "shmimMonitor thread lifecycle", "[dev::shmimMonitor]" )
             ThreadGuard guard( pdt );
 
             pdt.setShmimName( "smLifeShutdownWait" );
-            pdt.state( stateCodes::READY ); // not the target -- spins in the "wait for state" loop
+            pdt.state( stateCodes::READY ); // Not the target state, so the thread spins in the "wait for state" loop.
             pdt.startMonitorThread();
 
             std::this_thread::sleep_for( std::chrono::milliseconds( 300 ) );
@@ -998,7 +1038,7 @@ SCENARIO( "shmimMonitor thread lifecycle", "[dev::shmimMonitor]" )
             pdt.startMonitorThread();
 
             REQUIRE( waitFor( [&pdt]() { return pdt.m_allocateCount == 1; } ) );
-            pdt.joinMonitorThread(); // allocate() failure breaks out and the thread ends on its own
+            pdt.joinMonitorThread(); // The allocate() failure breaks out and the thread ends on its own.
             REQUIRE( pdt.smThreadJoinable() == false );
 
             ImageStreamIO_closeIm( &img );
@@ -1046,7 +1086,7 @@ SCENARIO( "shmimMonitor thread lifecycle", "[dev::shmimMonitor]" )
 
             IMAGE img;
             REQUIRE( rawCreate( img, "smLifeProcFailExisting", 3, 4, 4, 2 ) == 0 );
-            writeFrame( img, 4, 4, 0, 1.0f ); // pre-existing frame, delivered via getExistingFirst
+            writeFrame( img, 4, 4, 0, 1.0f ); // A pre-existing frame, delivered through getExistingFirst.
 
             pdt.startMonitorThread();
             REQUIRE( waitFor( [&pdt]() { return pdt.m_processImageCount.load() == 1; } ) );
@@ -1077,14 +1117,14 @@ SCENARIO( "shmimMonitor thread lifecycle", "[dev::shmimMonitor]" )
             writeFrame( img, 4, 4, 0, 1.0f );
             REQUIRE( waitFor( [&pdt]() { return pdt.m_processImageCount.load() == 1; } ) );
 
-            // Request shutdown, then deliver one more frame: sem_timedwait succeeds
-            // and the size check passes, but the shutdown/restart/state check right
-            // after it now trips, breaking out *before* processImage() is called.
+            // Request shutdown, then deliver one more frame. sem_timedwait succeeds and
+            // the size check passes, but the shutdown, restart, and state check right
+            // after it now trips. That breaks out before processImage() is called.
             pdt.setShutdownFlag( 1 );
             writeFrame( img, 4, 4, 1, 2.0f );
 
             pdt.joinMonitorThread();
-            REQUIRE( pdt.m_processImageCount.load() == 1 ); // the 2nd frame was never handed to processImage()
+            REQUIRE( pdt.m_processImageCount.load() == 1 ); // The second frame was never handed to processImage().
 
             ImageStreamIO_closeIm( &img );
         }
@@ -1099,7 +1139,7 @@ SCENARIO( "shmimMonitor thread lifecycle", "[dev::shmimMonitor]" )
 
             pdt.setShmimName( "smLifeMismatch" );
             pdt.state( stateCodes::OPERATING );
-            pdt.m_mutateAtProcessCount = 1; // mutate + repost right after the 1st processImage() call
+            pdt.m_mutateAtProcessCount = 1; // Mutate the size and repost right after the first processImage() call.
 
             IMAGE img;
             REQUIRE( rawCreate( img, "smLifeMismatch", 3, 4, 4, 2 ) == 0 );
@@ -1108,7 +1148,7 @@ SCENARIO( "shmimMonitor thread lifecycle", "[dev::shmimMonitor]" )
             REQUIRE( waitFor( [&pdt]() { return pdt.smState() == MAPPNS::shmimMonitorState::connected; } ) );
 
             writeFrame( img, 4, 4, 0, 1.0f );
-            REQUIRE( waitFor( [&pdt]() { return pdt.m_allocateCount == 2; }, 5000 ) ); // mismatch => reconnect
+            REQUIRE( waitFor( [&pdt]() { return pdt.m_allocateCount == 2; }, 5000 ) ); // The mismatch forces a reconnect.
 
             pdt.setShutdownFlag( 1 );
             pdt.killMonitorThread();
@@ -1128,13 +1168,14 @@ SCENARIO( "shmimMonitor thread lifecycle", "[dev::shmimMonitor]" )
 
             IMAGE img;
             REQUIRE( rawCreate( img, "smLifeExistingMismatch", 3, 4, 4, 2 ) == 0 );
-            writeFrame( img, 4, 4, 0, 9.0f ); // pre-existing frame before the monitor ever starts
+            writeFrame( img, 4, 4, 0, 9.0f ); // A pre-existing frame written before the monitor ever starts.
 
             pdt.startMonitorThread();
 
-            // 1st allocate() mutates size[0] -> getExistingFirst mismatch -> continue -> reconnect -> 2nd allocate()
+            // The first allocate() mutates size[0]. The getExistingFirst size check then
+            // fails, the loop continues, the monitor reconnects, and allocate() runs again.
             REQUIRE( waitFor( [&pdt]() { return pdt.m_allocateCount >= 2; }, 5000 ) );
-            // after reconnecting with consistent metadata, the still-present frame is delivered
+            // After reconnecting with consistent metadata, the still-present frame is delivered.
             REQUIRE( waitFor( [&pdt]() { return pdt.m_processImageCount.load() >= 1; }, 3000 ) );
 
             pdt.setShutdownFlag( 1 );
@@ -1160,13 +1201,13 @@ SCENARIO( "shmimMonitor thread lifecycle", "[dev::shmimMonitor]" )
             pdt.startMonitorThread();
             REQUIRE( waitFor( [&pdt]() { return pdt.smState() == MAPPNS::shmimMonitorState::connected; } ) );
 
-            pdt.corruptSemCount(); // simulates the source process having cleaned up
+            pdt.corruptSemCount(); // Simulates the source process having cleaned up.
 
-            // wait out the ~1s sem_timedwait timeout so the "sem<=0" break is hit
+            // Wait out the roughly one second sem_timedwait timeout so the "sem<=0" break is hit.
             std::this_thread::sleep_for( std::chrono::milliseconds( 1500 ) );
 
-            // the reconnect attempt now finds sem < SEMAPHORE_MAXVAL forever (that
-            // field can't be fixed in place) -- destroy and recreate properly.
+            // The reconnect attempt now finds sem below SEMAPHORE_MAXVAL forever, because
+            // that field cannot be fixed in place. So destroy and recreate the stream properly.
             ImageStreamIO_destroyIm( &img );
             REQUIRE( rawCreate( img, "smLifeSemZero", 3, 4, 4, 1 ) == 0 );
 
@@ -1199,7 +1240,7 @@ SCENARIO( "shmimMonitor thread lifecycle", "[dev::shmimMonitor]" )
 
             remove( shmimPath( "smLifeFileGone" ).c_str() );
 
-            // wait out the ~1s sem_timedwait timeout for restart-detection to trip
+            // Wait out the roughly one second sem_timedwait timeout so restart detection trips.
             std::this_thread::sleep_for( std::chrono::milliseconds( 1500 ) );
             REQUIRE( pdt.smState() != MAPPNS::shmimMonitorState::connected );
 
@@ -1228,10 +1269,10 @@ SCENARIO( "shmimMonitor thread lifecycle", "[dev::shmimMonitor]" )
             pdt.startMonitorThread();
             REQUIRE( waitFor( [&pdt]() { return pdt.smState() == MAPPNS::shmimMonitorState::connected; } ) );
 
-            // Replace the file with a fresh one (new inode) right away, so that by
-            // the time the ~1s timeout check runs, both open() and stat() succeed
-            // against the new file -- isolating the inode-only restart branch from
-            // the file-missing one.
+            // Replace the file with a fresh one that has a new inode right away. By the
+            // time the roughly one second timeout check runs, both open() and stat()
+            // succeed against the new file. This isolates the inode-only restart branch
+            // from the file-missing one.
             ImageStreamIO_destroyIm( &img );
             REQUIRE( rawCreate( img, "smLifeInodeChange", 3, 4, 4, 1 ) == 0 );
 
@@ -1259,7 +1300,7 @@ SCENARIO( "shmimMonitor thread lifecycle", "[dev::shmimMonitor]" )
             exhaustSemaphores( img );
 
             pdt.startMonitorThread();
-            pdt.joinMonitorThread(); // getsemwaitindex fails -> logs critical -> returns on its own
+            pdt.joinMonitorThread(); // getsemwaitindex fails, the thread logs a critical error, and it returns on its own.
             REQUIRE( pdt.smThreadJoinable() == false );
             REQUIRE( pdt.smState() != MAPPNS::shmimMonitorState::connected );
 

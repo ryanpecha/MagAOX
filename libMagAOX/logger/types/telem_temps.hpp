@@ -75,7 +75,7 @@ struct telem_temps : public flatbuffer_log
         }
 
         return msg;
-    } // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
+    } // LCOV_EXCL_LINE gcov reports this closing brace as a separate line that only runs during exception cleanup
 
     static std::vector<float> temps( void *msgBuffer /**< [in] Buffer containing the flatbuffer serialized message.*/ )
     {
@@ -91,7 +91,7 @@ struct telem_temps : public flatbuffer_log
             }
         }
         return p;
-    } // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
+    } // LCOV_EXCL_LINE gcov reports this closing brace as a separate line that only runs during exception cleanup
 
     /// Get the logMetaDetail for a member by name
     /**

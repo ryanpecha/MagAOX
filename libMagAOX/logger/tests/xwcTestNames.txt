@@ -1,13 +1,14 @@
-# XWCTEST_* fault-injection names used by libMagAOX/logger production headers, consumed by
-# tests/genTestMacros.py to generate testMacros.hpp. One name per line; '#' comments and
-# blank lines are ignored. See xwctest-macro-coverage-strategy.md for the conversion.
+# XWCTEST_* fault injection names used by the libMagAOX/logger production headers.
+# tests/genTestMacros.py reads this file to generate testMacros.hpp. Put one name per
+# line. Lines starting with '#' and blank lines are ignored. See
+# xwctest-macro-coverage-strategy.md for the conversion.
 
-# logMap.hpp (addFileListToFileMap)
+# logMap.hpp, in addFileListToFileMap
 XWCTEST_LOGMAP_AFLTFM_XWCE
 XWCTEST_LOGMAP_AFLTFM_BADALL
 XWCTEST_LOGMAP_AFLTFM_EXCEPTION
 
-# logMap.hpp (loadAppToFileMap)
+# logMap.hpp, in loadAppToFileMap
 XWCTEST_LOGMAP_LATFM_DIREXISTS_ERRC
 XWCTEST_LOGMAP_LATFM_BADALL1
 XWCTEST_LOGMAP_LATFM_BADALL2
@@ -18,7 +19,7 @@ XWCTEST_LOGMAP_LATFM_XWCE6
 XWCTEST_LOGMAP_LATFM_SIZEERR1
 XWCTEST_LOGMAP_LATFM_SIZEERR2
 
-# logMap.cpp (logInMemory::loadFile)
+# logMap.cpp, in logInMemory::loadFile
 XWCTEST_LOGINMEMORY_LOADFILE_SHORTREAD
 
 # logFileRaw.hpp

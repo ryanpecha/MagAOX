@@ -1,12 +1,22 @@
 /** \file MagAOXApp_test.hpp
-  * \brief Shared harness for the MagAOXApp Catch2 tests (MagAOXApp_test.cpp,
-  *        MagAOXAppExecute_test.cpp, and the per-fault translation units).
+  * \brief Shared Catch2 test harness for MagAOX::app::MagAOXApp.
   *
-  * APP_XWCTEST_BASE selects which MagAOXApp<true> the concrete test app derives from:
-  * the production class, or -- when a fault TU defines XWCTEST_NAMESPACE before
-  * including MagAOXApp.hpp -- the re-included copy inside that namespace with one
-  * XWCTEST_* fault macro enabled. The namespace nesting below mirrors that so each
-  * fault TU gets its own distinct harness types without ODR collisions.
+  * This header is used by MagAOXApp_test.cpp, MagAOXAppExecute_test.cpp, and the
+  * per-fault translation units that re-include it under a fault namespace.
+  *
+  * APP_XWCTEST_BASE selects the base class of the concrete test app. When
+  * XWCTEST_NAMESPACE is not defined the base is the production MagAOXApp<true>.
+  * When a fault translation unit defines XWCTEST_NAMESPACE before including
+  * MagAOXApp.hpp, the base is the copy of MagAOXApp<true> that was re-included inside
+  * that namespace with one XWCTEST_* fault macro enabled. The namespace nesting below
+  * mirrors that scheme, so each fault translation unit gets its own harness types and
+  * there are no one-definition-rule collisions.
+  *
+  * The MagAOXApp_test harness exposes protected members of MagAOXApp through thin
+  * public wrappers. It adds flags that make appStartup(), appLogic(), appShutdown(),
+  * onPowerOff(), and whilePowerOff() fail on demand. It does not stub out logging,
+  * INDI, or the file system. Tests that need those use real files under /tmp and a
+  * real indiDriver object that has no FIFOs and no indiserver to talk to.
   */
 #ifndef app_tests_MagAOXApp_test_hpp
 #define app_tests_MagAOXApp_test_hpp
@@ -32,6 +42,12 @@ namespace XWCTEST_NAMESPACE
 {
 #endif
 
+/// Test harness for MagAOXApp<true>.
+/** It stubs the appStartup(), appLogic(), and appShutdown() hooks with flags that make each
+  * one fail on demand, and exposes protected MagAOXApp members through public wrappers.
+  *
+  * \ingroup MagAOXApp_unit_test
+  */
 struct MagAOXApp_test : public APP_XWCTEST_BASE
 {
     MagAOXApp_test( bool gitmod = false ) : MagAOXApp( "sha1", gitmod )
@@ -42,9 +58,10 @@ struct MagAOXApp_test : public APP_XWCTEST_BASE
     bool appLogicFail{ false };
     bool appShutdownFail{ false };
 
-    // For exercising threadStart(), whose thread-start function only ever receives the
-    // thisPtr argument -- tpid/thrdInit must be reachable through it, the same way real
-    // derived apps (e.g. dev::dm's m_satThreadID/m_satThreadInit) expose them.
+    // Thread bookkeeping for the threadStart() tests. The thread function that
+    // threadStart() launches only receives the thisPtr argument, so the thread id and the
+    // init flag must be reachable through the app object. Real derived apps expose them
+    // the same way, for example dev::dm with m_satThreadID and m_satThreadInit.
     bool  m_testThreadInit{ false };
     pid_t m_testThreadID{ 0 };
 
@@ -68,13 +85,15 @@ struct MagAOXApp_test : public APP_XWCTEST_BASE
 
         return 0;
     }
-    int m_appLogicCallCount{ 0 };
-    /// If >0, on the m_flipPowerOffOnCall'th call to appLogic(), directly force
-    /// m_powerState back to 0 (as if an external power-off happened while running) and
-    /// make the *next* onPowerOff() call fail. Exercises execute()'s main-loop "power went
-    /// off while state()!=POWEROFF" branch, which needs power to go on, run appLogic() at
-    /// least once, then go off again -- more passes than the simple, shared bool flags
-    /// (appLogicFail, etc.) can express.
+    int m_appLogicCallCount{ 0 }; ///< Number of times appLogic() has run.
+    /// Call number of appLogic() on which to simulate an external power off.
+    /** If greater than zero, the appLogic() call with this number forces m_powerState
+      * back to 0 and makes the next onPowerOff() call fail. This exercises the branch in
+      * the main loop of execute() that handles power going off while state() is not
+      * POWEROFF. Reaching that branch needs power to come on, appLogic() to run at least
+      * once, and power to go off again. The simple bool flags such as appLogicFail
+      * cannot express that sequence.
+      */
     int m_flipPowerOffOnCall{ 0 };
 
     virtual int appLogic()
@@ -103,6 +122,7 @@ struct MagAOXApp_test : public APP_XWCTEST_BASE
         return 0;
     }
 
+    // Public wrappers for the protected INDI startup functions.
     int callCreateINDIFIFOS()
     {
         return APP_XWCTEST_BASE::createINDIFIFOS();
@@ -166,6 +186,7 @@ struct MagAOXApp_test : public APP_XWCTEST_BASE
         m_configBase = cb;
     }
 
+    // Public wrappers for the protected INDI send functions and the clearFSMAlert callback.
     template <typename T>
     int sendNewProperty( const pcf::IndiProperty &ipSend, const std::string &el, const T &newVal )
     {
@@ -230,6 +251,7 @@ struct MagAOXApp_test : public APP_XWCTEST_BASE
         return m_powerOnWait;
     }
 
+    // When set, the matching power hook returns -1 so execute() takes its error branch.
     bool onPowerOffFail{ false };
     bool whilePowerOffFail{ false };
 
@@ -292,10 +314,12 @@ struct MagAOXApp_test : public APP_XWCTEST_BASE
         return setCallBack_m_indiP_powerChannel( ip );
     }
 
-    /// Calls the static wrapper generated by INDI_SETCALLBACK_DECL, mirroring
-    /// doFSMClearAlert()'s use of st_newCallBack_clearFSMAlert below -- setPowerState()
-    /// above calls the real handler directly, so the static wrapper itself is otherwise
-    /// never exercised.
+    /// Set the power state through the static callback wrapper.
+    /** This calls the static wrapper that INDI_SETCALLBACK_DECL generates, in the same way
+      * that doFSMClearAlert() calls st_newCallBack_clearFSMAlert. setPowerState() above
+      * calls the real handler directly, so without this the static wrapper is never
+      * exercised.
+      */
     int setPowerStateViaStaticWrapper( const std::string &state, const std::string target )
     {
         pcf::IndiProperty ip( pcf::IndiProperty::Text );
@@ -358,15 +382,19 @@ struct MagAOXApp_test : public APP_XWCTEST_BASE
         return APP_XWCTEST_BASE::unlockPID();
     }
 
-    /// Exercise the elevatedPrivileges RAII guard's redundant elevate()/restore() early-return branches.
+    /// Exercise the early returns in the elevatedPrivileges RAII guard.
+    /** The guard elevates in its constructor. A second elevate() and a second restore()
+      * each take the early-return branch for a state that is already applied.
+      */
     void testElevatedPrivilegesDoubleGuard()
     {
         APP_XWCTEST_BASE::elevatedPrivileges ep( this );
-        ep.elevate(); // already elevated -- hits the early return
+        ep.elevate(); // Already elevated, so this takes the early return.
         ep.restore();
-        ep.restore(); // already restored -- hits the early return
+        ep.restore(); // Already restored, so this takes the early return.
     }
 
+    // Public wrappers for the protected updateIfChanged family and indiTargetUpdate().
     template <typename T>
     void updateIfChanged( pcf::IndiProperty &p, const std::string &el, const T &newVal )
     {

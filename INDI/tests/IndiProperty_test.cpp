@@ -1,8 +1,10 @@
 /** \file IndiProperty_test.cpp
-  * \brief Catch2 tests for pcf::IndiProperty (INDI/libcommon/IndiProperty.cpp).
+  * \brief Catch2 tests for pcf::IndiProperty in INDI/libcommon/IndiProperty.cpp.
   *
-  * Exercises every constructor, comparison, element operation, validity check,
-  * accessor/mutator, and enum<->string converter.
+  * Exercises every constructor, comparison method, element operation, validity
+  * check, accessor, and mutator. It also covers the converters between enum
+  * values and strings in both directions. IndiProperty is a plain value class,
+  * so no threads, sockets, or files are needed.
   */
 #include "../../tests/catch2/catch.hpp"
 
@@ -14,6 +16,7 @@ using pcf::IndiProperty;
 namespace IndiProperty_test
 {
 
+/// Builds a Number property named dev.prop with elements a and b holding the values 1 and 2.
 static IndiProperty makeProp()
 {
    IndiProperty ip( IndiProperty::Number, "dev", "prop" );
@@ -22,6 +25,9 @@ static IndiProperty makeProp()
    return ip;
 }
 
+// Verifies the constructors, the copy, the assignment operators, operator==, and the
+// compare methods. Each compare method looks at a different part of a property, and
+// each difference is checked with a property built to differ in only that part.
 SCENARIO( "IndiProperty construction, assignment, and comparison", "[IndiProperty]" )
 {
    GIVEN( "the various constructors" )
@@ -50,10 +56,10 @@ SCENARIO( "IndiProperty construction, assignment, and comparison", "[IndiPropert
          IndiProperty p5;
          p5 = p3;
          REQUIRE( p5.getDevice() == "dev" );
-         p5 = p5; // self-assignment branch
+         p5 = p5; // This takes the self-assignment branch.
          REQUIRE( p5.getName() == "sw" );
 
-         // BLOBEnable assignment operator
+         // The BLOBEnable assignment operator sets only that flag.
          p5 = IndiProperty::Also;
          REQUIRE( p5.getBLOBEnable() == IndiProperty::Also );
       }
@@ -64,25 +70,26 @@ SCENARIO( "IndiProperty construction, assignment, and comparison", "[IndiPropert
       WHEN( "using operator== and the compare methods" )
       {
          IndiProperty a = makeProp();
-         REQUIRE( a == a ); // self
+         REQUIRE( a == a ); // A property equals itself.
 
          IndiProperty b = makeProp();
          REQUIRE( a == b );
 
          IndiProperty fewer( IndiProperty::Number, "dev", "prop" );
          fewer.add( IndiElement( "a", "1" ) );
-         REQUIRE( !( a == fewer ) ); // different sizes
+         REQUIRE( !( a == fewer ) ); // The element counts differ.
 
          IndiProperty renamed = makeProp();
          renamed.remove( "b" );
          renamed.add( IndiElement( "c", "2" ) );
-         REQUIRE( !( a == renamed ) ); // same size, an element name differs
+         REQUIRE( !( a == renamed ) ); // The counts match but an element name differs.
 
          IndiProperty valDiff = makeProp();
          valDiff[ "a" ].setValue( std::string( "999" ) );
-         REQUIRE( !( a == valDiff ) ); // same names, an element value differs
+         REQUIRE( !( a == valDiff ) ); // The names match but an element value differs.
 
-         // compareProperty: type, device/name, sizes, element names -- not values
+         // compareProperty() checks type, device, name, element count, and element names.
+         // It ignores element values.
          REQUIRE( a.compareProperty( a ) );
          REQUIRE( a.compareProperty( b ) );
          IndiProperty difType( IndiProperty::Text, "dev", "prop" );
@@ -91,21 +98,21 @@ SCENARIO( "IndiProperty construction, assignment, and comparison", "[IndiPropert
          REQUIRE( !a.compareProperty( difName ) );
          REQUIRE( !a.compareProperty( fewer ) );
          REQUIRE( !a.compareProperty( renamed ) );
-         b["a"] = 99; // value changes don't matter to compareProperty
+         b["a"] = 99; // Value changes do not matter to compareProperty().
          REQUIRE( a.compareProperty( b ) );
 
-         // compareValue: one named element's value
+         // compareValue() checks the value of one named element.
          REQUIRE( a.compareValue( a, "a" ) );
          REQUIRE( !a.compareValue( difType, "a" ) );
          REQUIRE( !a.compareValue( difName, "a" ) );
-         REQUIRE( !a.compareValue( b, "a" ) ); // b["a"] now 99
+         REQUIRE( !a.compareValue( b, "a" ) ); // b["a"] is now 99.
          REQUIRE( a.compareValue( b, "b" ) );
-         REQUIRE( !a.compareValue( b, "zz" ) );      // not in either
+         REQUIRE( !a.compareValue( b, "zz" ) );      // The element is in neither property.
          IndiProperty extra = makeProp();
          extra.add( IndiElement( "onlyhere", "5" ) );
-         REQUIRE( !extra.compareValue( a, "onlyhere" ) ); // in this, not in comp
+         REQUIRE( !extra.compareValue( a, "onlyhere" ) ); // The element is in this property but not in the other.
 
-         // compareValues: all element values
+         // compareValues() checks every element value.
          REQUIRE( a.compareValues( a ) );
          IndiProperty c = makeProp();
          REQUIRE( a.compareValues( c ) );
@@ -113,24 +120,27 @@ SCENARIO( "IndiProperty construction, assignment, and comparison", "[IndiPropert
          REQUIRE( !a.compareValues( difName ) );
          REQUIRE( !a.compareValues( fewer ) );
          REQUIRE( !a.compareValues( renamed ) );
-         REQUIRE( !a.compareValues( b ) ); // value differs
+         REQUIRE( !a.compareValues( b ) ); // One value differs.
 
-         // hasNewValue
-         REQUIRE( !a.hasNewValue( a, "a" ) ); // self: no new value
+         // hasNewValue() is true only when the other value differs and is not blank.
+         REQUIRE( !a.hasNewValue( a, "a" ) ); // A property has no new value relative to itself.
          REQUIRE( !a.hasNewValue( difType, "a" ) );
          REQUIRE( !a.hasNewValue( difName, "a" ) );
-         REQUIRE( !a.hasNewValue( c, "a" ) );  // same value
-         REQUIRE( a.hasNewValue( b, "a" ) );   // 99 is new and non-blank
-         REQUIRE( !a.hasNewValue( b, "zz" ) ); // not in this
-         REQUIRE( !extra.hasNewValue( a, "onlyhere" ) ); // not in comp
+         REQUIRE( !a.hasNewValue( c, "a" ) );  // The values are the same.
+         REQUIRE( a.hasNewValue( b, "a" ) );   // 99 is new and not blank.
+         REQUIRE( !a.hasNewValue( b, "zz" ) ); // The element is not in this property.
+         REQUIRE( !extra.hasNewValue( a, "onlyhere" ) ); // The element is not in the other property.
          IndiProperty blank = makeProp();
          blank["a"] = IndiElement( "a", "" );
          blank.update( IndiElement( "a", "" ) );
-         REQUIRE( !a.hasNewValue( blank, "a" ) ); // differs but blank
+         REQUIRE( !a.hasNewValue( blank, "a" ) ); // The value differs but is blank.
       }
    }
 }
 
+// Verifies element lookup by name and by index through the const and non-const
+// overloads, the throws for missing elements, and add(), update(), addIfNoExist(),
+// remove(), and the whole map getter and setter.
 SCENARIO( "IndiProperty element access and manipulation", "[IndiProperty]" )
 {
    GIVEN( "a property with two elements" )
@@ -166,17 +176,17 @@ SCENARIO( "IndiProperty element access and manipulation", "[IndiProperty]" )
 
       WHEN( "adding, updating, and removing elements" )
       {
-         ip.update( IndiElement( "c", "3" ) ); // update-or-add path adds
+         ip.update( IndiElement( "c", "3" ) ); // update() adds the element when it does not exist.
          REQUIRE( ip.find( "c" ) );
-         ip.update( IndiElement( "c", "4" ) ); // update existing
+         ip.update( IndiElement( "c", "4" ) ); // update() replaces the element when it exists.
          REQUIRE( ip[ "c" ].getValue() == "4" );
 
-         ip.addIfNoExist( IndiElement( "c", "5" ) ); // exists: no-op
+         ip.addIfNoExist( IndiElement( "c", "5" ) ); // addIfNoExist() does nothing when the element exists.
          REQUIRE( ip[ "c" ].getValue() == "4" );
-         ip.addIfNoExist( IndiElement( "d", "6" ) ); // doesn't exist: added
+         ip.addIfNoExist( IndiElement( "d", "6" ) ); // addIfNoExist() adds the element when it does not exist.
          REQUIRE( ip[ "d" ].getValue() == "6" );
 
-         REQUIRE_THROWS( ip.add( IndiElement( "a", "9" ) ) ); // already exists
+         REQUIRE_THROWS( ip.add( IndiElement( "a", "9" ) ) ); // add() throws for a name that already exists.
 
          ip.update( "d", IndiElement( "d", "7" ) );
          REQUIRE( ip[ "d" ].getValue() == "7" );
@@ -186,7 +196,7 @@ SCENARIO( "IndiProperty element access and manipulation", "[IndiProperty]" )
          REQUIRE( !ip.find( "d" ) );
          REQUIRE_THROWS( ip.remove( "nope" ) );
 
-         // whole-map get/set
+         // getElements() and setElements() work on the whole element map.
          std::map<std::string, IndiElement> els = ip.getElements();
          els[ "e" ] = IndiElement( "e", "8" );
          ip.setElements( els );
@@ -195,6 +205,8 @@ SCENARIO( "IndiProperty element access and manipulation", "[IndiProperty]" )
    }
 }
 
+// Verifies the attribute getters and setters, the validity flags on a full and on an
+// empty property, createString(), clear(), and scrubName().
 SCENARIO( "IndiProperty attributes, validity, and strings", "[IndiProperty]" )
 {
    GIVEN( "a fully-populated property" )
@@ -292,6 +304,8 @@ SCENARIO( "IndiProperty attributes, validity, and strings", "[IndiProperty]" )
    }
 }
 
+// Verifies getErrorMsg(), the Excep exception type, and every enum converter in
+// both directions. Unknown strings and unknown enum values are included.
 SCENARIO( "IndiProperty error messages and enum converters", "[IndiProperty]" )
 {
    GIVEN( "each error code and enum value" )
@@ -304,12 +318,12 @@ SCENARIO( "IndiProperty error messages and enum converters", "[IndiProperty]" )
          REQUIRE( IndiProperty::getErrorMsg( IndiProperty::ErrIndexOutOfBounds ) == "Index out of bounds" );
          REQUIRE( IndiProperty::getErrorMsg( -12345 ) == "Unknown error" );
 
-         // The Excep exception type itself: thrown by add()/at()/remove(),
+         // Excep is the exception type thrown by add(), at(), and remove(). It is
          // caught here to exercise its constructor, what(), and destructor.
          IndiProperty ip = makeProp();
          try
          {
-            ip.add( IndiElement( "a", "9" ) ); // duplicate: throws Excep
+            ip.add( IndiElement( "a", "9" ) ); // A duplicate name makes add() throw Excep.
             REQUIRE( false );
          }
          catch( const IndiProperty::Excep &e )

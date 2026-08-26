@@ -18,6 +18,9 @@
 
 #include "../MagAOXApp.hpp"
 
+// Test-only fault hooks. Every XWCTEST_IF_ macro expands to an empty statement unless
+// a test defines the matching XWCTEST_ name before including this header. The callback
+// validation tests use this to return early before the real callback work.
 #include "tests/testMacros.hpp"
 
 namespace MagAOX
@@ -2304,9 +2307,9 @@ int stdCamera<derivedT>::appStartup()
     if( derivedT::c_stdCamera_readoutSpeed )
     {
         mx::meta::trueFalseT<derivedT::c_stdCamera_readoutSpeed> tf;
-        // createReadoutSpeed(true) does not propagate its internal registerIndiPropertyNew()
-        // call's return value (always returns 0), so this can never be true as currently
-        // implemented -- see the "every registration failure is propagated" test's comment.
+        // createReadoutSpeed() always returns 0. It does not pass on the return value of
+        // its own registerIndiPropertyNew() call. So this branch can never run. The test
+        // named "every registration failure is propagated" explains this in more detail.
         // LCOV_EXCL_START
         if( createReadoutSpeed( tf ) < 0 )
         {
@@ -2321,7 +2324,8 @@ int stdCamera<derivedT>::appStartup()
     if( derivedT::c_stdCamera_vShiftSpeed )
     {
         mx::meta::trueFalseT<derivedT::c_stdCamera_vShiftSpeed> tf;
-        // Same as createReadoutSpeed() above -- createVShiftSpeed(true) never returns <0.
+        // Same reason as createReadoutSpeed() above. createVShiftSpeed() never returns a
+        // negative value.
         // LCOV_EXCL_START
         if( createVShiftSpeed( tf ) < 0 )
         {
@@ -2906,9 +2910,9 @@ int stdCamera<derivedT>::appLogic()
 
         return 0;
     }
-    // Every call in this try block is either a plain member/arithmetic update or an
-    // updateIfChanged()/updateSwitchIfChanged() call, none of which throw for the values
-    // appLogic() passes them -- not reachable via the public API.
+    // Nothing in this try block can throw. The calls are plain member updates and
+    // updateIfChanged() calls, and none of them throw for the values appLogic()
+    // passes. So this handler cannot be reached.
     // LCOV_EXCL_START
     catch( const std::exception &e )
     {
@@ -3107,8 +3111,8 @@ int stdCamera<derivedT>::newCallBack_stdCamera( const pcf::IndiProperty &ipRecv 
 
     if( ipRecv.getDevice() != derived().configName() )
     {
-        // Suppressed (not injected) under the test macro, so this doesn't fit XWCTEST_IF_'s
-        // "wrap one statement to run under test" shape -- left as a raw #ifndef.
+        // Under the test macro this log call is removed rather than added. The XWCTEST_IF_
+        // macro form can only add a statement, so this stays a raw #ifndef.
 #ifndef XWCTEST_INDI_CALLBACK_VALIDATION
         derivedT::template log<software_error>( { __FILE__, __LINE__, "unknown INDI property" } );
 #endif
@@ -3122,13 +3126,11 @@ int stdCamera<derivedT>::newCallBack_stdCamera( const pcf::IndiProperty &ipRecv 
         return newCallBack_reconfigure( ipRecv );
     else if( derivedT::c_stdCamera_temp && name == "temp_ccd" )
         return newCallBack_temp( ipRecv );
-    // Only reachable for a derivedT with c_stdCamera_temp==false and
-    // c_stdCamera_tempControl==true (temperature control without basic temperature
-    // reporting) -- every existing test harness that sets tempControl=true also sets
-    // temp=true (a real camera that can control its temperature also reports it), and
-    // the reverse-only harness (temp=true, tempControl=false) exists for the report-only
-    // branches elsewhere. Not exercised via a dedicated third harness for this one
-    // dispatch-order line.
+    // This line runs only for a camera class with c_stdCamera_temp false and
+    // c_stdCamera_tempControl true. That is a camera that controls its temperature but
+    // does not report it. Every test harness with tempControl true also has temp true,
+    // because a real camera that controls temperature also reports it. A third harness
+    // just for this one dispatch line is not worth adding.
     // LCOV_EXCL_START
     else if( derivedT::c_stdCamera_tempControl && name == "temp_ccd" )
         return newCallBack_temp( ipRecv );
@@ -4585,7 +4587,7 @@ int stdCamera<derivedT>::updateINDI()
         }
         return 0;
     }
-    // Same reasoning as appLogic()'s catch above -- none of these update calls throw.
+    // Same reason as the appLogic() handler above. None of these update calls throw.
     // LCOV_EXCL_START
     catch( const std::exception &e )
     {
@@ -4645,12 +4647,14 @@ int stdCamera<derivedT>::recordCamera( bool force )
               m_adcSpeed,
               m_ccdTemp,
               m_ccdTempSetpt,
-              (uint8_t)m_tempControlStatus,  // LCOV_EXCL_LINE (gcov quirk: cast-expression argument lines in this
-              (uint8_t)m_tempControlOnTarget, // LCOV_EXCL_LINE  single aggregate-init call get spurious 0 hits --
+              // gcov gives the cast argument lines below zero hits even though this call
+              // runs. The other argument lines of the same call show real hits.
+              (uint8_t)m_tempControlStatus,  // LCOV_EXCL_LINE
+              (uint8_t)m_tempControlOnTarget, // LCOV_EXCL_LINE
               m_tempControlStatusStr,
               m_shutterStatus,
-              (int8_t)m_shutterState, // LCOV_EXCL_LINE          neighboring non-cast argument lines of this same
-              (uint8_t)m_synchro,     // LCOV_EXCL_LINE          call all show real hits, confirming it executes.
+              (int8_t)m_shutterState, // LCOV_EXCL_LINE
+              (uint8_t)m_synchro,     // LCOV_EXCL_LINE
               m_vshiftSpeed,
               (uint8_t)m_cropMode, // LCOV_EXCL_LINE
               c_hasFanSpeed && m_fanSpeedValid ? m_fanSpeedName : std::string( "" ),

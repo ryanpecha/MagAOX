@@ -106,7 +106,7 @@ struct telem_telenv : public flatbuffer_log
 
       return msg;
 
-   } // LCOV_EXCL_LINE -- EH-cleanup epilogue emitted on this brace; unreachable without an exception
+   } // LCOV_EXCL_LINE gcov reports this closing brace as a separate line that only runs during exception cleanup
 
    static double tempout( void * msgBuffer  /**< [in] Buffer containing the flatbuffer serialized message.*/ )
    {

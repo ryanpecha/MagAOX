@@ -1,5 +1,14 @@
 /** \file edtCamera_test.cpp
- * \brief Catch2 tests for the MagAOX::app::dev::edtCamera CRTP mixin.
+ * \brief Catch2 tests for the MagAOX::app::dev::edtCamera device mixin.
+ *
+ * The mixin is exercised through a MagAOXApp<false> harness that never connects to INDI.
+ * No EDT hardware or EDT library is used. This file defines extern "C" replacements for
+ * every pdv_ and edt_ function the mixin calls. The replacements count their calls and
+ * return scripted results from one shared edtStubState instance. Each test sets the stub
+ * state it needs, so every failure branch in the mixin can be forced.
+ *
+ * The configuration test writes /tmp/edtCamera_test.conf. The harness sets its config
+ * directory to /tmp so relative EDT config paths resolve there.
  *
  * \ingroup app_dev_unit_tests
  */
@@ -10,8 +19,8 @@
 #include <string>
 #include <vector>
 
-// Flip protected to public for this whole translation unit so the tests can poke
-// directly at MagAOXApp/edtCamera internals without a pile of accessor wrappers.
+// Make protected members public for this whole translation unit. The tests can then
+// read and set MagAOXApp and edtCamera internals directly instead of adding accessor wrappers.
 #define protected public
 #include "../../MagAOXApp.hpp"
 #include "../edtCamera.hpp"
@@ -22,10 +31,13 @@ using namespace MagAOX::app;
 namespace edtCamera_tests
 {
 
-/// Stub state for the fake EDT PDV SDK used by these tests.
+/// Scripted state for the fake EDT PDV SDK used by these tests.
+/** Flags force a specific SDK call to fail. Counters record how often each call ran.
+ * Queues supply the results of successive serial wait and read calls.
+ */
 struct edtStubState
 {
-    // -- pdvConfig() controls --
+    // Controls for pdvConfig().
     bool allocDependentFail{ false }; ///< Force `pdv_alloc_dependent` to return nullptr.
     int  readcfgReturn{ 0 };          ///< Value returned by `pdv_readcfg`.
     bool openChannelFail{ false };    ///< Force `edt_open_channel` to return nullptr.
@@ -46,14 +58,14 @@ struct edtStubState
     int multibufCalls{ 0 };
     int lastNumBuffs{ -1 };
 
-    // -- pdvStartAcquisition() / pdvAcquire() controls --
+    // Controls for pdvStartAcquisition() and pdvAcquire().
     int      startImagesCalls{ 0 };
     int      lastStartNumBuffs{ -1 };
     int      startImageCalls{ 0 };
     unsigned waitTimeSec{ 7 };
     unsigned waitTimeNsec{ 11 };
 
-    // -- pdvSerialWriteRead() controls --
+    // Controls for pdvSerialWriteRead().
     int                      commandResult{ 0 }; ///< Value returned by `pdv_serial_command`.
     std::deque<int>          waitResults;         ///< Popped in order by successive `pdv_serial_wait` calls.
     std::deque<std::string>  readChunks;          ///< Popped in order by successive `pdv_serial_read` calls.
@@ -68,6 +80,7 @@ struct edtStubState
     }
 };
 
+/// The single shared stub state instance that the SDK replacements below read and update.
 edtStubState g_edt;
 
 /// Reset the shared stub state before a test section.
@@ -78,12 +91,12 @@ void resetStub()
 
 /// Queue the flush-read placeholder followed by the given response chunks.
 /** `pdvSerialWriteRead` always performs one throw-away `pdv_serial_read` call to flush the
- * channel before sending its command, so every scripted read sequence needs a leading
- * placeholder entry to be consumed by that flush.
+ * channel before sending its command. Every scripted read sequence therefore needs a
+ * leading placeholder entry that the flush consumes.
  */
 void queueReadChunks( std::initializer_list<std::string> chunks )
 {
-    g_edt.readChunks.push_back( "" ); // consumed by the pre-command flush read
+    g_edt.readChunks.push_back( "" ); // Consumed by the flush read that precedes the command.
     for( auto &c : chunks )
     {
         g_edt.readChunks.push_back( c );
@@ -94,9 +107,13 @@ void queueReadChunks( std::initializer_list<std::string> chunks )
 
 using namespace edtCamera_tests;
 
+// Replacements for the EDT SDK functions that edtCamera calls. They need C linkage so they
+// satisfy the declarations in the SDK headers. Each one records its call in g_edt and returns
+// whatever the current stub state says.
 extern "C"
 {
 
+/// Returns a malloc'd Dependent, or nullptr when allocDependentFail is set.
 Dependent *pdv_alloc_dependent()
 {
     ++g_edt.allocDependentCalls;
@@ -116,6 +133,7 @@ int pdv_readcfg( const char *configFile, Dependent *dd_p, Edtinfo *edtinfo )
     return g_edt.readcfgReturn;
 }
 
+/// Returns a static EdtDev, or nullptr when openChannelFail is set.
 EdtDev *edt_open_channel( const char *deviceName, int unit, int channel )
 {
     static_cast<void>( deviceName );
@@ -163,6 +181,7 @@ void edt_close( EdtDev *edt_p )
     ++g_edt.edtCloseCalls;
 }
 
+/// Returns a static PdvDev, or nullptr when openPdvChannelFail is set.
 PdvDev *pdv_open_channel( const char *deviceName, int unit, int channel )
 {
     static_cast<void>( deviceName );
@@ -230,6 +249,7 @@ void pdv_start_images( PdvDev *pdv_p, int numBuffs )
     g_edt.lastStartNumBuffs = numBuffs;
 }
 
+/// Returns a static dummy image and fills the DMA timestamp from the stub state.
 u_char *pdv_wait_last_image_timed( PdvDev *pdv_p, uint dmaTimeStamp[2] )
 {
     static_cast<void>( pdv_p );
@@ -245,6 +265,7 @@ void pdv_start_image( PdvDev *pdv_p )
     ++g_edt.startImageCalls;
 }
 
+/// Copies the next scripted chunk into buf and returns its length. Returns 0 when the script is exhausted.
 int pdv_serial_read( PdvDev *pdv_p, char *buf, int size )
 {
     static_cast<void>( pdv_p );
@@ -278,6 +299,7 @@ int pdv_serial_read( PdvDev *pdv_p, char *buf, int size )
     return static_cast<int>( n );
 }
 
+/// Records the command string and returns the scripted commandResult.
 int pdv_serial_command( PdvDev *pdv_p, const char *command )
 {
     static_cast<void>( pdv_p );
@@ -285,6 +307,7 @@ int pdv_serial_command( PdvDev *pdv_p, const char *command )
     return g_edt.commandResult;
 }
 
+/// Pops and returns the next scripted wait result. Returns 0, meaning timeout, when the script is exhausted.
 int pdv_serial_wait( PdvDev *pdv_p, int timeout, int count )
 {
     static_cast<void>( pdv_p );
@@ -301,6 +324,7 @@ int pdv_serial_wait( PdvDev *pdv_p, int timeout, int count )
     return r;
 }
 
+/// Reports the scripted terminator character. Returns 0 when waitcharAvailable is false.
 int pdv_get_waitchar( PdvDev *pdv_p, u_char *waitc )
 {
     static_cast<void>( pdv_p );
@@ -316,11 +340,15 @@ int pdv_get_waitchar( PdvDev *pdv_p, u_char *waitc )
 namespace edtCamera_tests
 {
 
-/// Test harness exposing `dev::edtCamera` with a relative EDT config path.
+/// Test harness that exposes `dev::edtCamera` with a relative EDT config path.
+/** It supplies the mode map and mode name members that the mixin reads through derived().
+ * The lifecycle methods forward to the mixin so the tests can call them directly.
+ */
 struct edtCameraTestApp : public MagAOX::app::MagAOXApp<false>, public dev::edtCamera<edtCameraTestApp>
 {
     static constexpr bool c_edtCamera_relativeConfigPath = true;
 
+    // Members that the mixin reads and writes through derived().
     dev::cameraConfigMap m_cameraModes;
     std::string          m_startupMode;
     std::string          m_modeName;
@@ -378,7 +406,9 @@ struct edtCameraTestApp : public MagAOX::app::MagAOXApp<false>, public dev::edtC
     }
 };
 
-/// Test harness exposing `dev::edtCamera` with an absolute EDT config path.
+/// Test harness that exposes `dev::edtCamera` with an absolute EDT config path.
+/** Only pdvConfig() is exercised through this variant, so its lifecycle methods are empty.
+ */
 struct edtCameraTestAppAbs : public MagAOX::app::MagAOXApp<false>, public dev::edtCamera<edtCameraTestAppAbs>
 {
     static constexpr bool c_edtCamera_relativeConfigPath = false;
@@ -409,6 +439,7 @@ struct edtCameraTestAppAbs : public MagAOX::app::MagAOXApp<false>, public dev::e
         return 0;
     }
 
+    /// Seed one minimal camera mode entry with an absolute config path.
     void addMode( const std::string &name, const std::string &configFile = "/tmp/stub_abs.cfg" )
     {
         dev::cameraConfig cc;
@@ -421,8 +452,10 @@ struct edtCameraTestAppAbs : public MagAOX::app::MagAOXApp<false>, public dev::e
 
 using namespace edtCamera_tests;
 
-/// pdvConfig() covers success, every internal failure branch, and the relative/absolute path option.
-/**
+/// Verify pdvConfig() on success, on every SDK failure branch, and with both config path options.
+/** A bad mode name must be rejected. A good mode must fill in the frame geometry and camera
+ * type from the SDK. Each forced SDK failure must return a negative value.
+ *
  * \ingroup app_dev_unit_tests
  */
 TEST_CASE( "edtCamera pdvConfig configures the framegrabber or reports each failure", "[edtCamera]" )
@@ -535,9 +568,12 @@ TEST_CASE( "edtCamera pdvConfig configures the framegrabber or reports each fail
     }
 }
 
-/// pdvSerialWriteRead() covers every branch: command failure, timeouts, matched and
-/// unmatched terminators, and the trailing-byte drain loop.
-/**
+/// Verify every branch of pdvSerialWriteRead().
+/** The cases are a command failure, an initial timeout with power off and with power on,
+ * a matched terminator, an empty response with no terminator, a terminator that the SDK
+ * cannot report, and the drain of trailing bytes after a match. The scripted wait results
+ * and read chunks in the stub state steer the function through each path.
+ *
  * \ingroup app_dev_unit_tests
  */
 TEST_CASE( "edtCamera pdvSerialWriteRead handles every serial transaction outcome", "[edtCamera]" )
@@ -587,7 +623,7 @@ TEST_CASE( "edtCamera pdvSerialWriteRead handles every serial transaction outcom
     SECTION( "a matched terminator returns the accumulated response" )
     {
         edtCameraTestApp app;
-        g_edt.waitResults.push_back( 1 ); // initial wait succeeds
+        g_edt.waitResults.push_back( 1 ); // The initial wait succeeds.
         queueReadChunks( { "OK\n" } );
         std::string response;
         REQUIRE( app.pdvSerialWriteRead( response, "cmd", true ) == 0 );
@@ -597,8 +633,8 @@ TEST_CASE( "edtCamera pdvSerialWriteRead handles every serial transaction outcom
     SECTION( "an empty response with no terminator match logs a timeout (logErrors true)" )
     {
         edtCameraTestApp app;
-        g_edt.waitResults.push_back( 1 ); // initial wait succeeds
-        g_edt.waitResults.push_back( 0 ); // in-loop wait ends the loop
+        g_edt.waitResults.push_back( 1 ); // The initial wait succeeds.
+        g_edt.waitResults.push_back( 0 ); // The wait inside the read loop times out and ends the loop.
         queueReadChunks( { "" } );
         std::string response;
         REQUIRE( app.pdvSerialWriteRead( response, "cmd", true ) < 0 );
@@ -629,9 +665,9 @@ TEST_CASE( "edtCamera pdvSerialWriteRead handles every serial transaction outcom
     SECTION( "trailing bytes after a match are drained before returning success" )
     {
         edtCameraTestApp app;
-        g_edt.waitResults.push_back( 1 ); // initial wait succeeds
-        g_edt.waitResults.push_back( 5 ); // drain wait finds trailing bytes
-        g_edt.waitResults.push_back( 0 ); // second drain wait ends the drain
+        g_edt.waitResults.push_back( 1 ); // The initial wait succeeds.
+        g_edt.waitResults.push_back( 5 ); // The first drain wait finds trailing bytes.
+        g_edt.waitResults.push_back( 0 ); // The second drain wait times out and ends the drain.
         queueReadChunks( { "OK\n", "trailing" } );
         std::string response;
         REQUIRE( app.pdvSerialWriteRead( response, "cmd", true ) == 0 );
@@ -639,8 +675,10 @@ TEST_CASE( "edtCamera pdvSerialWriteRead handles every serial transaction outcom
     }
 }
 
-/// setupConfig()/loadConfig() populate and read back the framegrabber configuration section.
-/**
+/// Verify that setupConfig() and loadConfig() read the framegrabber section of a config file.
+/** The unit, channel, and buffer count must come from the file. The serial timeouts must keep
+ * their default values.
+ *
  * \ingroup app_dev_unit_tests
  */
 TEST_CASE( "edtCamera setupConfig and loadConfig manage unit, channel, and buffer settings", "[edtCamera]" )
@@ -667,9 +705,10 @@ TEST_CASE( "edtCamera setupConfig and loadConfig manage unit, channel, and buffe
     REQUIRE( app.m_writeTimeout == 1000 );
 }
 
-/// appStartup()/appLogic()/onPowerOff()/whilePowerOff()/appShutdown()/updateINDI() cover the
-/// remaining lifecycle entry points.
-/**
+/// Verify the remaining lifecycle entry points.
+/** appStartup() must fail when the startup mode cannot be configured and succeed otherwise.
+ * appLogic(), onPowerOff(), whilePowerOff(), appShutdown(), and updateINDI() must return 0.
+ *
  * \ingroup app_dev_unit_tests
  */
 TEST_CASE( "edtCamera lifecycle entry points succeed or report configuration failures", "[edtCamera]" )
@@ -702,9 +741,11 @@ TEST_CASE( "edtCamera lifecycle entry points succeed or report configuration fai
     }
 }
 
-/// pdvStartAcquisition()/pdvAcquire()/pdvReconfig() cover the acquisition helpers used by
-/// `dev::frameGrabber`.
-/**
+/// Verify the acquisition helpers that `dev::frameGrabber` calls.
+/** pdvStartAcquisition() must start the configured number of buffers. pdvAcquire() must copy
+ * the DMA timestamp into the caller's timespec. pdvReconfig() must clear the next mode on
+ * success and keep it on failure.
+ *
  * \ingroup app_dev_unit_tests
  */
 TEST_CASE( "edtCamera acquisition helpers start images, fetch timestamps, and reconfigure", "[edtCamera]" )
@@ -744,12 +785,12 @@ TEST_CASE( "edtCamera acquisition helpers start images, fetch timestamps, and re
     SECTION( "pdvReconfig reports and retries on failure" )
     {
         edtCameraTestApp app;
-        app.m_nextMode = ""; // an empty mode name always fails pdvConfig
+        app.m_nextMode = ""; // An empty mode name always fails pdvConfig. pdvReconfig still returns 0 and sleeps one second so the caller can retry.
         REQUIRE( app.pdvReconfig() == 0 );
     }
 }
 
-/// Destroying an `edtCamera` after a successful configuration closes the pdv handle.
+/// Verify that destroying an `edtCamera` after a successful configuration closes the pdv handle.
 /**
  * \ingroup app_dev_unit_tests
  */

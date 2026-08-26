@@ -1,5 +1,10 @@
 /** \file semUtils_test.cpp
-  * \brief Catch2 tests for the app semaphore utilities.
+  * \brief Catch2 tests for the XWC_SEM_ semaphore macros in semUtils.hpp and semUtilsDerived.hpp.
+  *
+  * The macros are function-like and expect a log<>() template in the enclosing class. Each macro
+  * is wrapped in a small member function of a test struct that provides a stub log<>(). The
+  * DERIVED variants are wrapped in a CRTP mixin so that derivedT::log<>() resolves as it would
+  * in a real device mixin. The tests use real unnamed POSIX semaphores and the real system clock.
   *
   * History:
   */
@@ -19,6 +24,8 @@ using namespace MagAOX::logger;
 namespace semUtils_test
 {
 
+/// Stub logger that satisfies the log<>() call the macros expand to.
+/// It discards the message and returns the retval template argument.
 struct testLogger
 {
     template <typename logT, int retval = 0>
@@ -28,6 +35,7 @@ struct testLogger
     }
 };
 
+/// Wraps each plain XWC_SEM_ macro in a member function so it can be called from a test.
 struct semUtilsTest : public testLogger
 {
     void waitTsRetVoid( timespec &ts, int sec, int nsec )
@@ -41,6 +49,10 @@ struct semUtilsTest : public testLogger
         return 0;
     }
 
+    /// Run the timed wait macro inside a bounded loop.
+    /// Returns the iteration count on which the wait succeeded, or -1 if the loop exited
+    /// without a successful wait. The macro uses continue on a timeout and break on any
+    /// other error, so both paths end at the -1 return once maxIters is reached.
     int timedwaitLoop( sem_t &sem, timespec &ts, int maxIters )
     {
         int iters = 0;
@@ -60,6 +72,8 @@ struct semUtilsTest : public testLogger
     }
 };
 
+/// CRTP mixin that wraps each XWC_SEM_ DERIVED macro in a member function.
+/// The macros call derivedT::template log<>(), so derivedT must supply that template.
 template <class derivedT>
 struct semUtilsDerivedMixin
 {
@@ -74,6 +88,7 @@ struct semUtilsDerivedMixin
         return 0;
     }
 
+    /// Same contract as semUtilsTest::timedwaitLoop() but using the DERIVED macro.
     int timedwaitLoopDerived( sem_t &sem, timespec &ts, int maxIters )
     {
         int iters = 0;
@@ -93,6 +108,7 @@ struct semUtilsDerivedMixin
     }
 };
 
+/// Concrete derived type for the mixin. It gets its log<>() from testLogger.
 struct semUtilsDerivedTest : public testLogger, public semUtilsDerivedMixin<semUtilsDerivedTest>
 {
 };
@@ -101,6 +117,8 @@ struct semUtilsDerivedTest : public testLogger, public semUtilsDerivedMixin<semU
 
 using namespace semUtils_test;
 
+/// Verify that XWC_SEM_WAIT_TS_RETVOID and XWC_SEM_WAIT_TS fill a timespec with the current
+/// time plus the requested offset, and that the nanosecond field stays normalized.
 SCENARIO( "Adding wait time to a timespec", "[semUtils]" )
 {
     GIVEN( "a semUtilsTest object" )
@@ -136,6 +154,9 @@ SCENARIO( "Adding wait time to a timespec", "[semUtils]" )
     }
 }
 
+/// Verify XWC_SEM_TIMEDWAIT_LOOP on a real semaphore. A posted semaphore must return on the
+/// first iteration. A timeout must continue the loop and leave errno as ETIMEDOUT. An invalid
+/// timespec must break the loop and leave errno as EINVAL.
 SCENARIO( "Waiting on a semaphore in a standard loop", "[semUtils]" )
 {
     GIVEN( "a semUtilsTest object and a semaphore" )
@@ -158,6 +179,7 @@ SCENARIO( "Waiting on a semaphore in a standard loop", "[semUtils]" )
 
         WHEN( "the wait times out" )
         {
+            // The deadline is now, so the unposted semaphore times out at once.
             timespec ts;
             clock_gettime( CLOCK_REALTIME, &ts );
 
@@ -169,6 +191,7 @@ SCENARIO( "Waiting on a semaphore in a standard loop", "[semUtils]" )
 
         WHEN( "sem_timedwait fails for a reason other than a timeout" )
         {
+            // A nanosecond field of two seconds is out of range, so sem_timedwait fails with EINVAL.
             timespec ts;
             clock_gettime( CLOCK_REALTIME, &ts );
             ts.tv_nsec = 2000000000;
@@ -183,6 +206,8 @@ SCENARIO( "Waiting on a semaphore in a standard loop", "[semUtils]" )
     }
 }
 
+/// Verify that XWC_SEM_FLUSH drains every pending post from a semaphore and leaves its value
+/// at zero, and that it is harmless on a semaphore with no pending posts.
 SCENARIO( "Flushing a semaphore", "[semUtils]" )
 {
     GIVEN( "a semUtilsTest object and a semaphore" )
@@ -219,6 +244,8 @@ SCENARIO( "Flushing a semaphore", "[semUtils]" )
     }
 }
 
+/// Verify the DERIVED variants of the wait time macros through the CRTP mixin.
+/// The checks are the same as for the plain macros.
 SCENARIO( "Adding wait time to a timespec, derived", "[semUtilsDerived]" )
 {
     GIVEN( "a semUtilsDerivedTest object" )
@@ -254,6 +281,8 @@ SCENARIO( "Adding wait time to a timespec, derived", "[semUtilsDerived]" )
     }
 }
 
+/// Verify XWC_SEM_TIMEDWAIT_LOOP_DERIVED through the CRTP mixin.
+/// The posted, timed out, and invalid timespec cases mirror the plain macro scenario.
 SCENARIO( "Waiting on a semaphore in a standard loop, derived", "[semUtilsDerived]" )
 {
     GIVEN( "a semUtilsDerivedTest object and a semaphore" )
@@ -301,6 +330,8 @@ SCENARIO( "Waiting on a semaphore in a standard loop, derived", "[semUtilsDerive
     }
 }
 
+/// Verify XWC_SEM_FLUSH_DERIVED through the CRTP mixin. The checks are the same as for the
+/// plain flush macro.
 SCENARIO( "Flushing a semaphore, derived", "[semUtilsDerived]" )
 {
     GIVEN( "a semUtilsDerivedTest object and a semaphore" )

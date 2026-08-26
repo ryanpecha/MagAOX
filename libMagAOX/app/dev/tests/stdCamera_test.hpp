@@ -1,6 +1,17 @@
 /** \file stdCamera_test.hpp
- * \brief Test harnesses for MagAOX::app::dev::stdCamera.
+ * \brief Test harnesses for the MagAOX::app::dev::stdCamera device mixin.
  * \author Claude
+ *
+ * This header declares two Catch2 test harnesses used by stdCamera_test.cpp. Each harness
+ * derives from MagAOXApp<false> and from the stdCamera mixin, so the real stdCamera code
+ * runs against a fake camera. The harnesses stub out the derived-class interface that a
+ * real camera app would implement. Each stub records that it was called and returns a
+ * result value the test can set in advance.
+ *
+ * stdCameraFullHarness turns every stdCamera capability flag on and also mixes in the
+ * telemeter. stdCameraReportOnlyHarness turns everything off except temperature and FPS
+ * reporting. Both harnesses can build a real indiDriver with no FIFOs so that code guarded
+ * by a null driver check can run without a live INDI server.
  *
  * \ingroup testing
  */
@@ -18,12 +29,17 @@ namespace stdCamera_tests
 {
 
 /// Test harness with every stdCamera capability flag turned on.
-/** This harness is used to drive every "enabled" code path in stdCamera: temperature control,
- * readout/vshift speed, EM gain, exposure time, FPS control, fan speed, analog gain, LED, synchro,
- * camera modes, ROI, crop mode, shutter, focus (both direct and helper-driven), and the state string.
+/** This harness drives every enabled code path in stdCamera. That covers temperature control,
+ * readout speed, vertical shift speed, EM gain, exposure time, FPS control, fan speed, analog gain,
+ * LED, synchro, camera modes, ROI, crop mode, shutter, focus, and the state string. Focus is covered
+ * both through the direct interface and through the INDI helper.
  *
- * It also overrides registerIndiPropertyNew/ReadOnly/Set so that individual registration calls can be
- * made to fail one at a time, exercising every error-return branch in stdCamera<derivedT>::appStartup().
+ * Every derived-class interface method is a stub. Each stub counts its calls, copies the requested
+ * value into the current value, and returns a result the test can set in advance.
+ *
+ * The harness also overrides registerIndiPropertyNew, registerIndiPropertyReadOnly, and
+ * registerIndiPropertySet. A test can make the Nth registration call fail. This reaches every
+ * error-return branch in stdCamera<derivedT>::appStartup().
  *
  * \ingroup stdCamera_tests
  */
@@ -37,12 +53,12 @@ struct stdCameraFullHarness : public MagAOX::app::MagAOXApp<false>,
     typedef MagAOX::app::dev::stdCamera<stdCameraFullHarness>   stdCameraT;
     typedef MagAOX::app::dev::telemeter<stdCameraFullHarness>   telemeterT;
 
-    // Re-publish MagAOXApp's protected power-management state for direct test inspection/mutation.
+    // Make the protected power-management state of MagAOXApp public so tests can read and set it.
     using MagAOX::app::MagAOXApp<false>::m_powerMgtEnabled;
     using MagAOX::app::MagAOXApp<false>::m_powerOnWait;
     using MagAOX::app::MagAOXApp<false>::m_powerOnCounter;
 
-    // Re-publish stdCamera's protected state for direct test inspection/mutation.
+    // Make the protected state of stdCamera public so tests can read and set it.
     using stdCameraT::m_adcSpeed;
     using stdCameraT::m_analogGainName;
     using stdCameraT::m_analogGainNameLabels;
@@ -212,7 +228,7 @@ struct stdCameraFullHarness : public MagAOX::app::MagAOXApp<false>,
     static constexpr bool c_stdCamera_hasShutter         = true;
     static constexpr bool c_stdCamera_usesStateString    = true;
 
-    // -- call counters / captured values, for assertions --
+    // Call counters and captured values. Tests assert on these to see which stubs ran.
     int m_powerOnDefaultsCalls{ 0 };
     int m_setTempControlCalls{ 0 };
     int m_setTempSetPtCalls{ 0 };
@@ -232,7 +248,7 @@ struct stdCameraFullHarness : public MagAOX::app::MagAOXApp<false>,
     int m_lastShutterSS{ -100 };
     int m_gotoFocusCalls{ 0 };
 
-    // -- forced return values, to exercise error-propagation branches --
+    // Forced return values. A test sets one of these to a nonzero value to exercise an error branch.
     int  m_setTempSetPtResult{ 0 };
     int  m_setTempControlResult{ 0 };
     int  m_setReadoutSpeedResult{ 0 };
@@ -255,14 +271,19 @@ struct stdCameraFullHarness : public MagAOX::app::MagAOXApp<false>,
 
     bool m_reconfig{ false };
 
-    // -- captures used to test the goto-focus helper without a real INDI driver --
+    // Captures for the goto-focus helper. The stubbed sendNewProperty() stores the outgoing
+    // property here instead of sending it to a real INDI driver.
     pcf::IndiProperty m_lastSentProperty;
     int               m_sendNewPropertyResult{ 0 };
 
-    // -- register-call fault injection, used to hit every registration failure branch in appStartup() --
+    // Registration fault injection. m_regCallCount counts registration calls. When it reaches
+    // m_regFailAt the call fails. A value of -1 means never fail. This is used to hit every
+    // registration failure branch in appStartup().
     int m_regCallCount{ 0 };
     int m_regFailAt{ -1 };
 
+    // Set up a fake camera with valid speed names, gain names, and a 1024 by 1024 ROI so that
+    // tests which do not care about these values do not have to set them.
     stdCameraFullHarness() : MagAOX::app::MagAOXApp<false>( "", false )
     {
         m_configName = "stdcamtest";
@@ -277,7 +298,7 @@ struct stdCameraFullHarness : public MagAOX::app::MagAOXApp<false>,
 
         m_fanSpeedNames      = { "low", "high" };
         m_fanSpeedNameLabels = { "Low", "High" };
-        m_defaultFanSpeed    = "low"; // a valid default so tests unrelated to fan-speed validation don't need to set it
+        m_defaultFanSpeed    = "low"; // A valid default so tests unrelated to fan-speed validation do not need to set it.
 
         m_analogGainNames      = { "low", "high" };
         m_analogGainNameLabels = { "Low", "High" };
@@ -316,16 +337,18 @@ struct stdCameraFullHarness : public MagAOX::app::MagAOXApp<false>,
     {
     }
 
-    // -- disambiguating wrappers (both MagAOXApp and stdCamera/telemeter declare these) --
+    // Disambiguating wrappers. MagAOXApp, stdCamera, and telemeter all declare setupConfig() and
+    // loadConfig(). These wrappers call the stdCamera and telemeter versions in order.
     int setupConfig( mx::app::appConfigurator &config )
     {
         if( stdCameraT::setupConfig( config ) < 0 )
             return -1;
 
-        // stdCamera::loadConfig() reads camera.full_x/y/w/h/bin_x/bin_y via config(), which only resolves
-        // keys previously registered with config.add(). stdCamera itself never registers these (the docs
-        // say derivedT must set them directly before appStartup()), so a real device app that wants them
-        // configurable from a file must add them itself, exactly as done here for testing purposes.
+        // stdCamera::loadConfig() reads camera.full_x, full_y, full_w, full_h, full_bin_x, and
+        // full_bin_y through config(). That call only resolves keys previously registered with
+        // config.add(). stdCamera itself never registers these keys. The documentation says derivedT
+        // must set them directly before appStartup(). A real device app that wants them configurable
+        // from a file must add them itself. This harness adds them here so tests can load them.
         config.add( "camera.full_x", "", "camera.full_x", argType::Required, "camera", "full_x", false, "float", "" );
         config.add( "camera.full_y", "", "camera.full_y", argType::Required, "camera", "full_y", false, "float", "" );
         config.add( "camera.full_w", "", "camera.full_w", argType::Required, "camera", "full_w", false, "int", "" );
@@ -345,8 +368,8 @@ struct stdCameraFullHarness : public MagAOX::app::MagAOXApp<false>,
         return telemeterT::loadConfig( config );
     }
 
-    // Bring the trueFalseT tag-dispatch overloads back into scope: the no-argument "derived-class
-    // interface" methods with the same names declared below in this harness would otherwise hide them.
+    // Bring the trueFalseT tag-dispatch overloads of stdCamera back into scope. The no-argument
+    // derived-class interface methods declared below have the same names and would otherwise hide them.
     using stdCameraT::checkFocus;
     using stdCameraT::checkNextROI;
     using stdCameraT::gotoFocus;
@@ -367,33 +390,35 @@ struct stdCameraFullHarness : public MagAOX::app::MagAOXApp<false>,
     using stdCameraT::stateString;
     using stdCameraT::stateStringValid;
 
-    // Note: appStartup() intentionally does NOT also start the telemeter log thread (unlike a real
-    // device app's appStartup()). Most tests only need stdCamera's own startup logic, and starting a
-    // real background log thread in every one of the many Catch2 SECTION re-executions across this test
-    // file is needlessly slow. Call startTelemetry() explicitly in the few tests that actually record
-    // telemetry (see recordCamera()).
+    // Run only the stdCamera startup logic. Unlike a real device app this does not start the telemeter
+    // log thread. Most tests only need stdCamera startup. Starting a real background log thread in
+    // every Catch2 SECTION re-execution across this test file would be needlessly slow. The few tests
+    // that record telemetry call startTelemetry() explicitly.
     int appStartup() override
     {
         return stdCameraT::appStartup();
     }
 
-    /// Start the telemeter log thread. Only needed by tests that actually call recordCamera()/telem().
+    /// Start the telemeter log thread. Only tests that call recordCamera() or telem() need this.
     int startTelemetry()
     {
         return telemeterT::appStartup();
     }
 
+    // Forward to the stdCamera appLogic().
     int appLogic() override
     {
         return stdCameraT::appLogic();
     }
 
+    // Shut down stdCamera and then the telemeter.
     int appShutdown() override
     {
         stdCameraT::appShutdown();
         return telemeterT::appShutdown();
     }
 
+    // Forward to the stdCamera power-off handlers.
     int onPowerOff() override
     {
         return stdCameraT::onPowerOff();
@@ -404,12 +429,14 @@ struct stdCameraFullHarness : public MagAOX::app::MagAOXApp<false>,
         return stdCameraT::whilePowerOff();
     }
 
+    // Forward the telemeter record-time check for the stdcam telemetry type.
     int checkRecordTimes()
     {
         return telemeterT::checkRecordTimes( MagAOX::logger::telem_stdcam() );
     }
 
-    // -- register-call fault injection --
+    // Registration fault injection. Each override counts the call and returns -1 when the count
+    // reaches m_regFailAt. Otherwise it forwards to the real MagAOXApp registration.
     int registerIndiPropertyNew( pcf::IndiProperty &prop, int ( *cb )( void *, const pcf::IndiProperty & ) )
     {
         ++m_regCallCount;
@@ -443,25 +470,28 @@ struct stdCameraFullHarness : public MagAOX::app::MagAOXApp<false>,
         return MagAOX::app::MagAOXApp<false>::registerIndiPropertySet( prop, devName, propName, cb );
     }
 
-    // Constructs a real (but FIFO-less) indiDriver so m_indiDriver != nullptr -- the same
-    // pattern used in dm_test.hpp/MagAOXApp_test.hpp -- so that onPowerOff()/whilePowerOff()/
-    // updateINDI()'s `if(!derived().m_indiDriver) return 0;` early-return guards are passed,
-    // letting the rest of those functions' bodies run (indi::updateIfChanged() and friends
-    // catch their own send failures, so this doesn't need a live INDI server).
+    // Construct a real indiDriver with no FIFOs so that m_indiDriver is not null. This is the same
+    // pattern used in dm_test.hpp and MagAOXApp_test.hpp. onPowerOff(), whilePowerOff(), and
+    // updateINDI() return early when the driver is null. With a driver present the rest of those
+    // bodies run. indi::updateIfChanged() and related helpers catch their own send failures, so no
+    // live INDI server is needed.
     void setupRealDriver()
     {
         m_indiDriver = MagAOX::app::dev::testHarness::makeFifolessIndiDriver<MagAOX::app::MagAOXApp<false>>(
             this, m_configName );
     }
 
-    // -- capture outgoing goto-focus commands instead of requiring a real INDI driver --
+    // Stub for sendNewProperty(). Capture the outgoing goto-focus command instead of sending it
+    // through a real INDI driver. Return the result the test has set.
     int sendNewProperty( const pcf::IndiProperty &ipSend )
     {
         m_lastSentProperty = ipSend;
         return m_sendNewPropertyResult;
     }
 
-    // -- stdCamera derived-class interface --
+    // The stdCamera derived-class interface. A real camera app talks to hardware in these methods.
+    // Here each stub counts its calls, copies the requested value into the current value where one
+    // exists, and returns the forced result.
     int powerOnDefaults()
     {
         ++m_powerOnDefaultsCalls;
@@ -570,6 +600,7 @@ struct stdCameraFullHarness : public MagAOX::app::MagAOXApp<false>,
         return m_setCropModeResult;
     }
 
+    // Record the requested shutter state. Zero means closed and anything else means open.
     int setShutter( int ss )
     {
         ++m_setShutterCalls;
@@ -580,8 +611,8 @@ struct stdCameraFullHarness : public MagAOX::app::MagAOXApp<false>,
 
     bool checkFocus()
     {
-        // Mirror the pattern documented for checkFocusSwitchState(): when the focus-state helper is
-        // configured, defer to it; otherwise fall back to the directly-injected test result.
+        // Mirror the pattern documented for checkFocusSwitchState(). When the focus-state helper is
+        // configured, defer to it. Otherwise return the result the test has set directly.
         if( m_focusStateHelperConfigured )
         {
             return checkFocusSwitchState();
@@ -595,6 +626,7 @@ struct stdCameraFullHarness : public MagAOX::app::MagAOXApp<false>,
         return m_gotoFocusResult;
     }
 
+    // Return the state string and validity the test has set.
     std::string stateString()
     {
         return m_stateStringResult;
@@ -605,13 +637,15 @@ struct stdCameraFullHarness : public MagAOX::app::MagAOXApp<false>,
         return m_stateStringValidResult;
     }
 
+    // Telemeter hook. Force a stdcam telemetry record when the telemeter asks for one.
     int recordTelem( const MagAOX::logger::telem_stdcam * )
     {
         return recordCamera( true );
     }
 
-    // -- exposers for protected members, used to directly touch tag-dispatch overloads and helpers
-    //    that are otherwise unreachable through the normal call paths (see report for details). --
+    // Public wrappers for protected members. These call the trueFalseT tag-dispatch overloads and
+    // helpers directly. The normal call paths never reach the disabled overloads in this harness,
+    // because every capability flag is on. The wrappers let the tests cover both overloads anyway.
     int exposeCreateReadoutSpeedTrue()
     {
         mx::meta::trueFalseT<true> t;
@@ -654,9 +688,13 @@ struct stdCameraFullHarness : public MagAOX::app::MagAOXApp<false>,
     }
 };
 
-/// Test harness with only "report only" temperature/FPS status (no control), and every other capability off.
-/** This harness exercises the `else if (derivedT::c_stdCamera_temp)` and `else if (derivedT::c_stdCamera_fps)`
- * branches in stdCamera, as well as the "disabled" skip branches for every other feature.
+/// Test harness that only reports temperature and FPS, with every other capability off.
+/** Temperature and FPS are reported but not controlled. This harness exercises the
+ * `else if (derivedT::c_stdCamera_temp)` and `else if (derivedT::c_stdCamera_fps)` branches in
+ * stdCamera. It also exercises the disabled skip branch for every other feature.
+ *
+ * Only powerOnDefaults() is stubbed from the derived-class interface. No other stub is needed
+ * because every controllable feature is off.
  *
  * \ingroup stdCamera_tests
  */
@@ -667,7 +705,7 @@ struct stdCameraReportOnlyHarness : public MagAOX::app::MagAOXApp<false>,
 
     typedef MagAOX::app::dev::stdCamera<stdCameraReportOnlyHarness> stdCameraT;
 
-    // Re-publish stdCamera's protected state for direct test inspection/mutation.
+    // Make the protected state of stdCamera public so tests can read and set it.
     using stdCameraT::m_adcSpeed;
     using stdCameraT::m_analogGainName;
     using stdCameraT::m_analogGainNameLabels;
@@ -835,7 +873,7 @@ struct stdCameraReportOnlyHarness : public MagAOX::app::MagAOXApp<false>,
 
     bool m_reconfig{ false };
 
-    // -- register-call fault injection, mirroring stdCameraFullHarness (see there for rationale) --
+    // Registration fault injection. This mirrors stdCameraFullHarness. See there for the rationale.
     int m_regCallCount{ 0 };
     int m_regFailAt{ -1 };
 
@@ -848,6 +886,7 @@ struct stdCameraReportOnlyHarness : public MagAOX::app::MagAOXApp<false>,
     {
     }
 
+    // Disambiguating wrappers. Both MagAOXApp and stdCamera declare these. Forward to stdCamera.
     int setupConfig( mx::app::appConfigurator &config )
     {
         return stdCameraT::setupConfig( config );
@@ -858,6 +897,8 @@ struct stdCameraReportOnlyHarness : public MagAOX::app::MagAOXApp<false>,
         return stdCameraT::loadConfig( config );
     }
 
+    // Registration fault injection. Only the read-only registration is overridden because this
+    // harness registers no settable properties.
     int registerIndiPropertyReadOnly( pcf::IndiProperty &prop )
     {
         ++m_regCallCount;
@@ -868,6 +909,7 @@ struct stdCameraReportOnlyHarness : public MagAOX::app::MagAOXApp<false>,
         return MagAOX::app::MagAOXApp<false>::registerIndiPropertyReadOnly( prop );
     }
 
+    // Forward the MagAOXApp lifecycle hooks to stdCamera.
     int appStartup() override
     {
         return stdCameraT::appStartup();
@@ -893,12 +935,13 @@ struct stdCameraReportOnlyHarness : public MagAOX::app::MagAOXApp<false>,
         return stdCameraT::whilePowerOff();
     }
 
+    // The only derived-class interface stub this harness needs. It does nothing.
     int powerOnDefaults()
     {
         return 0;
     }
 
-    // See stdCameraFullHarness::setupRealDriver() for why this is needed.
+    // Construct a real indiDriver with no FIFOs. See stdCameraFullHarness::setupRealDriver() for why.
     void setupRealDriver()
     {
         m_indiDriver = MagAOX::app::dev::testHarness::makeFifolessIndiDriver<MagAOX::app::MagAOXApp<false>>(
