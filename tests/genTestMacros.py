@@ -1,23 +1,34 @@
 #!/bin/env python3
 
-# Generates a C++ header of XWCTEST_IF_<NAME>(line) macros from a plain text list of
-# XWCTEST_<NAME> fault injection names.
+# Generates a C++ header of XWCTEST_IF_<NAME>(line) fault injection macros from a plain
+# text list of XWCTEST_<NAME> names. The full scheme, how production code and the unit
+# tests use the generated header, and how to add a hook, is in genTestMacros.md next to
+# this script. Read that first.
 #
-# Each generated macro has two forms. When a test translation unit defines the matching
-# XWCTEST_<NAME> before it includes the production header, the macro expands to the given
-# line inside a block, marked with LCOV_EXCL_LINE so coverage ignores it. Otherwise the
-# macro expands to an empty `do {} while(0)`. Production builds never define these names.
-# So the macro call sites in production code are always inert there.
+# Flow:
+#   libMagAOX/<area>/tests/xwcTestNames.txt   ->  this script  ->  libMagAOX/<area>/tests/testMacros.hpp
+#   production code does #include "tests/testMacros.hpp" and calls XWCTEST_IF_<NAME>( statement );
+#   a test defines XWCTEST_<NAME> before including the production header to turn one site on.
 #
-# Usage:
-#   genTestMacros.py --names <names-file> --out <output-header>
+# Each name produces one macro. XWCTEST_IF_<NAME>(line) expands to the statement inside
+# its own block when XWCTEST_<NAME> is defined, and to an empty `do {} while(0)` otherwise.
+# Injected statements carry LCOV_EXCL_LINE so coverage ignores them. Production builds
+# never define these names, so every site is inert there. The block scope means a
+# declaration cannot be injected this way. The one such site is kept as a raw #ifdef,
+# see genTestMacros.md.
+#
+# Usage, from the repo root so the paths in the generated banner are repo relative:
+#   python3 tests/genTestMacros.py --names <names-file> --out <output-header>
+#
+# No Makefile runs this. Run it by hand after editing a names file and commit the output.
 #
 # The names file is plain text with one XWCTEST_<NAME> per line. Blank lines and lines
 # starting with '#' are ignored. For each name the text up to and including the first '_'
 # is stripped off. For example XWCTEST_FOO_BAR becomes the callable XWCTEST_IF_FOO_BAR,
 # guarded by #ifdef XWCTEST_FOO_BAR.
 #
-# The header is rendered from xwcTestMacroTemplate.jinja2 in this directory.
+# The header is rendered from xwcTestMacroTemplate.jinja2 in this directory. Needs
+# Python 3.9 or newer and the jinja2 module.
 
 import os
 import sys
@@ -83,6 +94,8 @@ def main():
     # Strip the leading XWCTEST_ prefix. The template adds the XWCTEST_ and XWCTEST_IF_ prefixes back.
     templateInfo = dict()
     templateInfo["xwcTestNames"] = [x[(x.find("_") + 1):] for x in gXwcTests]
+    # Recorded in the banner of the generated header so a reader knows where to edit.
+    templateInfo["namesFile"] = os.path.relpath(namesPath)
 
     renderedHeader = template.render(templateInfo)
 
